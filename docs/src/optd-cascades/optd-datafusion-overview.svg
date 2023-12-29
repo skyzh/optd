@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg version="1.1" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns="http://www.w3.org/2000/svg" xmlns:xl="http://www.w3.org/1999/xlink" viewBox="61 172 861 244" width="861" height="244">
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:xl="http://www.w3.org/1999/xlink" viewBox="61 172 861 244" width="861" height="244">
   <defs>
     <marker orient="auto" overflow="visible" markerUnits="strokeWidth" id="FilledArrow_Marker" stroke-linejoin="miter" stroke-miterlimit="10" viewBox="-1 -4 10 8" markerWidth="10" markerHeight="8" color="black">
       <g>
@@ -8,7 +8,7 @@
       </g>
     </marker>
   </defs>
-  <g id="optd-datafusion-overview" fill="none" stroke="none" fill-opacity="1" stroke-dasharray="none" stroke-opacity="1">
+  <g id="optd-datafusion-overview" stroke="none" fill-opacity="1" fill="none" stroke-opacity="1" stroke-dasharray="none">
     <title>optd-datafusion-overview</title>
     <g id="optd-datafusion-overview_Layer_1">
       <title>Layer 1</title>

@@ -14,9 +14,8 @@
 
 # Adaptive Optimization
 
-- [(WIP) Overview](./adaptive_overview.md)
-- [(WIP) Partial Exploration](./partial_exploration.md)
-- [(WIP) Reoptimization](./reoptimization.md)
+- [Re-optimization](./reoptimization.md)
+- [Partial Exploration](./partial_exploration.md)
 
 # Demo
 

@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:xl="http://www.w3.org/1999/xlink" viewBox="70 279 801 280" width="801" height="280">
+  <defs>
+    <marker orient="auto" overflow="visible" markerUnits="strokeWidth" id="FilledArrow_Marker" stroke-linejoin="miter" stroke-miterlimit="10" viewBox="-1 -4 10 8" markerWidth="10" markerHeight="8" color="black">
+      <g>
+        <path d="M 8 0 L 0 -3 L 0 3 Z" fill="currentColor" stroke="currentColor" stroke-width="1"/>
+      </g>
+    </marker>
+    <marker orient="auto" overflow="visible" markerUnits="strokeWidth" id="FilledArrow_Marker_2" stroke-linejoin="miter" stroke-miterlimit="10" viewBox="-9 -4 10 8" markerWidth="10" markerHeight="8" color="black">
+      <g>
+        <path d="M -8 0 L 0 3 L 0 -3 Z" fill="currentColor" stroke="currentColor" stroke-width="1"/>
+      </g>
+    </marker>
+  </defs>
+  <g id="optd-reopt-architecture" stroke="none" fill-opacity="1" fill="none" stroke-opacity="1" stroke-dasharray="none">
+    <title>optd-reopt-architecture</title>
+    <g id="optd-reopt-architecture_Layer_1">
+      <title>Layer 1</title>
+      <g id="Graphic_2">
+        <rect x="352.5" y="471.5" width="169" height="86.5" fill="white"/>
+        <rect x="352.5" y="471.5" width="169" height="86.5" stroke="gray" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        <text transform="translate(357.5 505.526)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="16" fill="black" x="4.228" y="15">Adaptive Cost Model</tspan>
+        </text>
+      </g>
+      <g id="Graphic_3">
+        <rect x="701" y="471.5" width="169" height="86.5" fill="white"/>
+        <rect x="701" y="471.5" width="169" height="86.5" stroke="gray" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        <text transform="translate(706 505.526)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="16" fill="black" x="17.716" y="15">Base Cost Model</tspan>
+        </text>
+      </g>
+      <g id="Graphic_4">
+        <rect x="352.5" y="280" width="169" height="86.5" fill="white"/>
+        <rect x="352.5" y="280" width="169" height="86.5" stroke="gray" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        <text transform="translate(357.5 314.026)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="16" fill="black" x="44.092" y="15">Execution</tspan>
+        </text>
+      </g>
+      <g id="Line_5">
+        <line x1="437" y1="366.5" x2="437" y2="461.6" marker-end="url(#FilledArrow_Marker)" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+      </g>
+      <g id="Line_6">
+        <line x1="531.4" y1="514.75" x2="691.1" y2="514.75" marker-end="url(#FilledArrow_Marker)" marker-start="url(#FilledArrow_Marker_2)" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+      </g>
+      <g id="Graphic_7">
+        <rect x="70.5" y="471.5" width="169" height="86.5" fill="white"/>
+        <rect x="70.5" y="471.5" width="169" height="86.5" stroke="gray" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+        <text transform="translate(75.5 505.526)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="16" fill="black" x="34.308" y="15">Optimization</tspan>
+        </text>
+      </g>
+      <g id="Line_8">
+        <line x1="352.5" y1="514.75" x2="249.4" y2="514.75" marker-end="url(#FilledArrow_Marker)" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+      </g>
+      <g id="Line_9">
+        <line x1="218.6893" y1="471.5" x2="365.12062" y2="372.0617" marker-end="url(#FilledArrow_Marker)" stroke="black" stroke-linecap="round" stroke-linejoin="round" stroke-width="1"/>
+      </g>
+      <g id="Graphic_10">
+        <text transform="translate(255.662 497)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="14" fill="black" x="0" y="13">Adaptive Cost</tspan>
+        </text>
+      </g>
+      <g id="Graphic_11">
+        <text transform="translate(440 410.804)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="14" fill="black" x="8739676e-19" y="13">Runtime Data</tspan>
+        </text>
+      </g>
+      <g id="Graphic_12">
+        <text transform="translate(124 410.804)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="14" fill="black" x="29842795e-20" y="13">Plan with Data Collectors</tspan>
+        </text>
+      </g>
+      <g id="Graphic_13">
+        <text transform="translate(538.604 495.5)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="14" fill="black" x="6394885e-19" y="13">-&gt; Override Row Count</tspan>
+        </text>
+      </g>
+      <g id="Graphic_14">
+        <text transform="translate(587.604 516.892)" fill="black">
+          <tspan font-family="Helvetica Neue" font-size="14" fill="black" x="6394885e-19" y="13">&lt;- Cost</tspan>
+        </text>
+      </g>
+    </g>
+  </g>
+</svg>

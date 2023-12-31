@@ -25,4 +25,4 @@
 # Testing
 
 - [SQLPlannerTest](./sqlplannertest.md)
-- [(WIP) Datafusion CLI](./datafusion_cli.md)
+- [Datafusion CLI](./datafusion_cli.md)

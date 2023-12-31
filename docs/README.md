@@ -5,3 +5,5 @@ The docs is written in `mdbook` format. You can follow the [`mdbook` installatio
 ```shell
 mdbook serve
 ```
+
+The online version of the documentation can be found at [https://cmu-db.github.io/optd/](https://cmu-db.github.io/optd/).

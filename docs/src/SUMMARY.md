@@ -19,10 +19,10 @@
 
 # Demo
 
-- [(WIP) Three Join Demo](./demo_three_join.md)
-- [(WIP) TPC-H Q8 Demo](./tpch_q8_demo.md)
+- [Three Join Demo](./demo_three_join.md)
+- [TPC-H Q8 Demo](./demo_tpch_q8.md)
 
 # Testing
 
-- [(WIP) SQLPlannerTest](./sqlplannertest.md)
+- [SQLPlannerTest](./sqlplannertest.md)
 - [(WIP) Datafusion CLI](./datafusion_cli.md)

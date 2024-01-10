@@ -20,6 +20,6 @@ Here, `Group` corresponds to the `MExpr` in the Cascades paper, and `Expr` is si
 
 Note that we store physical expressions (i.e., NLJ/HashJoin) and logical expressions (i.e., Join) in the same group.
 
-One special thing about the optd Cascades optimizer is that it persists states across runs. The states include: whether a rule is invoked or not, all the elements in the memo table, etc. The persistence property makes it possible for the optimizer to associate runtime information with the plan nodes, and use these runtime information in subsequent optimizations. You can learn more about adaptive optimization in optd in [Adaptive Optimization Overview](./adaptive_overview.md).
+One special thing about the optd Cascades optimizer is that it persists states across runs. The states include: whether a rule is invoked or not, all the elements in the memo table, etc. The persistence property makes it possible for the optimizer to associate runtime information with the plan nodes, and use these runtime information in subsequent optimizations. You can learn more about adaptive optimization in optd in [Re-optimization](./reoptimization.md) and [Partial Exploration](./partial_exploration.md).
 
 optd also provides a heuristics optimizer engine for testing rule implementation. It can be found at `optd-core/src/heuristics`.

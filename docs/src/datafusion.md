@@ -72,6 +72,8 @@ LogicalJoin { #0 = #3 }
 
 in the optd representation.
 
+For SQL expressions, the optd Datafusion representation does not do cost-based searches on expressions, though this is supported in optd-core. Each SQL expression can only have one binding in the current implementation.
+
 ## Explain
 
 We use risinglightdb's pretty-xmlish crate and implement a custom explain format for Datafusion plan nodes.

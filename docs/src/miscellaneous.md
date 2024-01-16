@@ -29,3 +29,7 @@ After applying the rule twice, the memo table will have self-referential groups.
 ## Partial Exploration
 
 Each iteration will only be slower because we have to invoke the optimize group tasks before we can find a group to apply the rule. Probably we can keep the task stack across runs to make it faster.
+
+## Physical Property
+
+A major missing feature in the optimizer. Need this to support shuffling and sort optimizations.

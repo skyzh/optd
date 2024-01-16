@@ -1,0 +1,31 @@
+# Miscellaneous
+
+This is a note covering things that do not work well in the system right now.
+
+## Type System
+
+Currently, we hard code decimal type to have `15, 2` precision. Type inferences should be done in the schema property inference.
+
+## Expression
+
+optd supports exploring SQL expressions in the optimization process. However, this might be super inefficient as optimizing a plan node (i.e., join to hash join) usually needs the full binding of an expression tree. This could have exponential plan space and is super inefficient.
+
+## Bindings
+
+We do not have something like a binding iterator as in the Cascades paper. Before applying a rule, we will generate all bindings of a group, which might take a lot of memory. This should be fixed in the future.
+
+## Cycle Detection
+
+Consider the case for join commute rule.
+
+```
+(Join A B) <- group 1
+(Projection (Join B A) <expressions list>) <- group 2
+(Projection (Projection (Join A B) <expressions list>) <expressions list>) <- group 1 may refer itself
+```
+
+After applying the rule twice, the memo table will have self-referential groups. Currently, we detect such self-referential things in optimize group task. Probably there will be better ways to do that.
+
+## Partial Exploration
+
+Each iteration will only be slower because we have to invoke the optimize group tasks before we can find a group to apply the rule. Probably we can keep the task stack across runs to make it faster.

@@ -26,3 +26,7 @@
 
 - [SQLPlannerTest](./sqlplannertest.md)
 - [Datafusion CLI](./datafusion_cli.md)
+
+# Miscellaneous
+
+- [Miscellaneous](./miscellaneous.md)

@@ -34,7 +34,7 @@ For DAG, another challenge is to recover the reusable fragments from the optimiz
 
 ## Memo Table
 
-Obviously, it is not efficient to simply store a mapping from RelNode to the expression id. Cannot imaging how many levels of depths will it require to compute a hash of a tree structure.
+Obviously, it is not efficient to simply store a mapping from RelNode to the expression id. Cannot imagine how many levels of depths will it require to compute a hash of a tree structure.
 
 ## Partial Exploration
 

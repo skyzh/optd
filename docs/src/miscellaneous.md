@@ -43,3 +43,7 @@ Each iteration will only be slower because we have to invoke the optimize group 
 ## Physical Property + Enforcer Rules
 
 A major missing feature in the optimizer. Need this to support shuffling and sort optimizations.
+
+## Pruning
+
+Currently, we have implemented the pruning condition as in the paper, but we did not actually enable it.

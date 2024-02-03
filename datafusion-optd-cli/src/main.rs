@@ -194,17 +194,11 @@ pub async fn main() -> Result<()> {
     let mut ctx = {
         let mut state =
             SessionState::new_with_config_rt(session_config.clone(), Arc::new(runtime_env));
-<<<<<<< HEAD
         if !args.enable_logical {
             // clean up optimizer rules so that we can plug in our own optimizer
             state = state.with_optimizer_rules(vec![]);
             state = state.with_physical_optimizer_rules(vec![]);
         }
-=======
-        // clean up optimizer rules so that we can plug in our own optimizer
-        state = state.with_optimizer_rules(vec![]);
-        state = state.with_physical_optimizer_rules(vec![]);
->>>>>>> 2c9dbed (feat: disable datafusion optimizer)
         // use optd-bridge query planner
         let optimizer = DatafusionOptimizer::new_physical(Box::new(DatafusionCatalog::new(
             state.catalog_list(),

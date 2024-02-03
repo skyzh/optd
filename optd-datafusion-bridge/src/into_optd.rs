@@ -117,7 +117,7 @@ impl OptdPlanContext<'_> {
                     expr,
                 )
                 .into_expr())
-            }
+            } 
             _ => bail!("Unsupported expression: {:?}", expr),
         }
     }

@@ -1,13 +1,9 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
 use datafusion::{
-    arrow::datatypes::{Schema, SchemaRef},
-    datasource::source_as_provider,
-    logical_expr::Operator,
-    physical_expr,
-    physical_plan::{
+    arrow::datatypes::{Schema, SchemaRef}, catalog::schema, common::DFSchema, datasource::source_as_provider, logical_expr::Operator, physical_expr, physical_plan::{
         self,
         aggregates::AggregateMode,
         expressions::create_aggregate_expr,
@@ -16,17 +12,17 @@ use datafusion::{
         },
         projection::ProjectionExec,
         AggregateExpr, ExecutionPlan, PhysicalExpr,
-    },
-    scalar::ScalarValue,
+    }, scalar::ScalarValue
 };
 use optd_datafusion_repr::{
     plan_nodes::{
         BinOpExpr, BinOpType, ColumnRefExpr, ConstantExpr, ConstantType, Expr, FuncExpr, FuncType,
         JoinType, LogOpExpr, LogOpType, OptRelNode, OptRelNodeRef, OptRelNodeTyp, PhysicalAgg,
         PhysicalFilter, PhysicalHashJoin, PhysicalNestedLoopJoin, PhysicalProjection, PhysicalScan,
-        PhysicalSort, PlanNode, SortOrderExpr, SortOrderType,
+        PhysicalSort, PhysicalEmptyRelation, PlanNode, SortOrderExpr, SortOrderType,
     },
     PhysicalCollector,
+    properties::schema::Schema as OptdSchema,
 };
 
 use crate::{physical_collector::CollectorExec, OptdPlanContext};
@@ -398,6 +394,10 @@ impl OptdPlanContext<'_> {
 
     #[async_recursion]
     async fn from_optd_plan_node(&mut self, node: PlanNode) -> Result<Arc<dyn ExecutionPlan>> {
+        let mut schema = OptdSchema(vec![]);
+        if node.typ() == OptRelNodeTyp::PhysicalEmptyRelation {
+            schema = node.schema(self.optimizer.unwrap().optd_optimizer());
+        }
         let rel_node = node.into_rel_node();
         let rel_node_dbg = rel_node.clone();
         let result = match &rel_node.typ {
@@ -440,12 +440,21 @@ impl OptdPlanContext<'_> {
                     self.optimizer.as_ref().unwrap().runtime_statistics.clone(),
                 )) as Arc<dyn ExecutionPlan>)
             }
+            OptRelNodeTyp::PhysicalEmptyRelation => {
+                let physical_node = PhysicalEmptyRelation::from_rel_node(rel_node).unwrap();
+                let datafusion_schema : Schema = schema.into();
+                Ok(Arc::new(datafusion::physical_plan::empty::EmptyExec::new(
+                    physical_node.produce_one_row(),
+                    Arc::new(datafusion_schema),
+                )) as Arc<dyn ExecutionPlan>)
+            }
             typ => unimplemented!("{}", typ),
         };
         result.with_context(|| format!("when processing {}", rel_node_dbg))
     }
 
     pub async fn from_optd(&mut self, root_rel: OptRelNodeRef) -> Result<Arc<dyn ExecutionPlan>> {
+        println!("{}", root_rel);
         self.from_optd_plan_node(PlanNode::from_rel_node(root_rel).unwrap())
             .await
     }

@@ -8,7 +8,7 @@ use optd_core::rel_node::RelNode;
 use optd_datafusion_repr::plan_nodes::{
     BinOpExpr, BinOpType, ColumnRefExpr, ConstantExpr, Expr, ExprList, FuncExpr, FuncType,
     JoinType, LogOpExpr, LogOpType, LogicalAgg, LogicalFilter, LogicalJoin, LogicalProjection,
-    LogicalScan, LogicalSort, OptRelNode, OptRelNodeRef, OptRelNodeTyp, PlanNode, SortOrderExpr,
+    LogicalScan, LogicalSort, LogicalEmptyRelation, OptRelNode, OptRelNodeRef, OptRelNodeTyp, PlanNode, SortOrderExpr,
     SortOrderType,
 };
 
@@ -68,6 +68,10 @@ impl OptdPlanContext<'_> {
                 ScalarValue::Utf8(x) => {
                     let x = x.as_ref().unwrap();
                     Ok(ConstantExpr::string(x).into_expr())
+                }
+                ScalarValue::Int64(x) => {
+                    let x = x.as_ref().unwrap();
+                    Ok(ConstantExpr::int(*x as i64).into_expr())
                 }
                 ScalarValue::Date32(x) => {
                     let x = x.as_ref().unwrap();
@@ -236,6 +240,10 @@ impl OptdPlanContext<'_> {
         Ok(LogicalJoin::new(left, right, ConstantExpr::bool(true).into_expr(), JoinType::Cross))
     }
 
+    fn into_optd_empty_relation(&mut self, node: &logical_plan::EmptyRelation) -> Result<LogicalEmptyRelation> {
+        Ok(LogicalEmptyRelation::new(node.produce_one_row))
+    }
+
     fn into_optd_plan_node(&mut self, node: &LogicalPlan) -> Result<PlanNode> {
         let node = match node {
             LogicalPlan::TableScan(node) => self.into_optd_table_scan(node)?.into_plan_node(),
@@ -246,6 +254,7 @@ impl OptdPlanContext<'_> {
             LogicalPlan::Join(node) => self.into_optd_join(node)?.into_plan_node(),
             LogicalPlan::Filter(node) => self.into_optd_filter(node)?.into_plan_node(),
             LogicalPlan::CrossJoin(node) => self.into_optd_cross_join(node)?.into_plan_node(),
+            LogicalPlan::EmptyRelation(node) => self.into_optd_empty_relation(node)?.into_plan_node(),
             _ => bail!(
                 "unsupported plan node: {}",
                 format!("{:?}", node).split('\n').next().unwrap()

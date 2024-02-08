@@ -2,6 +2,7 @@
 
 mod agg;
 mod apply;
+mod empty_relation;
 mod expr;
 mod filter;
 mod join;
@@ -9,7 +10,6 @@ pub(super) mod macros;
 mod projection;
 mod scan;
 mod sort;
-mod empty_relation;
 
 use std::sync::Arc;
 
@@ -20,6 +20,7 @@ use optd_core::{
 
 pub use agg::{LogicalAgg, PhysicalAgg};
 pub use apply::{ApplyType, LogicalApply};
+pub use empty_relation::{LogicalEmptyRelation, PhysicalEmptyRelation};
 pub use expr::{
     BinOpExpr, BinOpType, ColumnRefExpr, ConstantExpr, ConstantType, ExprList, FuncExpr, FuncType,
     LogOpExpr, LogOpType, SortOrderExpr, SortOrderType, UnOpExpr, UnOpType,
@@ -30,7 +31,6 @@ use pretty_xmlish::{Pretty, PrettyConfig};
 pub use projection::{LogicalProjection, PhysicalProjection};
 pub use scan::{LogicalScan, PhysicalScan};
 pub use sort::{LogicalSort, PhysicalSort};
-pub use empty_relation::{LogicalEmptyRelation, PhysicalEmptyRelation};
 
 use crate::{
     adaptive::PhysicalCollector,

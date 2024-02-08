@@ -1,28 +1,34 @@
-use std::{collections::HashMap, fmt::Display, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
 use datafusion::{
-    arrow::datatypes::{Schema, SchemaRef}, catalog::schema, common::DFSchema, datasource::source_as_provider, logical_expr::Operator, physical_expr, physical_plan::{
+    arrow::datatypes::{Schema, SchemaRef},
+    datasource::source_as_provider,
+    logical_expr::Operator,
+    physical_expr,
+    physical_plan::{
         self,
         aggregates::AggregateMode,
         expressions::create_aggregate_expr,
         joins::{
-            utils::{ColumnIndex, JoinFilter}, CrossJoinExec, PartitionMode
+            utils::{ColumnIndex, JoinFilter},
+            CrossJoinExec, PartitionMode,
         },
         projection::ProjectionExec,
         AggregateExpr, ExecutionPlan, PhysicalExpr,
-    }, scalar::ScalarValue
+    },
+    scalar::ScalarValue,
 };
 use optd_datafusion_repr::{
     plan_nodes::{
         BinOpExpr, BinOpType, ColumnRefExpr, ConstantExpr, ConstantType, Expr, FuncExpr, FuncType,
         JoinType, LogOpExpr, LogOpType, OptRelNode, OptRelNodeRef, OptRelNodeTyp, PhysicalAgg,
-        PhysicalFilter, PhysicalHashJoin, PhysicalNestedLoopJoin, PhysicalProjection, PhysicalScan,
-        PhysicalSort, PhysicalEmptyRelation, PlanNode, SortOrderExpr, SortOrderType,
+        PhysicalEmptyRelation, PhysicalFilter, PhysicalHashJoin, PhysicalNestedLoopJoin,
+        PhysicalProjection, PhysicalScan, PhysicalSort, PlanNode, SortOrderExpr, SortOrderType,
     },
-    PhysicalCollector,
     properties::schema::Schema as OptdSchema,
+    PhysicalCollector,
 };
 
 use crate::{physical_collector::CollectorExec, OptdPlanContext};
@@ -313,7 +319,8 @@ impl OptdPlanContext<'_> {
         let physical_expr = self.from_optd_expr(node.cond(), &Arc::new(filter_schema.clone()))?;
 
         if let JoinType::Cross = node.join_type() {
-            return Ok(Arc::new(CrossJoinExec::new(left_exec, right_exec)) as Arc<dyn ExecutionPlan + 'static>);
+            return Ok(Arc::new(CrossJoinExec::new(left_exec, right_exec))
+                as Arc<dyn ExecutionPlan + 'static>);
         }
 
         let join_type = match node.join_type() {
@@ -442,7 +449,7 @@ impl OptdPlanContext<'_> {
             }
             OptRelNodeTyp::PhysicalEmptyRelation => {
                 let physical_node = PhysicalEmptyRelation::from_rel_node(rel_node).unwrap();
-                let datafusion_schema : Schema = schema.into();
+                let datafusion_schema: Schema = schema.into();
                 Ok(Arc::new(datafusion::physical_plan::empty::EmptyExec::new(
                     physical_node.produce_one_row(),
                     Arc::new(datafusion_schema),

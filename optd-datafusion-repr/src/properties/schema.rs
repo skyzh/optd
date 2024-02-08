@@ -31,7 +31,7 @@ impl Into<DatafusionSchema> for Schema {
             ConstantType::Decimal => DataType::Float64,
             ConstantType::Utf8String => DataType::Utf8,
         };
-        let fields : Vec<_> = self
+        let fields: Vec<_> = self
             .0
             .iter()
             .enumerate()

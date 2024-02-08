@@ -40,7 +40,12 @@ impl LogicalEmptyRelation {
     }
 
     pub fn produce_one_row(&self) -> bool {
-        self.clone().into_rel_node().data.as_ref().unwrap().as_bool()
+        self.clone()
+            .into_rel_node()
+            .data
+            .as_ref()
+            .unwrap()
+            .as_bool()
     }
 }
 
@@ -73,6 +78,11 @@ impl PhysicalEmptyRelation {
     }
 
     pub fn produce_one_row(&self) -> bool {
-        self.clone().into_rel_node().data.as_ref().unwrap().as_bool()
+        self.clone()
+            .into_rel_node()
+            .data
+            .as_ref()
+            .unwrap()
+            .as_bool()
     }
 }

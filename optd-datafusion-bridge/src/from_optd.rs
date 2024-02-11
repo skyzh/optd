@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use anyhow::{bail, Context, Result};
 use async_recursion::async_recursion;
 use datafusion::{
-    arrow::datatypes::{Schema, SchemaRef},
+    arrow::datatypes::{DataType, Field, Schema, SchemaRef},
     datasource::source_as_provider,
     logical_expr::Operator,
     physical_expr,
@@ -32,6 +32,27 @@ use optd_datafusion_repr::{
 };
 
 use crate::{physical_collector::CollectorExec, OptdPlanContext};
+
+// TODO: current DataType and ConstantType are not 1 to 1 mapping
+// optd schema stores constantType from data type in catalog.get
+// for decimal128, the precision is lost
+fn from_optd_schema(optd_schema: &OptdSchema) -> Schema {
+    let match_type = |typ: &ConstantType| match typ {
+        ConstantType::Any => unimplemented!(),
+        ConstantType::Bool => DataType::Boolean,
+        ConstantType::Int => DataType::Int64,
+        ConstantType::Date => DataType::Date32,
+        ConstantType::Decimal => DataType::Float64,
+        ConstantType::Utf8String => DataType::Utf8,
+    };
+    let fields: Vec<_> = optd_schema
+        .0
+        .iter()
+        .enumerate()
+        .map(|(i, typ)| Field::new(&format!("c{}", i), match_type(typ), false))
+        .collect();
+    Schema::new(fields)
+}
 
 impl OptdPlanContext<'_> {
     #[async_recursion]
@@ -449,7 +470,7 @@ impl OptdPlanContext<'_> {
             }
             OptRelNodeTyp::PhysicalEmptyRelation => {
                 let physical_node = PhysicalEmptyRelation::from_rel_node(rel_node).unwrap();
-                let datafusion_schema: Schema = schema.into();
+                let datafusion_schema: Schema = from_optd_schema(&schema);
                 Ok(Arc::new(datafusion::physical_plan::empty::EmptyExec::new(
                     physical_node.produce_one_row(),
                     Arc::new(datafusion_schema),
@@ -461,7 +482,6 @@ impl OptdPlanContext<'_> {
     }
 
     pub async fn from_optd(&mut self, root_rel: OptRelNodeRef) -> Result<Arc<dyn ExecutionPlan>> {
-        println!("{}", root_rel);
         self.from_optd_plan_node(PlanNode::from_rel_node(root_rel).unwrap())
             .await
     }

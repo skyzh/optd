@@ -2503,10 +2503,8 @@ name = "optd-datafusion-repr"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arrow-schema 47.0.0",
  "async-trait",
  "camelpaste",
- "datafusion",
  "datafusion-expr",
  "itertools",
  "num-derive",

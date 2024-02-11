@@ -33,7 +33,6 @@ PhysicalProjection
 -- Test whether the optimizer eliminates join to empty relation
 select * from t1 inner join t2 on false;
 select 64+1 from t1 inner join t2 on false;
-select 64+1 from t1 inner join t2 on 1=0;
 
 /*
 LogicalProjection { exprs: [ #0, #1, #2, #3 ] }

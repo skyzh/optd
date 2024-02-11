@@ -158,7 +158,6 @@ pub async fn main() -> Result<()> {
     };
 
     let mut session_config = SessionConfig::from_env()?.with_information_schema(true);
-    session_config.options_mut().optimizer.max_passes = 0;
 
     if !args.enable_logical {
         session_config.options_mut().optimizer.max_passes = 0;

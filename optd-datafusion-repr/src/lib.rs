@@ -8,7 +8,8 @@ use optd_core::cascades::{CascadesOptimizer, GroupId, OptimizerProperties};
 use plan_nodes::{OptRelNode, OptRelNodeRef, OptRelNodeTyp, PlanNode};
 use properties::schema::{Catalog, SchemaPropertyBuilder};
 use rules::{
-    HashJoinRule, JoinAssocRule, JoinCommuteRule, PhysicalConversionRule, ProjectionPullUpJoin, EliminateJoinRule,
+    EliminateJoinRule, HashJoinRule, JoinAssocRule, JoinCommuteRule, PhysicalConversionRule,
+    ProjectionPullUpJoin,
 };
 
 pub use adaptive::PhysicalCollector;

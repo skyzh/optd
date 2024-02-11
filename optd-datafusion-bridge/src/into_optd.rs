@@ -4,6 +4,7 @@ use datafusion::{
     logical_expr::{self, logical_plan, LogicalPlan, Operator},
     scalar::ScalarValue,
 };
+use datafusion_expr::Expr as DFExpr;
 use optd_core::rel_node::RelNode;
 use optd_datafusion_repr::plan_nodes::{
     BinOpExpr, BinOpType, ColumnRefExpr, ConstantExpr, Expr, ExprList, FuncExpr, FuncType,
@@ -117,7 +118,7 @@ impl OptdPlanContext<'_> {
                     expr,
                 )
                 .into_expr())
-            }
+            } 
             _ => bail!("Unsupported expression: {:?}", expr),
         }
     }
@@ -215,12 +216,33 @@ impl OptdPlanContext<'_> {
         }
 
         if log_ops.is_empty() {
-            Ok(LogicalJoin::new(
-                left,
-                right,
-                ConstantExpr::bool(true).into_expr(),
-                join_type,
-            ))
+            // optd currently only supports
+            // 1. normal equal condition join
+            //    select * from a join b on a.id = b.id
+            // 2. join on false/true
+            //    select * from a join b on false/true
+            // 3. join on other literals or other filters are not supported
+            //  instead of converting them to a join on true, we bail out
+
+            match node.filter {
+                Some(DFExpr::Literal(ScalarValue::Boolean(Some(val)))) => {
+                    return Ok(LogicalJoin::new(
+                        left,
+                        right,
+                        ConstantExpr::bool(val).into_expr(),
+                        join_type,
+                    ));
+                }
+                None => {
+                    return Ok(LogicalJoin::new(
+                        left,
+                        right,
+                        ConstantExpr::bool(true).into_expr(),
+                        join_type,
+                    ));
+                }
+                _ => bail!("unsupported join filter: {:?}", node.filter),
+            }
         } else if log_ops.len() == 1 {
             Ok(LogicalJoin::new(left, right, log_ops.remove(0), join_type))
         } else {

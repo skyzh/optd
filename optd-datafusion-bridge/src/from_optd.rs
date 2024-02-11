@@ -345,7 +345,7 @@ impl OptdPlanContext<'_> {
         }
 
         let join_type = match node.join_type() {
-            JoinType::Inner | JoinType::Cross => datafusion::logical_expr::JoinType::Inner,
+            JoinType::Inner => datafusion::logical_expr::JoinType::Inner,
             JoinType::LeftOuter => datafusion::logical_expr::JoinType::Left,
             _ => unimplemented!(),
         };

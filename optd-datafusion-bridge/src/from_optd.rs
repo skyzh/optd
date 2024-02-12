@@ -24,8 +24,9 @@ use optd_datafusion_repr::{
     plan_nodes::{
         BinOpExpr, BinOpType, ColumnRefExpr, ConstantExpr, ConstantType, Expr, FuncExpr, FuncType,
         JoinType, LogOpExpr, LogOpType, OptRelNode, OptRelNodeRef, OptRelNodeTyp, PhysicalAgg,
-        PhysicalEmptyRelation, PhysicalFilter, PhysicalHashJoin, PhysicalNestedLoopJoin,
-        PhysicalProjection, PhysicalScan, PhysicalSort, PlanNode, SortOrderExpr, SortOrderType,
+        PhysicalEmptyRelation, PhysicalFilter, PhysicalHashJoin, PhysicalLimit,
+        PhysicalNestedLoopJoin, PhysicalProjection, PhysicalScan, PhysicalSort, PlanNode,
+        SortOrderExpr, SortOrderType,
     },
     properties::schema::Schema as OptdSchema,
     PhysicalCollector,
@@ -272,6 +273,41 @@ impl OptdPlanContext<'_> {
     }
 
     #[async_recursion]
+    async fn conv_from_optd_limit(
+        &mut self,
+        node: PhysicalLimit,
+    ) -> Result<Arc<dyn ExecutionPlan + 'static>> {
+        let child = self.conv_from_optd_plan_node(node.child()).await?;
+
+        // Limit skip/fetch expressions are only allowed to be constant int
+        assert!(node.skip().typ() == OptRelNodeTyp::Constant(ConstantType::UInt64));
+        // Conversion from u64 -> usize could fail (also the case in into_optd)
+        let skip = ConstantExpr::from_rel_node(node.skip().into_rel_node())
+            .unwrap()
+            .value()
+            .as_u64()
+            .try_into()
+            .unwrap();
+
+        assert!(node.fetch().typ() == OptRelNodeTyp::Constant(ConstantType::UInt64));
+        let fetch = ConstantExpr::from_rel_node(node.fetch().into_rel_node())
+            .unwrap()
+            .value()
+            .as_u64();
+        let fetch_opt: Option<usize> = if fetch == u64::MAX {
+            None
+        } else {
+            Some(fetch.try_into().unwrap())
+        };
+
+        Ok(
+            Arc::new(datafusion::physical_plan::limit::GlobalLimitExec::new(
+                child, skip, fetch_opt,
+            )) as Arc<dyn ExecutionPlan>,
+        )
+    }
+
+    #[async_recursion]
     async fn conv_from_optd_sort(
         &mut self,
         node: PhysicalSort,
@@ -492,6 +528,10 @@ impl OptdPlanContext<'_> {
                     physical_node.produce_one_row(),
                     Arc::new(datafusion_schema),
                 )) as Arc<dyn ExecutionPlan>)
+            }
+            OptRelNodeTyp::PhysicalLimit => {
+                self.conv_from_optd_limit(PhysicalLimit::from_rel_node(rel_node).unwrap())
+                    .await
             }
             typ => unimplemented!("{}", typ),
         };

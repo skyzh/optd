@@ -9,8 +9,8 @@ use optd_core::rel_node::RelNode;
 use optd_datafusion_repr::plan_nodes::{
     BinOpExpr, BinOpType, ColumnRefExpr, ConstantExpr, Expr, ExprList, FuncExpr, FuncType,
     JoinType, LogOpExpr, LogOpType, LogicalAgg, LogicalEmptyRelation, LogicalFilter, LogicalJoin,
-    LogicalProjection, LogicalScan, LogicalSort, OptRelNode, OptRelNodeRef, OptRelNodeTyp,
-    PlanNode, SortOrderExpr, SortOrderType,
+    LogicalLimit, LogicalProjection, LogicalScan, LogicalSort, OptRelNode, OptRelNodeRef,
+    OptRelNodeTyp, PlanNode, SortOrderExpr, SortOrderType,
 };
 
 use crate::OptdPlanContext;
@@ -301,6 +301,22 @@ impl OptdPlanContext<'_> {
         Ok(LogicalEmptyRelation::new(node.produce_one_row))
     }
 
+    fn conv_into_optd_limit(&mut self, node: &logical_plan::Limit) -> Result<LogicalLimit> {
+        let input = self.conv_into_optd_plan_node(node.input.as_ref())?;
+        // try_into guys are converting usize to u64.
+        let converted_skip = node.skip.try_into().unwrap();
+        let converted_fetch = if let Some(x) = node.fetch {
+            x.try_into().unwrap()
+        } else {
+            u64::MAX // u64 MAX represents infinity (not the best way to do this)
+        };
+        Ok(LogicalLimit::new(
+            input,
+            ConstantExpr::uint64(converted_skip).into_expr(),
+            ConstantExpr::uint64(converted_fetch).into_expr(),
+        ))
+    }
+
     fn conv_into_optd_plan_node(&mut self, node: &LogicalPlan) -> Result<PlanNode> {
         let node = match node {
             LogicalPlan::TableScan(node) => self.conv_into_optd_table_scan(node)?.into_plan_node(),
@@ -316,6 +332,7 @@ impl OptdPlanContext<'_> {
             LogicalPlan::EmptyRelation(node) => {
                 self.conv_into_optd_empty_relation(node)?.into_plan_node()
             }
+            LogicalPlan::Limit(node) => self.conv_into_optd_limit(node)?.into_plan_node(),
             _ => bail!(
                 "unsupported plan node: {}",
                 format!("{:?}", node).split('\n').next().unwrap()

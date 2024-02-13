@@ -11,8 +11,8 @@ use properties::{
     schema::{Catalog, SchemaPropertyBuilder},
 };
 use rules::{
-    EliminateFilterRule, EliminateJoinRule, HashJoinRule, JoinAssocRule, JoinCommuteRule,
-    PhysicalConversionRule, ProjectionPullUpJoin,
+    EliminateFilterRule, EliminateJoinRule, EliminateLimitRule, HashJoinRule, JoinAssocRule,
+    JoinCommuteRule, PhysicalConversionRule, ProjectionPullUpJoin,
 };
 
 pub use adaptive::PhysicalCollector;
@@ -52,6 +52,7 @@ impl DatafusionOptimizer {
         rules.push(Arc::new(ProjectionPullUpJoin::new()));
         rules.push(Arc::new(EliminateJoinRule::new()));
         rules.push(Arc::new(EliminateFilterRule::new()));
+        rules.push(Arc::new(EliminateLimitRule::new()));
 
         let cost_model = AdaptiveCostModel::new(50);
         Self {

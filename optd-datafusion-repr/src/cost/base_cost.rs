@@ -1,9 +1,13 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
-use crate::plan_nodes::OptRelNodeTyp;
+use crate::properties::column_ref::{ColumnRefPropertyBuilder, GroupColumnRefs};
+use crate::{
+    plan_nodes::{OptRelNodeRef, OptRelNodeTyp},
+    properties::column_ref::ColumnRef,
+};
 use itertools::Itertools;
 use optd_core::{
-    cascades::RelNodeContext,
+    cascades::{CascadesOptimizer, RelNodeContext},
     cost::{Cost, CostModel},
     rel_node::{RelNode, RelNodeTyp, Value},
 };
@@ -18,18 +22,33 @@ fn compute_plan_node_cost<T: RelNodeTyp, C: CostModel<T>>(
         .iter()
         .map(|child| compute_plan_node_cost(model, child, total_cost))
         .collect_vec();
-    let cost = model.compute_cost(&node.typ, &node.data, &children, None);
+    let cost = model.compute_cost(&node.typ, &node.data, &children, None, None);
     model.accumulate(total_cost, &cost);
     cost
 }
 
 pub struct OptCostModel {
-    table_stat: HashMap<String, usize>,
+    per_table_stats_map: HashMap<String, PerTableStats>,
+}
+
+pub struct PerTableStats {
+    row_cnt: usize,
+    per_column_stats_vec: Vec<PerColumnStats>,
+}
+
+pub struct PerColumnStats {
+    mcvs: Box<dyn MostCommonValues>,
+}
+
+pub trait MostCommonValues: 'static + Send + Sync {
+    fn get_freq(&self, value: &Value) -> Option<f64>;
 }
 
 pub const ROW_COUNT: usize = 1;
 pub const COMPUTE_COST: usize = 2;
 pub const IO_COST: usize = 3;
+// used to indicate a combination of unimplemented!(), unreachable!(), or panic!()
+const INVALID_SELECTIVITY: f64 = -1.0;
 
 impl OptCostModel {
     pub fn row_cnt(Cost(cost): &Cost) -> f64 {
@@ -94,16 +113,13 @@ impl CostModel<OptRelNodeTyp> for OptCostModel {
         node: &OptRelNodeTyp,
         data: &Option<Value>,
         children: &[Cost],
-        _context: Option<RelNodeContext>,
+        context: Option<RelNodeContext>,
+        optimizer: Option<&CascadesOptimizer<OptRelNodeTyp>>,
     ) -> Cost {
         match node {
             OptRelNodeTyp::PhysicalScan => {
-                let table_name = data.as_ref().unwrap().as_str();
-                let row_cnt = self
-                    .table_stat
-                    .get(table_name.as_ref())
-                    .copied()
-                    .unwrap_or(1) as f64;
+                let table = data.as_ref().unwrap().as_str();
+                let row_cnt = self.get_row_cnt(table.as_ref()).unwrap_or(1) as f64;
                 Self::cost(row_cnt, 0.0, row_cnt)
             }
             OptRelNodeTyp::PhysicalEmptyRelation => Self::cost(0.5, 0.01, 0.0),
@@ -115,7 +131,37 @@ impl CostModel<OptRelNodeTyp> for OptCostModel {
             OptRelNodeTyp::PhysicalFilter => {
                 let (row_cnt, _, _) = Self::cost_tuple(&children[0]);
                 let (_, compute_cost, _) = Self::cost_tuple(&children[1]);
-                let selectivity = 0.001;
+                let selectivity = match context {
+                    Some(context) => {
+                        if let Some(optimizer) = optimizer {
+                            let column_refs = optimizer
+                                .get_property_by_group::<ColumnRefPropertyBuilder>(
+                                    context.group_id,
+                                    1,
+                                );
+                            let expr_group_id = context.children_group_ids[1];
+                            let expr_trees = optimizer.get_all_group_bindings(expr_group_id, false);
+                            // there may be more than one expression tree in a group (you can see this trivially as you can just swap the order of two subtrees for commutative operators)
+                            // however, we just take an arbitrary expression tree from the group to compute selectivity
+                            if let Some(expr_tree) = expr_trees.first() {
+                                self.get_filter_selectivity(Arc::clone(expr_tree), &column_refs)
+                            } else {
+                                INVALID_SELECTIVITY
+                            }
+                        } else {
+                            INVALID_SELECTIVITY
+                        }
+                    }
+                    None => INVALID_SELECTIVITY,
+                };
+
+                // to have a sensible "default" for now
+                let selectivity = if selectivity == INVALID_SELECTIVITY {
+                    0.001
+                } else {
+                    selectivity
+                };
+
                 Self::cost(
                     (row_cnt * selectivity).max(1.0),
                     row_cnt * compute_cost,
@@ -192,7 +238,168 @@ impl CostModel<OptRelNodeTyp> for OptCostModel {
 }
 
 impl OptCostModel {
-    pub fn new(table_stat: HashMap<String, usize>) -> Self {
-        Self { table_stat }
+    pub fn new(per_table_stats_map: HashMap<String, PerTableStats>) -> Self {
+        Self {
+            per_table_stats_map,
+        }
+    }
+
+    /// The expr_tree input must be a "mixed expression tree"
+    ///     An "expression node" refers to a RelNode that returns true for is_expression()
+    ///     A "full expression tree" is where every node in the tree is an expression node
+    ///     A "mixed expression tree" is where every base-case node and all its parents are expression nodes
+    ///     A "base-case node" is a node that doesn't lead to further recursion (such as a BinOp(Eq))
+    /// The schema input is the schema the predicate represented by the expr_tree is applied on
+    /// The output will be the selectivity of the expression tree if it were a "filter predicate".
+    /// A "filter predicate" operates on one input node, unlike a "join predicate" which operates on two input nodes.
+    ///     This is why the function only takes in a single schema.
+    fn get_filter_selectivity(
+        &self,
+        expr_tree: OptRelNodeRef,
+        column_refs: &GroupColumnRefs,
+    ) -> f64 {
+        assert!(expr_tree.typ.is_expression());
+        match expr_tree.typ {
+            OptRelNodeTyp::BinOp(bin_op_typ) => {
+                if bin_op_typ.is_comparison() {
+                    let left_child = expr_tree.child(0);
+                    let right_child = expr_tree.child(1);
+
+                    if left_child.as_ref().typ == OptRelNodeTyp::ColumnRef {
+                        let col_ref_idx = left_child.as_ref().data.as_ref().unwrap().as_u64();
+                        // this is always safe since col_ref_idx was initially a usize in ColumnRefExpr::new()
+                        let usize_col_ref_idx = col_ref_idx as usize;
+                        if let ColumnRef::BaseTableColumnRef { table, col_idx } =
+                            &column_refs[usize_col_ref_idx]
+                        {
+                            if let OptRelNodeTyp::Constant(_) = right_child.as_ref().typ {
+                                self.get_column_equality_selectivity(
+                                    table,
+                                    *col_idx,
+                                    right_child.as_ref().data.as_ref().unwrap(),
+                                )
+                            } else {
+                                INVALID_SELECTIVITY
+                            }
+                        } else {
+                            INVALID_SELECTIVITY
+                        }
+                    } else {
+                        INVALID_SELECTIVITY
+                    }
+                } else if bin_op_typ.is_numerical() || bin_op_typ.is_logical() {
+                    INVALID_SELECTIVITY
+                } else {
+                    unreachable!("all BinOpTypes should be true for at least one is_*() function")
+                }
+            }
+            _ => INVALID_SELECTIVITY,
+        }
+    }
+
+    fn get_column_equality_selectivity(&self, table: &str, col_idx: usize, value: &Value) -> f64 {
+        if let Some(per_table_stats) = self.per_table_stats_map.get(table) {
+            if let Some(per_column_stats) = per_table_stats.per_column_stats_vec.get(col_idx) {
+                if let Some(freq) = per_column_stats.mcvs.get_freq(value) {
+                    freq
+                } else {
+                    INVALID_SELECTIVITY
+                }
+            } else {
+                INVALID_SELECTIVITY
+            }
+        } else {
+            INVALID_SELECTIVITY
+        }
+    }
+
+    pub fn get_row_cnt(&self, table: &str) -> Option<usize> {
+        self.per_table_stats_map
+            .get(table)
+            .map(|per_table_stats| per_table_stats.row_cnt)
+    }
+}
+
+impl PerTableStats {
+    pub fn new(row_cnt: usize, per_column_stats_vec: Vec<PerColumnStats>) -> Self {
+        Self {
+            row_cnt,
+            per_column_stats_vec,
+        }
+    }
+}
+
+impl PerColumnStats {
+    pub fn new(mcvs: Box<dyn MostCommonValues>) -> Self {
+        Self { mcvs }
+    }
+}
+
+/// I thought about using the system's own parser and planner to generate these expression trees, but
+/// this is not currently feasible because it would create a cyclic dependency between optd-datafusion-bridge
+/// and optd-datafusion-repr
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashMap, sync::Arc};
+
+    use optd_core::rel_node::{RelNode, Value};
+
+    use crate::{
+        plan_nodes::{BinOpType, ConstantType, OptRelNodeTyp},
+        properties::column_ref::ColumnRef,
+    };
+
+    use super::{MostCommonValues, OptCostModel, PerColumnStats, PerTableStats};
+
+    struct MockMostCommonValues {
+        mcvs: HashMap<Value, f64>,
+    }
+
+    impl MostCommonValues for MockMostCommonValues {
+        fn get_freq(&self, value: &Value) -> Option<f64> {
+            self.mcvs.get(value).copied()
+        }
+    }
+
+    #[test]
+    fn test_colref_eq_constint_in_mcv() {
+        let t1_c0_v1_freq = 0.1;
+        let cost_model = OptCostModel::new(
+            vec![(
+                String::from("t1"),
+                PerTableStats::new(
+                    100,
+                    vec![PerColumnStats::new(Box::new(MockMostCommonValues {
+                        mcvs: vec![(Value::Int32(1), t1_c0_v1_freq)].into_iter().collect(),
+                    }))],
+                ),
+            )]
+            .into_iter()
+            .collect(),
+        );
+        let expr_tree = Arc::new(RelNode::<OptRelNodeTyp> {
+            typ: OptRelNodeTyp::BinOp(BinOpType::Eq),
+            children: vec![
+                Arc::new(RelNode::<OptRelNodeTyp> {
+                    typ: OptRelNodeTyp::ColumnRef,
+                    children: vec![],
+                    data: Some(Value::UInt64(0)),
+                }),
+                Arc::new(RelNode::<OptRelNodeTyp> {
+                    typ: OptRelNodeTyp::Constant(ConstantType::Int32),
+                    children: vec![],
+                    data: Some(Value::Int32(1)),
+                }),
+            ],
+            data: None,
+        });
+        let column_refs = vec![ColumnRef::BaseTableColumnRef {
+            table: String::from("t1"),
+            col_idx: 0,
+        }];
+        assert_eq!(
+            cost_model.get_filter_selectivity(expr_tree, &column_refs),
+            t1_c0_v1_freq
+        );
     }
 }

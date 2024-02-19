@@ -2501,6 +2501,7 @@ dependencies = [
  "arrow-schema",
  "async-trait",
  "camelpaste",
+ "datafusion",
  "datafusion-expr",
  "itertools",
  "num-derive",

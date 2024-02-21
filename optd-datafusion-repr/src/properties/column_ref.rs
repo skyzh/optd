@@ -111,7 +111,8 @@ impl PropertyBuilder<OptRelNodeTyp> for ColumnRefPropertyBuilder {
             | OptRelNodeTyp::DataType(_)
             | OptRelNodeTyp::Between
             | OptRelNodeTyp::EmptyRelation
-            | OptRelNodeTyp::Like => {
+            | OptRelNodeTyp::Like
+            | OptRelNodeTyp::InList => {
                 vec![ColumnRef::Derived]
             }
             _ => unimplemented!("Unsupported rel node type {:?}", typ),

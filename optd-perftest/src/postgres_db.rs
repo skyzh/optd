@@ -1,4 +1,4 @@
-use crate::cardtest::CardtestRunnerDBHelper;
+use crate::cardtest::{Benchmark, CardtestRunnerDBHelper};
 use anyhow::Result;
 use async_trait::async_trait;
 
@@ -16,8 +16,12 @@ impl CardtestRunnerDBHelper for PostgresDb {
         "Postgres"
     }
 
+    async fn load_database(&self, _benchmark: &Benchmark) -> anyhow::Result<()> {
+        Ok(())
+    }
+
     async fn eval_true_card(&self, _sql: &str) -> anyhow::Result<usize> {
-        Ok(10)
+        Ok(1)
     }
 
     async fn eval_est_card(&self, _sql: &str) -> anyhow::Result<usize> {

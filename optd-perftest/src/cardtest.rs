@@ -77,6 +77,12 @@ pub trait CardtestRunnerDBHelper {
     fn get_name(&self) -> &str;
 
     // The order of queries has to be the same between these two functions.
-    async fn eval_benchmark_estcards(&self, benchmark: &Benchmark) -> anyhow::Result<Vec<usize>>;
-    async fn eval_benchmark_truecards(&self, benchmark: &Benchmark) -> anyhow::Result<Vec<usize>>;
+    async fn eval_benchmark_estcards(
+        &mut self,
+        benchmark: &Benchmark,
+    ) -> anyhow::Result<Vec<usize>>;
+    async fn eval_benchmark_truecards(
+        &mut self,
+        benchmark: &Benchmark,
+    ) -> anyhow::Result<Vec<usize>>;
 }

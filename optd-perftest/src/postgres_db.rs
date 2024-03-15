@@ -4,7 +4,9 @@ use crate::{
     tpch::{TpchConfig, TpchKit},
 };
 use async_trait::async_trait;
+use lazy_static::lazy_static;
 use regex::Regex;
+
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -150,7 +152,10 @@ impl CardtestRunnerDBHelper for PostgresDb {
         "Postgres"
     }
 
-    async fn eval_benchmark_estcards(&self, benchmark: &Benchmark) -> anyhow::Result<Vec<usize>> {
+    async fn eval_benchmark_estcards(
+        &mut self,
+        benchmark: &Benchmark,
+    ) -> anyhow::Result<Vec<usize>> {
         self.load_benchmark_data(benchmark).await?;
         let dbname = benchmark.get_dbname();
         let client = Self::connect_to_db(&dbname).await?;
@@ -160,7 +165,10 @@ impl CardtestRunnerDBHelper for PostgresDb {
         }
     }
 
-    async fn eval_benchmark_truecards(&self, benchmark: &Benchmark) -> anyhow::Result<Vec<usize>> {
+    async fn eval_benchmark_truecards(
+        &mut self,
+        benchmark: &Benchmark,
+    ) -> anyhow::Result<Vec<usize>> {
         self.load_benchmark_data(benchmark).await?;
         let dbname = benchmark.get_dbname();
         let client = Self::connect_to_db(&dbname).await?;
@@ -225,8 +233,10 @@ impl PostgresDb {
 
     /// Extract the row count from a line of an EXPLAIN output
     fn extract_row_count(explain_line: &str) -> Option<usize> {
-        let re = Regex::new(r"rows=(\d+)").unwrap();
-        if let Some(caps) = re.captures(explain_line) {
+        lazy_static! {
+            static ref ROW_CNT_RE: Regex = Regex::new(r"row_cnt=(\d+\.\d+)").unwrap();
+        }
+        if let Some(caps) = ROW_CNT_RE.captures(explain_line) {
             if let Some(matched) = caps.get(1) {
                 let rows_str = matched.as_str();
                 match rows_str.parse::<usize>() {

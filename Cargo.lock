@@ -2737,6 +2737,7 @@ dependencies = [
  "log",
  "optd-datafusion-bridge",
  "optd-datafusion-repr",
+ "optd-gungnir",
  "regex",
  "shlex",
  "tokio",

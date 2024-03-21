@@ -1,6 +1,6 @@
 use crate::{
     benchmark::Benchmark,
-    cardtest::CardtestRunnerDBHelper,
+    cardtest::CardtestRunnerDBMSHelper,
     tpch::{TpchConfig, TpchKit},
 };
 use async_trait::async_trait;
@@ -15,7 +15,7 @@ use std::{
 };
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
-use tokio_postgres::{Client, NoTls};
+use tokio_postgres::{Client, NoTls, Row};
 
 /// This dbname is assumed to always exist
 const DEFAULT_DBNAME: &str = "postgres";
@@ -72,7 +72,7 @@ impl PostgresDb {
     async fn load_benchmark_data(&self, benchmark: &Benchmark) -> anyhow::Result<()> {
         let dbname = benchmark.get_dbname();
         // since we don't know whether dbname exists at this point, we have to connect to the default database
-        let default_db_client = self.connect_to_db(DEFAULT_DBNAME).await?;
+        let defaultdb_client = self.connect_to_db(DEFAULT_DBNAME).await?;
         let pgdata_dones_dpath = self.workspace_dpath.join("pgdata_dones");
         if !pgdata_dones_dpath.exists() {
             fs::create_dir(&pgdata_dones_dpath)?;
@@ -81,25 +81,35 @@ impl PostgresDb {
         let done_fpath = pgdata_dones_dpath.join(done_fname);
         // determine whether we should load the data
         let should_load = if benchmark.is_readonly() {
-            // we use the existence of done_fpath to indicate that loading was finished rather than
-            // whether dbname exists as it's possible for dbname to be created by only partially loaded
-            !done_fpath.exists()
+            // if the db doesn't even exist then we clearly need to load it
+            if !Self::get_does_db_exist(&defaultdb_client, &dbname).await? {
+                // there may be a done_fpath left over from before. we need to make sure to delete it since it's
+                // now known to be inaccurate
+                if done_fpath.exists() {
+                    fs::remove_file(&done_fpath)?;
+                }
+                true
+            } else {
+                // if the db does exist, we use done_fpath to determine if we need to load it since it's possible
+                // for the db to be created but only partially loaded
+                !done_fpath.exists()
+            }
         } else {
             true
         };
         if should_load {
             log::debug!("[start] loading benchmark data");
             // it's possible for the db to exist or not after we have determined we should load the data
-            let does_db_exist = Self::get_does_db_exist(&default_db_client, &dbname).await?;
+            let does_db_exist = Self::get_does_db_exist(&defaultdb_client, &dbname).await?;
             if does_db_exist {
-                default_db_client
+                defaultdb_client
                     .query(&format!("DROP DATABASE {}", dbname), &[])
                     .await?;
             }
-            default_db_client
+            defaultdb_client
                 .query(&format!("CREATE DATABASE {}", dbname), &[])
                 .await?;
-            drop(default_db_client);
+            drop(defaultdb_client);
             // now that we've created `dbname`, we can connect to that
             let client = self.connect_to_db(&dbname).await?;
             match benchmark {
@@ -168,7 +178,7 @@ impl PostgresDb {
 }
 
 #[async_trait]
-impl CardtestRunnerDBHelper for PostgresDb {
+impl CardtestRunnerDBMSHelper for PostgresDb {
     fn get_name(&self) -> &str {
         "Postgres"
     }
@@ -200,7 +210,7 @@ impl CardtestRunnerDBHelper for PostgresDb {
     }
 }
 
-/// This impl has helpers for ```impl CardtestRunnerDBHelper for PostgresDb```
+/// This impl has helpers for ```impl CardtestRunnerDBMSHelper for PostgresDb```
 impl PostgresDb {
     async fn eval_tpch_estcards(
         &self,
@@ -213,7 +223,7 @@ impl PostgresDb {
         let mut estcards = vec![];
         for sql_fpath in tpch_kit.get_sql_fpath_ordered_iter(tpch_config)? {
             let sql = fs::read_to_string(sql_fpath)?;
-            let estcard = Self::eval_query_estcard(client, &sql).await?;
+            let estcard = self.eval_query_estcard(client, &sql).await?;
             estcards.push(estcard);
         }
 
@@ -231,22 +241,29 @@ impl PostgresDb {
         let mut truecards = vec![];
         for sql_fpath in tpch_kit.get_sql_fpath_ordered_iter(tpch_config)? {
             let sql = fs::read_to_string(sql_fpath)?;
-            let truecard = Self::eval_query_truecard(client, &sql).await?;
+            let truecard = self.eval_query_truecard(client, &sql).await?;
             truecards.push(truecard);
         }
 
         Ok(truecards)
     }
 
-    async fn eval_query_estcard(client: &Client, sql: &str) -> anyhow::Result<usize> {
-        let result = client.query(&format!("EXPLAIN {}", sql), &[]).await?;
+    fn log_explain(&self, explain_rows: &[Row]) {
+        let explain_lines: Vec<&str> = explain_rows.iter().map(|row| row.get(0)).collect();
+        let explain_str = explain_lines.join("\n");
+        log::info!("{} {}", self.get_name(), explain_str);
+    }
+
+    async fn eval_query_estcard(&self, client: &Client, sql: &str) -> anyhow::Result<usize> {
+        let explain_rows = client.query(&format!("EXPLAIN {}", sql), &[]).await?;
+        self.log_explain(&explain_rows);
         // the first line contains the explain of the root node
-        let first_explain_line: &str = result.first().unwrap().get(0);
+        let first_explain_line: &str = explain_rows.first().unwrap().get(0);
         let estcard = PostgresDb::extract_row_count(first_explain_line).unwrap();
         Ok(estcard)
     }
 
-    async fn eval_query_truecard(client: &Client, sql: &str) -> anyhow::Result<usize> {
+    async fn eval_query_truecard(&self, client: &Client, sql: &str) -> anyhow::Result<usize> {
         let rows = client.query(sql, &[]).await?;
         let truecard = rows.len();
         Ok(truecard)

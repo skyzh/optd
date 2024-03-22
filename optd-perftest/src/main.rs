@@ -2,8 +2,8 @@ use clap::{Parser, Subcommand};
 use optd_perftest::cardtest;
 use optd_perftest::shell;
 use optd_perftest::tpch::{TpchConfig, TPCH_KIT_POSTGRES};
-use prettytable::{format, Cell, Row, Table};
-use std::{fs, iter};
+use prettytable::{format, Table};
+use std::fs;
 
 #[derive(Parser)]
 struct Cli {
@@ -32,7 +32,7 @@ enum Commands {
         #[arg(long)]
         #[clap(value_delimiter = ',', num_args = 1..)]
         // this is the current list of all queries that work in perftest
-        #[clap(default_value = "2,3,5,7,8,9,10,11,12,13,14,17")]
+        #[clap(default_value = "2,3,5,6,7,8,9,10,11,12,13,14,17")]
         query_ids: Vec<u32>,
 
         #[arg(long)]
@@ -76,7 +76,7 @@ async fn main() -> anyhow::Result<()> {
                 seed,
                 query_ids: query_ids.clone(),
             };
-            let qerrors_alldbs =
+            let cardinfo_alldbs =
                 cardtest::cardtest(&workspace_dpath, &pguser, &pgpassword, tpch_config).await?;
             println!();
             println!(" Aggregate Q-Error Comparison");
@@ -84,12 +84,14 @@ async fn main() -> anyhow::Result<()> {
             agg_qerror_table.set_titles(prettytable::row![
                 "DBMS", "Median", "# Inf", "Mean", "Min", "Max"
             ]);
-            for (dbms, qerrors) in &qerrors_alldbs {
-                if !qerrors.is_empty() {
+            for (dbms, cardinfos) in &cardinfo_alldbs {
+                if !cardinfos.is_empty() {
+                    let qerrors: Vec<f64> =
+                        cardinfos.iter().map(|cardinfo| cardinfo.qerror).collect();
                     let finite_qerrors: Vec<f64> = qerrors
                         .clone()
                         .into_iter()
-                        .filter(|&qerror| qerror.is_finite())
+                        .filter(|qerror| qerror.is_finite())
                         .collect();
                     let ninf_qerrors = qerrors.len() - finite_qerrors.len();
                     let mean_qerror =
@@ -98,7 +100,7 @@ async fn main() -> anyhow::Result<()> {
                         .iter()
                         .min_by(|a, b| a.partial_cmp(b).unwrap())
                         .unwrap();
-                    let median_qerror = statistical::median(qerrors);
+                    let median_qerror = statistical::median(&qerrors);
                     let max_qerror = qerrors
                         .iter()
                         .max_by(|a, b| a.partial_cmp(b).unwrap())
@@ -119,24 +121,30 @@ async fn main() -> anyhow::Result<()> {
             agg_qerror_table.set_format(*format::consts::FORMAT_NO_LINESEP_WITH_TITLE);
             agg_qerror_table.printstd();
 
-            let mut per_query_qerror_table = Table::new();
             println!();
-            println!(" Per-Query Q-Error Comparison");
-            let title_cells = iter::once(Cell::new("Query #"))
-                .chain(qerrors_alldbs.keys().map(|dbms| Cell::new(dbms)))
-                .collect();
-            per_query_qerror_table.set_titles(Row::new(title_cells));
+            println!(" Per-Query Cardinality Info");
+            println!(" ===========================");
             for (i, query_id) in query_ids.iter().enumerate() {
-                let mut row_cells = vec![];
-                row_cells.push(prettytable::cell!(query_id));
-                for qerrors in qerrors_alldbs.values() {
-                    let qerror = qerrors.get(i).unwrap();
-                    row_cells.push(prettytable::cell!(fmt_qerror(*qerror)));
+                println!(" Query {}", query_id);
+                let mut this_query_cardinfo_table = Table::new();
+                this_query_cardinfo_table.set_titles(prettytable::row![
+                    "DBMS",
+                    "Q-Error",
+                    "Est. Card.",
+                    "True Card."
+                ]);
+                for (dbms, cardinfos) in &cardinfo_alldbs {
+                    let this_query_cardinfo = cardinfos.get(i).unwrap();
+                    this_query_cardinfo_table.add_row(prettytable::row![
+                        dbms,
+                        this_query_cardinfo.qerror,
+                        this_query_cardinfo.estcard,
+                        this_query_cardinfo.truecard
+                    ]);
                 }
-                per_query_qerror_table.add_row(Row::new(row_cells));
+                this_query_cardinfo_table.set_format(*format::consts::FORMAT_NO_LINESEP_WITH_TITLE);
+                this_query_cardinfo_table.printstd();
             }
-            per_query_qerror_table.set_format(*format::consts::FORMAT_NO_LINESEP_WITH_TITLE);
-            per_query_qerror_table.printstd();
         }
     }
 

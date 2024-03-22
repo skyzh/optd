@@ -2,7 +2,7 @@ use crate::{
     benchmark::Benchmark,
     cardtest::CardtestRunnerDBMSHelper,
     tpch::{TpchConfig, TpchKit},
-    truecard_cache::DBMSTruecardCache,
+    truecard::{TruecardCache, TruecardGetter},
 };
 use async_trait::async_trait;
 use futures::Sink;
@@ -13,6 +13,7 @@ use std::{
     fs,
     io::Cursor,
     path::{Path, PathBuf},
+    time::Instant,
 };
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
@@ -24,18 +25,15 @@ pub const POSTGRES_DBMS_NAME: &str = "Postgres";
 /// This dbname is assumed to always exist
 const DEFAULT_DBNAME: &str = "postgres";
 
+/// Conceptually, this struct represents a "thing that creates connections to Postgres"
+/// Thus, it's ok to have multiple copies of this struct at once
+#[derive(Clone)]
 pub struct PostgresDBMS {
     workspace_dpath: PathBuf,
     pguser: String,
     pgpassword: String,
-    truecard_cache: DBMSTruecardCache,
 }
 
-/// Conventions I keep for methods of this class:
-///   - Functions should be idempotent. For instance, start_postgres() should not fail if Postgres is already running
-///       - For instance, this is why "createdb" is _not_ a function
-///   - Stop and start functions should be separate
-///   - Setup should be done in build() unless it requires more information (like benchmark)
 impl PostgresDBMS {
     pub fn build<P: AsRef<Path>>(
         workspace_dpath: P,
@@ -43,18 +41,16 @@ impl PostgresDBMS {
         pgpassword: &str,
     ) -> anyhow::Result<Self> {
         let workspace_dpath = PathBuf::from(workspace_dpath.as_ref());
-        let truecard_cache = DBMSTruecardCache::build(&workspace_dpath, POSTGRES_DBMS_NAME)?;
         let pg_dbms = Self {
             workspace_dpath,
             pguser: String::from(pguser),
             pgpassword: String::from(pgpassword),
-            truecard_cache,
         };
         Ok(pg_dbms)
     }
 
     /// Create a connection to a Postgres database
-    async fn connect_to_db(&self, dbname: &str) -> anyhow::Result<Client> {
+    pub async fn connect_to_db(&self, dbname: &str) -> anyhow::Result<Client> {
         let (client, connection) = tokio_postgres::connect(
             &format!(
                 "host=localhost user={} password={} dbname={}",
@@ -143,6 +139,8 @@ impl PostgresDBMS {
         client: &Client,
         tpch_config: &TpchConfig,
     ) -> anyhow::Result<()> {
+        let start = Instant::now();
+
         // set up TpchKit
         let tpch_kit = TpchKit::build(&self.workspace_dpath)?;
 
@@ -162,6 +160,9 @@ impl PostgresDBMS {
         // you need to do VACUUM FULL ANALYZE and not just ANALYZE to make sure the stats are created in a deterministic way
         // this is standard practice for postgres benchmarking
         client.query("VACUUM FULL ANALYZE", &[]).await?;
+
+        let duration = start.elapsed();
+        println!("postgres load_tpch_data duration: {:?}", duration);
 
         Ok(())
     }
@@ -193,88 +194,28 @@ impl PostgresDBMS {
 
         Ok(())
     }
-}
 
-#[async_trait]
-impl CardtestRunnerDBMSHelper for PostgresDBMS {
-    fn get_name(&self) -> &str {
-        POSTGRES_DBMS_NAME
-    }
-
-    async fn eval_benchmark_estcards(
-        &mut self,
-        benchmark: &Benchmark,
-    ) -> anyhow::Result<Vec<usize>> {
-        self.load_benchmark_data(benchmark).await?;
-        let dbname = benchmark.get_dbname();
-        let client = self.connect_to_db(&dbname).await?;
-        match benchmark {
-            Benchmark::Test => unimplemented!(),
-            Benchmark::Tpch(tpch_config) => self.eval_tpch_estcards(&client, tpch_config).await,
-        }
-    }
-
-    async fn eval_benchmark_truecards(
-        &mut self,
-        benchmark: &Benchmark,
-    ) -> anyhow::Result<Vec<usize>> {
-        self.load_benchmark_data(benchmark).await?;
-        let dbname = benchmark.get_dbname();
-        let client = self.connect_to_db(&dbname).await?;
-        match benchmark {
-            Benchmark::Test => unimplemented!(),
-            Benchmark::Tpch(tpch_config) => {
-                self.eval_tpch_truecards(&client, tpch_config, &dbname)
-                    .await
-            }
-        }
-    }
-}
-
-/// This impl has helpers for ```impl CardtestRunnerDBMSHelper for PostgresDBMS```
-impl PostgresDBMS {
     async fn eval_tpch_estcards(
         &self,
         client: &Client,
         tpch_config: &TpchConfig,
     ) -> anyhow::Result<Vec<usize>> {
+        let start = Instant::now();
+
         let tpch_kit = TpchKit::build(&self.workspace_dpath)?;
         tpch_kit.gen_queries(tpch_config)?;
 
         let mut estcards = vec![];
-        for sql_fpath in tpch_kit.get_sql_fpath_ordered_iter(tpch_config)? {
+        for (_, sql_fpath) in tpch_kit.get_sql_fpath_ordered_iter(tpch_config)? {
             let sql = fs::read_to_string(sql_fpath)?;
             let estcard = self.eval_query_estcard(client, &sql).await?;
             estcards.push(estcard);
         }
 
+        let duration = start.elapsed();
+        println!("postgres eval_tpch_estcards duration: {:?}", duration);
+
         Ok(estcards)
-    }
-
-    async fn eval_tpch_truecards(
-        &mut self,
-        client: &Client,
-        tpch_config: &TpchConfig,
-        dbname: &str, // used by truecard_cache
-    ) -> anyhow::Result<Vec<usize>> {
-        let tpch_kit = TpchKit::build(&self.workspace_dpath)?;
-        tpch_kit.gen_queries(tpch_config)?;
-
-        let mut truecards = vec![];
-        for sql_fpath in tpch_kit.get_sql_fpath_ordered_iter(tpch_config)? {
-            let sql = fs::read_to_string(sql_fpath)?;
-            let truecard = match self.truecard_cache.get_truecard(dbname, &sql) {
-                Some(truecard) => truecard,
-                None => {
-                    let truecard = self.eval_query_truecard(client, &sql).await?;
-                    self.truecard_cache.insert_truecard(dbname, &sql, truecard);
-                    truecard
-                }
-            };
-            truecards.push(truecard);
-        }
-
-        Ok(truecards)
     }
 
     fn log_explain(&self, explain_rows: &[Row]) {
@@ -290,6 +231,33 @@ impl PostgresDBMS {
         let first_explain_line: &str = explain_rows.first().unwrap().get(0);
         let estcard = PostgresDBMS::extract_row_count(first_explain_line).unwrap();
         Ok(estcard)
+    }
+
+    async fn eval_tpch_truecards(
+        &mut self,
+        client: &Client,
+        tpch_config: &TpchConfig,
+        dbname: &str, // used by truecard_cache
+        truecard_cache: &mut TruecardCache,
+    ) -> anyhow::Result<Vec<usize>> {
+        let tpch_kit = TpchKit::build(&self.workspace_dpath)?;
+        tpch_kit.gen_queries(tpch_config)?;
+
+        let mut truecards = vec![];
+        for (query_id, sql_fpath) in tpch_kit.get_sql_fpath_ordered_iter(tpch_config)? {
+            let sql = fs::read_to_string(sql_fpath)?;
+            let truecard = match truecard_cache.get_truecard(dbname, query_id) {
+                Some(truecard) => truecard,
+                None => {
+                    let truecard = self.eval_query_truecard(client, &sql).await?;
+                    truecard_cache.insert_truecard(dbname, query_id, truecard);
+                    truecard
+                }
+            };
+            truecards.push(truecard);
+        }
+
+        Ok(truecards)
     }
 
     async fn eval_query_truecard(&self, client: &Client, sql: &str) -> anyhow::Result<usize> {
@@ -316,5 +284,54 @@ impl PostgresDBMS {
         } else {
             None
         }
+    }
+}
+
+#[async_trait]
+impl CardtestRunnerDBMSHelper for PostgresDBMS {
+    fn get_name(&self) -> &str {
+        POSTGRES_DBMS_NAME
+    }
+
+    async fn eval_benchmark_estcards(
+        &mut self,
+        benchmark: &Benchmark,
+    ) -> anyhow::Result<Vec<usize>> {
+        self.load_benchmark_data(benchmark).await?;
+        let dbname = benchmark.get_dbname();
+        let client = self.connect_to_db(&dbname).await?;
+        match benchmark {
+            Benchmark::Test => unimplemented!(),
+            Benchmark::Tpch(tpch_config) => self.eval_tpch_estcards(&client, tpch_config).await,
+        }
+    }
+}
+
+#[async_trait]
+impl TruecardGetter for PostgresDBMS {
+    async fn get_benchmark_truecards(
+        &mut self,
+        benchmark: &Benchmark,
+    ) -> anyhow::Result<Vec<usize>> {
+        // load truecards from saved file
+        let truecard_cache_fpath = self.workspace_dpath.join("truecard_cache.json");
+        let mut truecard_cache = TruecardCache::build(truecard_cache_fpath)?;
+
+        // if necessary, actually execute the queries
+        // it's ok to call load_benchmark_data() even though we might have already called it in
+        //   get_benchmark_estcards() because the second call to load_benchmark_data() will
+        //   simply do nothing as the dbname will already exist
+        self.load_benchmark_data(benchmark).await?;
+        let dbname = benchmark.get_dbname();
+        let client = self.connect_to_db(&dbname).await?;
+        // all "eval_*" functions should add the truecards they find to the truecard cache
+        match benchmark {
+            Benchmark::Test => unimplemented!(),
+            Benchmark::Tpch(tpch_config) => {
+                self.eval_tpch_truecards(&client, tpch_config, &dbname, &mut truecard_cache)
+                    .await
+            }
+        }
+        // note that truecard_cache will save itself when it goes out of scope
     }
 }

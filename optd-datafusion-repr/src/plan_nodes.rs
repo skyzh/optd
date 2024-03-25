@@ -208,8 +208,17 @@ pub trait OptRelNode: 'static + Clone {
     }
 }
 
-pub trait ExplainData: OptRelNode {
-    fn explain_data(data: &Value) -> Vec<(&'static str, Pretty<'static>)>;
+/// Plan nodes that are defined through `define_plan_node` macro with data
+/// field should implement this trait. Since data is stored as `Value` in
+/// `RelNode`, we need to now how to convert between `Value` and the actual
+/// data type.
+///
+/// For reasons why `explain_data`` needs to be explicitly implemented, see
+/// `define_plan_node`.
+pub trait ExplainData<T>: OptRelNode {
+    fn data_to_value(data: &T) -> Value;
+    fn value_to_data(value: &Value) -> T;
+    fn explain_data(data: &T) -> Vec<(&'static str, Pretty<'static>)>;
 }
 
 #[derive(Clone, Debug)]

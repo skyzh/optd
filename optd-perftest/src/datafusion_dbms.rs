@@ -34,7 +34,7 @@ use regex::Regex;
 
 pub struct DatafusionDBMS {
     workspace_dpath: PathBuf,
-    use_cached_stats: bool,
+    no_cached_stats: bool,
     ctx: SessionContext,
 }
 
@@ -63,16 +63,16 @@ impl CardtestRunnerDBMSHelper for DatafusionDBMS {
 impl DatafusionDBMS {
     pub async fn new<P: AsRef<Path>>(
         workspace_dpath: P,
-        use_cached_stats: bool,
+        no_cached_stats: bool,
     ) -> anyhow::Result<Self> {
         Ok(DatafusionDBMS {
             workspace_dpath: workspace_dpath.as_ref().to_path_buf(),
-            use_cached_stats,
+            no_cached_stats,
             ctx: Self::new_session_ctx(None).await?,
         })
     }
 
-    /// Reset [`SessionContext`] to a clean state. But initializa the optimizer
+    /// Reset [`SessionContext`] to a clean state. But initialize the optimizer
     /// with pre-generated statistics.
     ///
     /// A more ideal way to generate statistics would be to use the `ANALYZE`
@@ -144,10 +144,14 @@ impl DatafusionDBMS {
         tpch_kit.gen_queries(tpch_config)?;
 
         let mut estcards = vec![];
-        for (_, sql_fpath) in tpch_kit.get_sql_fpath_ordered_iter(tpch_config)? {
+        for (query_id, sql_fpath) in tpch_kit.get_sql_fpath_ordered_iter(tpch_config)? {
             let sql = fs::read_to_string(sql_fpath)?;
             let estcard = self.eval_query_estcard(&sql).await?;
             estcards.push(estcard);
+            println!(
+                "done evaluating datafusion's estcard for TPC-H Q{}",
+                query_id
+            );
         }
 
         Ok(estcards)
@@ -209,7 +213,7 @@ impl DatafusionDBMS {
             .workspace_dpath
             .join("datafusion_stats_caches")
             .join(format!("{}.json", benchmark_fname));
-        if self.use_cached_stats && stats_cache_fpath.exists() {
+        if !self.no_cached_stats && stats_cache_fpath.exists() {
             let file = File::open(&stats_cache_fpath)?;
             Ok(serde_json::from_reader(file)?)
         } else {
@@ -218,7 +222,7 @@ impl DatafusionDBMS {
                 _ => unimplemented!(),
             };
 
-            // regardless of whether self.use_cached_stats is true or false, we want to update the cache
+            // regardless of whether self.no_cached_stats is true or false, we want to update the cache
             // this way, even if we choose not to read from the cache, the cache still always has the
             // most up to date version of the stats
             fs::create_dir_all(stats_cache_fpath.parent().unwrap())?;

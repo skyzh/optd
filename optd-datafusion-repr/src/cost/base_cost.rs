@@ -315,9 +315,16 @@ pub trait Distribution: 'static + Send + Sync {
 pub const ROW_COUNT: usize = 1;
 pub const COMPUTE_COST: usize = 2;
 pub const IO_COST: usize = 3;
-// used to indicate a combination of unimplemented!(), unreachable!(), or panic!()
-// TODO: a future PR will remove this and get the code working for all of TPC-H
-const INVALID_SELECTIVITY: f64 = 0.001;
+
+// Default statistics. All are from selfuncs.h in Postgres unless specified otherwise
+// Default selectivity estimate for equalities such as "A = b"
+const DEFAULT_EQ_SEL: f64 = 0.005;
+// Default selectivity estimate for inequalities such as "A < b"
+const DEFAULT_INEQ_SEL: f64 = 0.3333333333333333;
+// Default selectivity estimate for pattern-match operators such as LIKE
+const DEFAULT_MATCH_SEL: f64 = 0.005;
+
+const INVALID_SEL: f64 = 0.01;
 
 impl<M: MostCommonValues, D: Distribution> OptCostModel<M, D> {
     pub fn row_cnt(Cost(cost): &Cost) -> f64 {
@@ -421,10 +428,10 @@ impl<M: MostCommonValues, D: Distribution> CostModel<OptRelNodeTyp> for OptCostM
                             row_cnt.min(fetch as f64)
                         }
                     } else {
-                        (row_cnt * INVALID_SELECTIVITY).max(1.0)
+                        panic!("compute_cost() should not be called if optimizer is None")
                     }
                 } else {
-                    (row_cnt * INVALID_SELECTIVITY).max(1.0)
+                    panic!("compute_cost() should not be called if context is None")
                 };
                 Self::cost(row_cnt, compute_cost, 0.0)
             }
@@ -446,13 +453,13 @@ impl<M: MostCommonValues, D: Distribution> CostModel<OptRelNodeTyp> for OptCostM
                             if let Some(expr_tree) = expr_trees.first() {
                                 self.get_filter_selectivity(Arc::clone(expr_tree), &column_refs)
                             } else {
-                                INVALID_SELECTIVITY
+                                panic!("encountered a PhysicalFilter without an expression")
                             }
                         } else {
-                            INVALID_SELECTIVITY
+                            panic!("compute_cost() should not be called if optimizer is None")
                         }
                     }
-                    None => INVALID_SELECTIVITY,
+                    None => panic!("compute_cost() should not be called if context is None"),
                 };
 
                 Self::cost(
@@ -552,28 +559,9 @@ impl<M: MostCommonValues, D: Distribution> OptCostModel<M, D> {
         column_refs: &GroupColumnRefs,
     ) -> f64 {
         assert!(expr_tree.typ.is_expression());
-        match expr_tree.typ {
-            OptRelNodeTyp::BinOp(bin_op_typ) => {
-                assert!(expr_tree.children.len() == 2);
-                let left_child = expr_tree.child(0);
-                let right_child = expr_tree.child(1);
-
-                if bin_op_typ.is_comparison() {
-                    self.get_comparison_op_selectivity(
-                        bin_op_typ,
-                        left_child,
-                        right_child,
-                        column_refs,
-                    )
-                } else if bin_op_typ.is_numerical() {
-                    INVALID_SELECTIVITY
-                } else {
-                    unreachable!("all BinOpTypes should be true for at least one is_*() function")
-                }
-            }
-            OptRelNodeTyp::LogOp(log_op_typ) => {
-                self.get_log_op_selectivity(log_op_typ, &expr_tree.children, column_refs)
-            }
+        match &expr_tree.typ {
+            OptRelNodeTyp::Constant(_) => todo!("check bool type or else panic"),
+            OptRelNodeTyp::ColumnRef => todo!("check bool type or else panic"),
             OptRelNodeTyp::UnOp(un_op_typ) => {
                 assert!(expr_tree.children.len() == 1);
                 let child = expr_tree.child(0);
@@ -581,24 +569,63 @@ impl<M: MostCommonValues, D: Distribution> OptCostModel<M, D> {
                     // not doesn't care about nulls so there's no complex logic. it just reverses the selectivity
                     // for instance, != _will not_ include nulls but "NOT ==" _will_ include nulls
                     UnOpType::Not => 1.0 - self.get_filter_selectivity(child, column_refs),
-                    _ => INVALID_SELECTIVITY,
+                    UnOpType::Neg => panic!(
+                        "the selectivity of operations that return numerical values is undefined"
+                    ),
                 }
             }
-            _ => INVALID_SELECTIVITY,
+            OptRelNodeTyp::BinOp(bin_op_typ) => {
+                assert!(expr_tree.children.len() == 2);
+                let left_child = expr_tree.child(0);
+                let right_child = expr_tree.child(1);
+
+                if bin_op_typ.is_comparison() {
+                    self.get_comparison_op_selectivity(
+                        *bin_op_typ,
+                        left_child,
+                        right_child,
+                        column_refs,
+                    )
+                } else if bin_op_typ.is_numerical() {
+                    panic!(
+                        "the selectivity of operations that return numerical values is undefined"
+                    )
+                } else {
+                    unreachable!("all BinOpTypes should be true for at least one is_*() function")
+                }
+            }
+            OptRelNodeTyp::LogOp(log_op_typ) => {
+                self.get_log_op_selectivity(*log_op_typ, &expr_tree.children, column_refs)
+            }
+            OptRelNodeTyp::Func(_) => todo!("check bool type or else panic"),
+            OptRelNodeTyp::SortOrder(_) => {
+                panic!("the selectivity of sort order expressions is undefined")
+            }
+            OptRelNodeTyp::Between => INVALID_SEL,
+            OptRelNodeTyp::Cast => todo!("check bool type or else panic"),
+            OptRelNodeTyp::Like => DEFAULT_MATCH_SEL,
+            OptRelNodeTyp::DataType(_) => {
+                panic!("the selectivity of a data type is not defined")
+            }
+            OptRelNodeTyp::InList => INVALID_SEL,
+            _ => unreachable!(
+                "all expression OptRelNodeTyp were enumerated. this should be unreachable"
+            ),
         }
     }
 
     /// Comparison operators are the base case for recursion in get_filter_selectivity()
     fn get_comparison_op_selectivity(
         &self,
-        bin_op_typ: BinOpType,
+        comp_bin_op_typ: BinOpType,
         left: OptRelNodeRef,
         right: OptRelNodeRef,
         column_refs: &GroupColumnRefs,
     ) -> f64 {
-        assert!(bin_op_typ.is_comparison());
+        assert!(comp_bin_op_typ.is_comparison());
 
-        // the # of column refs determines how we handle the logic
+        // it's more convenient to refer to the children based on whether they're column nodes or not
+        // rather than by left/right
         let mut col_ref_nodes = vec![];
         let mut non_col_ref_nodes = vec![];
         let is_left_col_ref;
@@ -623,8 +650,9 @@ impl<M: MostCommonValues, D: Distribution> OptCostModel<M, D> {
             non_col_ref_nodes.push(right);
         }
 
+        // handle the different cases of column nodes
         if col_ref_nodes.is_empty() {
-            INVALID_SELECTIVITY
+            INVALID_SEL
         } else if col_ref_nodes.len() == 1 {
             let col_ref_node = col_ref_nodes
                 .pop()
@@ -636,71 +664,90 @@ impl<M: MostCommonValues, D: Distribution> OptCostModel<M, D> {
                     .pop()
                     .expect("non_col_ref_nodes should have a value since col_ref_nodes.len() == 1");
 
-                if let OptRelNodeTyp::Constant(_) = non_col_ref_node.as_ref().typ {
-                    let value = non_col_ref_node
-                        .as_ref()
-                        .data
-                        .as_ref()
-                        .expect("constants should have data");
-                    match match bin_op_typ {
-                        BinOpType::Eq => {
-                            self.get_column_equality_selectivity(table, *col_idx, value, true)
+                match non_col_ref_node.as_ref().typ {
+                    OptRelNodeTyp::Constant(_) => {
+                        let value = non_col_ref_node
+                            .as_ref()
+                            .data
+                            .as_ref()
+                            .expect("constants should have data");
+                        match comp_bin_op_typ {
+                            BinOpType::Eq => {
+                                self.get_column_equality_selectivity(table, *col_idx, value, true)
+                            }
+                            BinOpType::Neq => {
+                                self.get_column_equality_selectivity(table, *col_idx, value, false)
+                            }
+                            BinOpType::Lt => self.get_column_range_selectivity(
+                                table,
+                                *col_idx,
+                                value,
+                                is_left_col_ref,
+                                false,
+                            ),
+                            BinOpType::Leq => self.get_column_range_selectivity(
+                                table,
+                                *col_idx,
+                                value,
+                                is_left_col_ref,
+                                true,
+                            ),
+                            BinOpType::Gt => self.get_column_range_selectivity(
+                                table,
+                                *col_idx,
+                                value,
+                                !is_left_col_ref,
+                                false,
+                            ),
+                            BinOpType::Geq => self.get_column_range_selectivity(
+                                table,
+                                *col_idx,
+                                value,
+                                !is_left_col_ref,
+                                true,
+                            ),
+                            _ => unreachable!("all comparison BinOpTypes were enumerated. this should be unreachable"),
                         }
-                        BinOpType::Neq => {
-                            self.get_column_equality_selectivity(table, *col_idx, value, false)
-                        }
-                        BinOpType::Lt => self.get_column_range_selectivity(
-                            table,
-                            *col_idx,
-                            value,
-                            is_left_col_ref,
-                            false,
-                        ),
-                        BinOpType::Leq => self.get_column_range_selectivity(
-                            table,
-                            *col_idx,
-                            value,
-                            is_left_col_ref,
-                            true,
-                        ),
-                        BinOpType::Gt => self.get_column_range_selectivity(
-                            table,
-                            *col_idx,
-                            value,
-                            !is_left_col_ref,
-                            false,
-                        ),
-                        BinOpType::Geq => self.get_column_range_selectivity(
-                            table,
-                            *col_idx,
-                            value,
-                            !is_left_col_ref,
-                            true,
-                        ),
-                        _ => None,
-                    } {
-                        Some(sel) => sel,
-                        None => INVALID_SELECTIVITY,
                     }
-                } else {
-                    INVALID_SELECTIVITY
+                    OptRelNodeTyp::BinOp(_) => {
+                        Self::get_default_comparison_op_selectivity(comp_bin_op_typ)
+                    }
+                    OptRelNodeTyp::Cast => INVALID_SEL,
+                    _ => unimplemented!(
+                        "unhandled case of comparing a column ref node to {}",
+                        non_col_ref_node.as_ref().typ
+                    ),
                 }
             } else {
-                INVALID_SELECTIVITY
+                unimplemented!("non base table column refs need to be implemented")
             }
         } else if col_ref_nodes.len() == 2 {
-            INVALID_SELECTIVITY
+            Self::get_default_comparison_op_selectivity(comp_bin_op_typ)
         } else {
-            unreachable!("We could have at most pushed left and right into col_ref_nodes")
+            unreachable!("we could have at most pushed left and right into col_ref_nodes")
+        }
+    }
+
+    /// The default selectivity of a comparison expression
+    /// Used when one side of the comparison is a column while the other side is something too
+    ///   complex/impossible to evaluate (subquery, UDF, another column, we have no stats, etc.)
+    fn get_default_comparison_op_selectivity(comp_bin_op_typ: BinOpType) -> f64 {
+        assert!(comp_bin_op_typ.is_comparison());
+        match comp_bin_op_typ {
+            BinOpType::Eq => DEFAULT_EQ_SEL,
+            BinOpType::Neq => 1.0 - DEFAULT_EQ_SEL,
+            BinOpType::Lt | BinOpType::Leq | BinOpType::Gt | BinOpType::Geq => DEFAULT_INEQ_SEL,
+            _ => unreachable!(
+                "all comparison BinOpTypes were enumerated. this should be unreachable"
+            ),
         }
     }
 
     /// Get the selectivity of an expression of the form "column equals value" (or "value equals column")
-    /// Computes selectivity based off of statistics
+    /// Will handle the case of statistics missing
     /// Equality predicates are handled entirely differently from range predicates so this is its own function
     /// Also, get_column_equality_selectivity is a subroutine when computing range selectivity, which is another
     ///     reason for separating these into two functions
-    /// If it is unable to find the statistics, it returns None
     /// is_eq means whether it's == or !=
     fn get_column_equality_selectivity(
         &self,
@@ -708,7 +755,7 @@ impl<M: MostCommonValues, D: Distribution> OptCostModel<M, D> {
         col_idx: usize,
         value: &Value,
         is_eq: bool,
-    ) -> Option<f64> {
+    ) -> f64 {
         if let Some(per_table_stats) = self.per_table_stats_map.get(table) {
             if let Some(Some(per_column_stats)) = per_table_stats.per_column_stats_vec.get(col_idx)
             {
@@ -722,16 +769,26 @@ impl<M: MostCommonValues, D: Distribution> OptCostModel<M, D> {
                     // note that nulls are not included in ndistinct so we don't need to do non_mcv_cnt - 1 if null_frac > 0
                     (non_mcv_freq - per_column_stats.null_frac) / (non_mcv_cnt as f64)
                 };
-                Some(if is_eq {
+                if is_eq {
                     eq_freq
                 } else {
                     1.0 - eq_freq - per_column_stats.null_frac
-                })
+                }
             } else {
-                None
+                #[allow(clippy::collapsible_else_if)]
+                if is_eq {
+                    DEFAULT_EQ_SEL
+                } else {
+                    1.0 - DEFAULT_EQ_SEL
+                }
             }
         } else {
-            None
+            #[allow(clippy::collapsible_else_if)]
+            if is_eq {
+                DEFAULT_EQ_SEL
+            } else {
+                1.0 - DEFAULT_EQ_SEL
+            }
         }
     }
 
@@ -748,7 +805,7 @@ impl<M: MostCommonValues, D: Distribution> OptCostModel<M, D> {
         value: &Value,
         is_col_lt_val: bool,
         is_col_eq_val: bool,
-    ) -> Option<f64> {
+    ) -> f64 {
         if let Some(per_table_stats) = self.per_table_stats_map.get(table) {
             if let Some(Some(per_column_stats)) = per_table_stats.per_column_stats_vec.get(col_idx)
             {
@@ -764,12 +821,10 @@ impl<M: MostCommonValues, D: Distribution> OptCostModel<M, D> {
                 // depending on whether value is in mcvs or not, we use different logic to turn total_leq_cdf into total_lt_cdf
                 // this logic just so happens to be the exact same logic as get_column_equality_selectivity implements
                 let total_lt_freq = total_leq_freq
-                    - self
-                        .get_column_equality_selectivity(table, col_idx, value, true)
-                        .expect("we already know that table and col_idx exist");
+                    - self.get_column_equality_selectivity(table, col_idx, value, true);
 
                 // use either total_leq_freq or total_lt_freq to get the selectivity
-                Some(if is_col_lt_val {
+                if is_col_lt_val {
                     if is_col_eq_val {
                         // this branch means <=
                         total_leq_freq
@@ -788,12 +843,12 @@ impl<M: MostCommonValues, D: Distribution> OptCostModel<M, D> {
                         // this branch means >. same logic as above
                         1.0 - total_leq_freq - per_column_stats.null_frac
                     }
-                })
+                }
             } else {
-                None
+                DEFAULT_INEQ_SEL
             }
         } else {
-            None
+            DEFAULT_INEQ_SEL
         }
     }
 

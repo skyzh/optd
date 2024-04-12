@@ -12,19 +12,22 @@ use crate::{
 };
 use arrow_schema::{ArrowError, DataType};
 use datafusion::arrow::array::{
-    Array, BooleanArray, Date32Array, Decimal128Array, Float32Array, Float64Array, Int16Array,
-    Int32Array, Int8Array, RecordBatch, RecordBatchIterator, RecordBatchReader, StringArray,
-    UInt16Array, UInt32Array, UInt8Array,
+    Array, BooleanArray, Date32Array, Float32Array, Int16Array, Int32Array, Int8Array, RecordBatch,
+    RecordBatchIterator, RecordBatchReader, StringArray, UInt16Array, UInt32Array, UInt8Array,
 };
 use itertools::Itertools;
+use optd_core::rel_node::SerializableOrderedF64;
 use optd_core::{
     cascades::{CascadesOptimizer, RelNodeContext},
     cost::{Cost, CostModel},
     rel_node::{RelNode, RelNodeTyp, Value},
 };
+use optd_gungnir::stats::counter::Counter;
 use optd_gungnir::stats::hyperloglog::{self, HyperLogLog};
+use optd_gungnir::stats::misragries::{MisraGries, DEFAULT_K_TO_TRACK};
 use optd_gungnir::stats::tdigest::{self, TDigest};
 use optd_gungnir::utils::arith_encoder;
+use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 
 fn compute_plan_node_cost<T: RelNodeTyp, C: CostModel<T>>(
@@ -46,7 +49,7 @@ pub type BaseTableStats<M, D> = HashMap<String, PerTableStats<M, D>>;
 
 // The "standard" concrete types that optd currently uses
 // All of optd (except unit tests) must use the same types
-pub type DataFusionMostCommonValues = MockMostCommonValues;
+pub type DataFusionMostCommonValues = Counter<Value>;
 pub type DataFusionDistribution = TDigest;
 pub type DataFusionBaseTableStats =
     BaseTableStats<DataFusionMostCommonValues, DataFusionDistribution>;
@@ -59,42 +62,7 @@ pub struct OptCostModel<M: MostCommonValues, D: Distribution> {
     per_table_stats_map: BaseTableStats<M, D>,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct MockMostCommonValues {
-    mcvs: HashMap<Value, f64>,
-}
-
-impl MockMostCommonValues {
-    pub fn empty() -> Self {
-        MockMostCommonValues {
-            mcvs: HashMap::new(),
-        }
-    }
-}
-
-impl MostCommonValues for MockMostCommonValues {
-    fn freq(&self, value: &Value) -> Option<f64> {
-        self.mcvs.get(value).copied()
-    }
-
-    fn total_freq(&self) -> f64 {
-        self.mcvs.values().sum()
-    }
-
-    fn freq_over_pred(&self, pred: Box<dyn Fn(&Value) -> bool>) -> f64 {
-        self.mcvs
-            .iter()
-            .filter(|(val, _)| pred(val))
-            .map(|(_, freq)| freq)
-            .sum()
-    }
-
-    fn cnt(&self) -> usize {
-        self.mcvs.len()
-    }
-}
-
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct PerTableStats<M: MostCommonValues, D: Distribution> {
     row_cnt: usize,
     // This is a Vec of Options instead of just a Vec because some columns may not have stats
@@ -107,9 +75,12 @@ pub struct PerTableStats<M: MostCommonValues, D: Distribution> {
 
 impl DataFusionPerTableStats {
     pub fn from_record_batches<I: IntoIterator<Item = Result<RecordBatch, ArrowError>>>(
-        batch_iter: RecordBatchIterator<I>,
+        batch_iter_builder: impl Fn() -> anyhow::Result<RecordBatchIterator<I>>,
     ) -> anyhow::Result<Self> {
-        let schema = batch_iter.schema();
+        let batch_iter1 = batch_iter_builder()?;
+        let batch_iter2 = batch_iter_builder()?;
+
+        let schema = batch_iter1.schema();
         let col_types = schema
             .fields()
             .iter()
@@ -118,16 +89,30 @@ impl DataFusionPerTableStats {
         let col_cnt = col_types.len();
 
         let mut row_cnt = 0;
-        let mut mcvs = col_types
-            .iter()
-            .map(|col_type| {
+
+        let mut hlls = vec![HyperLogLog::new(hyperloglog::DEFAULT_PRECISION); col_cnt];
+        let mut mgs: Vec<MisraGries<Value>> = vec![MisraGries::new(DEFAULT_K_TO_TRACK); col_cnt];
+        let mut null_cnt = vec![0; col_cnt];
+
+        // 1. First pass: HLL + MG + null_cnt + row_cnt.
+        for batch in batch_iter1 {
+            let batch = batch?;
+            row_cnt += batch.num_rows();
+
+            for (i, col) in batch.columns().iter().enumerate() {
+                let col_type = &col_types[i];
                 if Self::is_type_supported(col_type) {
-                    Some(MockMostCommonValues::empty())
-                } else {
-                    None
+                    null_cnt[i] += col.null_count();
+                    Self::generate_partial_stats_for_column(
+                        col,
+                        col_type,
+                        &mut mgs[i],
+                        &mut hlls[i],
+                    );
                 }
-            })
-            .collect_vec();
+            }
+        }
+
         let mut distr = col_types
             .iter()
             .map(|col_type| {
@@ -138,31 +123,34 @@ impl DataFusionPerTableStats {
                 }
             })
             .collect_vec();
-        let mut hlls = vec![HyperLogLog::new(hyperloglog::DEFAULT_PRECISION); col_cnt];
-        let mut null_cnt = vec![0; col_cnt];
+        let mut cnts: Vec<Counter<Value>> = mgs
+            .iter()
+            .map(|mg| {
+                let mfk: Vec<Value> = mg.most_frequent_keys().into_iter().cloned().collect();
+                Counter::new(&mfk)
+            })
+            .collect();
 
-        for batch in batch_iter {
+        // 2. Second pass: MCV + TDigest.
+        // TODO(Alexis): Remove MCV from TDigest.
+        for batch in batch_iter2 {
             let batch = batch?;
-            row_cnt += batch.num_rows();
 
-            // Enumerate the columns.
             for (i, col) in batch.columns().iter().enumerate() {
                 let col_type = &col_types[i];
                 if Self::is_type_supported(col_type) {
-                    // Update null cnt.
-                    null_cnt[i] += col.null_count();
-
-                    Self::generate_stats_for_column(col, col_type, &mut distr[i], &mut hlls[i]);
+                    Self::generate_stats_for_column(col, col_type, &mut distr[i], &mut cnts[i]);
                 }
             }
         }
 
-        // Assemble the per-column stats.
+        // 3. Assemble stats.
         let mut per_column_stats_vec = Vec::with_capacity(col_cnt);
         for i in 0..col_cnt {
+            let counter = cnts.remove(0);
             per_column_stats_vec.push(if Self::is_type_supported(&col_types[i]) {
                 Some(PerColumnStats::new(
-                    mcvs[i].take().unwrap(),
+                    counter,
                     hlls[i].n_distinct(),
                     null_cnt[i] as f64 / row_cnt as f64,
                     distr[i].take().unwrap(),
@@ -171,6 +159,7 @@ impl DataFusionPerTableStats {
                 None
             });
         }
+
         Ok(Self {
             row_cnt,
             per_column_stats_vec,
@@ -193,27 +182,128 @@ impl DataFusionPerTableStats {
         )
     }
 
+    /// Generate partial statistics for a column.
+    fn generate_partial_stats_for_column(
+        col: &Arc<dyn Array>,
+        col_type: &DataType,
+        mg: &mut MisraGries<Value>,
+        hll: &mut HyperLogLog,
+    ) {
+        macro_rules! generate_partial_stats_for_col {
+            ({ $col:expr, $mg:expr, $hll:expr, $array_type:path, $value_type:path}) => {{
+                let array = $col.as_any().downcast_ref::<$array_type>().unwrap();
+
+                // Filter out `None` values.
+                let mg_values = array
+                    .iter()
+                    .flatten()
+                    .map(|x| $value_type(x))
+                    .collect::<Vec<_>>();
+                let hll_values = array.iter().flatten().collect::<Vec<_>>();
+
+                $mg.aggregate(&mg_values);
+                $hll.aggregate(&hll_values);
+            }};
+        }
+
+        match col_type {
+            DataType::Boolean => {
+                generate_partial_stats_for_col!({ col, mg, hll, BooleanArray, Value::Bool })
+            }
+            DataType::Int8 => {
+                generate_partial_stats_for_col!({ col, mg, hll, Int8Array, Value::Int8 })
+            }
+            DataType::Int16 => {
+                generate_partial_stats_for_col!({ col, mg, hll, Int16Array, Value::Int16 })
+            }
+            DataType::Int32 => {
+                generate_partial_stats_for_col!({ col, mg, hll, Int32Array, Value::Int32 })
+            }
+            DataType::UInt8 => {
+                generate_partial_stats_for_col!({ col, mg, hll, UInt8Array, Value::UInt8 })
+            }
+            DataType::UInt16 => {
+                generate_partial_stats_for_col!({ col, mg, hll, UInt16Array, Value::UInt16 })
+            }
+            DataType::UInt32 => {
+                generate_partial_stats_for_col!({ col, mg, hll, UInt32Array, Value::UInt32 })
+            }
+            DataType::Float32 => {
+                let array = col.as_any().downcast_ref::<Float32Array>().unwrap();
+
+                let mg_values = array
+                    .iter()
+                    .flatten()
+                    .map(|x| Value::Float(SerializableOrderedF64(OrderedFloat::from(x as f64))))
+                    .collect::<Vec<_>>();
+                let hll_values = array.iter().flatten().collect::<Vec<_>>();
+
+                mg.aggregate(&mg_values);
+                hll.aggregate(&hll_values);
+            }
+            DataType::Float64 => {
+                let array = col.as_any().downcast_ref::<Float32Array>().unwrap();
+
+                let mg_values = array
+                    .iter()
+                    .flatten()
+                    .map(|x| Value::Float(SerializableOrderedF64(OrderedFloat::from(x as f64))))
+                    .collect::<Vec<_>>();
+                let hll_values = array.iter().flatten().collect::<Vec<_>>();
+
+                mg.aggregate(&mg_values);
+                hll.aggregate(&hll_values);
+            }
+            DataType::Date32 => {
+                generate_partial_stats_for_col!({ col, mg, hll, Date32Array, Value::Date32 })
+            }
+            DataType::Utf8 => {
+                let array = col.as_any().downcast_ref::<StringArray>().unwrap();
+
+                let mg_values = array
+                    .iter()
+                    .flatten()
+                    .map(|x| x.to_string())
+                    .map(|x| Value::String(x.into()))
+                    .collect::<Vec<_>>();
+                let hll_values = array
+                    .iter()
+                    .flatten()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<_>>();
+
+                mg.aggregate(&mg_values);
+                hll.aggregate(&hll_values);
+            }
+
+            _ => unreachable!(),
+        }
+    }
+
     /// Generate statistics for a column.
     fn generate_stats_for_column(
         col: &Arc<dyn Array>,
         col_type: &DataType,
         distr: &mut Option<TDigest>,
-        hll: &mut HyperLogLog,
+        cnt: &mut Counter<Value>,
     ) {
         macro_rules! generate_stats_for_col {
-            ({ $col:expr, $distr:expr, $hll:expr, $array_type:path, $to_f64:ident }) => {{
+            ({ $col:expr, $distr:expr, $array_type:path, $to_f64:ident, $value_type:path }) => {{
                 let array = $col.as_any().downcast_ref::<$array_type>().unwrap();
                 // Filter out `None` values.
-                let values = array.iter().filter_map(|x| x).collect::<Vec<_>>();
+                let distr_values = array.iter().flatten().collect::<Vec<_>>();
+                let cnt_values = array
+                    .iter()
+                    .flatten()
+                    .map(|x| $value_type(x))
+                    .collect::<Vec<_>>();
 
-                // Update distribution.
                 *$distr = {
-                    let mut f64_values = values.iter().map(|x| $to_f64(*x)).collect::<Vec<_>>();
+                    let mut f64_values =
+                        distr_values.iter().map(|x| $to_f64(*x)).collect::<Vec<_>>();
                     Some($distr.take().unwrap().merge_values(&mut f64_values))
                 };
-
-                // Update hll.
-                $hll.aggregate(&values);
+                cnt.aggregate(&cnt_values);
             }};
         }
 
@@ -222,62 +312,103 @@ impl DataFusionPerTableStats {
             val.into()
         }
 
-        /// Convert i128 to f64 with possible precision loss.
-        ///
-        /// Note: optd represents decimal with the significand as f64 (see `ConstantExpr::decimal`).
-        /// For instance 0.04 of type `Decimal128(15, 2)` is just 4.0, the type information
-        /// is discarded. Therefore we must use the significand to generate the statistics.
-        fn i128_to_f64(val: i128) -> f64 {
-            val as f64
-        }
-
         fn str_to_f64(string: &str) -> f64 {
             arith_encoder::encode(string)
         }
 
         match col_type {
             DataType::Boolean => {
-                generate_stats_for_col!({ col, distr, hll, BooleanArray, to_f64_safe })
+                generate_stats_for_col!({ col, distr, BooleanArray, to_f64_safe, Value::Bool })
             }
             DataType::Int8 => {
-                generate_stats_for_col!({ col, distr, hll, Int8Array, to_f64_safe })
+                generate_stats_for_col!({ col, distr, Int8Array, to_f64_safe, Value::Int8 })
             }
             DataType::Int16 => {
-                generate_stats_for_col!({ col, distr, hll, Int16Array, to_f64_safe })
+                generate_stats_for_col!({ col, distr, Int16Array, to_f64_safe, Value::Int16 })
             }
             DataType::Int32 => {
-                generate_stats_for_col!({ col, distr, hll, Int32Array, to_f64_safe })
+                generate_stats_for_col!({ col, distr, Int32Array, to_f64_safe, Value::Int32 })
             }
             DataType::UInt8 => {
-                generate_stats_for_col!({ col, distr, hll, UInt8Array, to_f64_safe })
+                generate_stats_for_col!({ col, distr, UInt8Array, to_f64_safe, Value::UInt8 })
             }
             DataType::UInt16 => {
-                generate_stats_for_col!({ col, distr, hll, UInt16Array, to_f64_safe })
+                generate_stats_for_col!({ col, distr, UInt16Array, to_f64_safe, Value::UInt16 })
             }
             DataType::UInt32 => {
-                generate_stats_for_col!({ col, distr, hll, UInt32Array, to_f64_safe })
+                generate_stats_for_col!({ col, distr, UInt32Array, to_f64_safe, Value::UInt32 })
             }
             DataType::Float32 => {
-                generate_stats_for_col!({ col, distr, hll, Float32Array, to_f64_safe })
+                let array = col.as_any().downcast_ref::<Float32Array>().unwrap();
+
+                let distr_values = array.iter().flatten().collect::<Vec<_>>();
+                let cnt_values = array
+                    .iter()
+                    .flatten()
+                    .map(|x| Value::Float(SerializableOrderedF64(OrderedFloat::from(x as f64))))
+                    .collect::<Vec<_>>();
+
+                *distr = {
+                    let mut f64_values = distr_values
+                        .iter()
+                        .map(|x| to_f64_safe(*x))
+                        .collect::<Vec<_>>();
+                    Some(distr.take().unwrap().merge_values(&mut f64_values))
+                };
+                cnt.aggregate(&cnt_values);
             }
             DataType::Float64 => {
-                generate_stats_for_col!({ col, distr, hll, Float64Array, to_f64_safe })
+                let array = col.as_any().downcast_ref::<Float32Array>().unwrap();
+
+                let distr_values = array.iter().flatten().collect::<Vec<_>>();
+                let cnt_values = array
+                    .iter()
+                    .flatten()
+                    .map(|x| Value::Float(SerializableOrderedF64(OrderedFloat::from(x as f64))))
+                    .collect::<Vec<_>>();
+
+                *distr = {
+                    let mut f64_values = distr_values
+                        .iter()
+                        .map(|x| to_f64_safe(*x))
+                        .collect::<Vec<_>>();
+                    Some(distr.take().unwrap().merge_values(&mut f64_values))
+                };
+                cnt.aggregate(&cnt_values);
             }
             DataType::Date32 => {
-                generate_stats_for_col!({ col, distr, hll, Date32Array, to_f64_safe })
-            }
-            DataType::Decimal128(_, _) => {
-                generate_stats_for_col!({ col, distr, hll, Decimal128Array, i128_to_f64 })
+                generate_stats_for_col!({ col, distr, Date32Array, to_f64_safe, Value::Date32 })
             }
             DataType::Utf8 => {
-                generate_stats_for_col!({ col, distr, hll, StringArray, str_to_f64 })
+                let array = col.as_any().downcast_ref::<StringArray>().unwrap();
+
+                let distr_values = array
+                    .iter()
+                    .flatten()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<_>>();
+                let cnt_values = array
+                    .iter()
+                    .flatten()
+                    .map(|x| x.to_string())
+                    .map(|x| Value::String(x.into()))
+                    .collect::<Vec<_>>();
+
+                *distr = {
+                    let mut f64_values = distr_values
+                        .iter()
+                        .map(|x| str_to_f64(x))
+                        .collect::<Vec<_>>();
+                    Some(distr.take().unwrap().merge_values(&mut f64_values))
+                };
+                cnt.aggregate(&cnt_values);
             }
             _ => unreachable!(),
         }
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct PerColumnStats<M: MostCommonValues, D: Distribution> {
     // even if nulls are the most common, they cannot appear in mcvs
     mcvs: M,

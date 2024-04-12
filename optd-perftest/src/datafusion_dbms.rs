@@ -315,6 +315,7 @@ impl DatafusionDBMS {
         for ddl in ddls {
             Self::execute(&ctx, ddl).await?;
         }
+
         let mut base_table_stats = BaseTableStats::default();
         for tbl_fpath in tpch_kit.get_tbl_fpath_iter(tpch_config).unwrap() {
             let tbl_name = tbl_fpath.file_stem().unwrap().to_str().unwrap();
@@ -327,17 +328,18 @@ impl DatafusionDBMS {
                 .await
                 .unwrap()
                 .schema();
-            // Load the .tbl file into record batches using arrow.
-            let tbl_file = fs::File::open(&tbl_fpath)?;
-            let csv_reader = ReaderBuilder::new(schema.clone())
-                .has_header(false)
-                .with_delimiter(b'|')
-                .build(tbl_file)
-                .unwrap();
-            let batch_iter = RecordBatchIterator::new(csv_reader, schema);
+
             base_table_stats.insert(
                 tbl_name.to_string(),
-                PerTableStats::from_record_batches(batch_iter)?,
+                PerTableStats::from_record_batches(|| {
+                    let tbl_file = fs::File::open(&tbl_fpath)?;
+                    let csv_reader1 = ReaderBuilder::new(schema.clone())
+                        .has_header(false)
+                        .with_delimiter(b'|')
+                        .build(tbl_file)
+                        .unwrap();
+                    Ok(RecordBatchIterator::new(csv_reader1, schema.clone()))
+                })?,
             );
         }
 

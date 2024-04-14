@@ -1,7 +1,7 @@
+/// A wrapper around tpch-kit
 use serde::{Deserialize, Serialize};
 
 use crate::shell;
-/// A wrapper around tpch-kit (https://github.com/gregrahn/tpch-kit)
 use std::env;
 use std::env::consts::OS;
 use std::fmt::{self, Display, Formatter};
@@ -53,7 +53,6 @@ pub struct TpchKit {
     pub indexes_fpath: PathBuf,
 }
 
-/// I keep the same conventions for these methods as I do for PostgresDBMS
 impl TpchKit {
     pub fn build<P: AsRef<Path>>(workspace_dpath: P) -> io::Result<Self> {
         log::debug!("[start] building TpchKit");
@@ -93,44 +92,23 @@ impl TpchKit {
             indexes_fpath,
         };
 
-        // set envvars (DSS_PATH can change so we don't set it now)
+        // setup
         env::set_var("DSS_CONFIG", kit.dbgen_dpath.to_str().unwrap());
         env::set_var("DSS_QUERY", kit.queries_dpath.to_str().unwrap());
-
-        // do setup after creating kit
-        kit.clonepull_tpch_kit_repo()?;
+        shell::clonepull_repo(TPCH_KIT_REPO_URL, &kit.tpch_kit_repo_dpath)?;
 
         log::debug!("[end] building TpchKit");
         Ok(kit)
-    }
-
-    fn clonepull_tpch_kit_repo(&self) -> io::Result<()> {
-        if !self.tpch_kit_repo_dpath.exists() {
-            log::debug!("[start] cloning tpch-kit repo");
-            shell::run_command_with_status_check(&format!(
-                "git clone {} {}",
-                TPCH_KIT_REPO_URL,
-                self.tpch_kit_repo_dpath.to_str().unwrap()
-            ))?;
-            log::debug!("[end] cloning tpch-kit repo");
-        } else {
-            log::debug!("[skip] cloning tpch-kit repo");
-        }
-        log::debug!("[start] pulling latest tpch-kit repo");
-        shell::run_command_with_status_check_in_dir("git pull", Some(&self.tpch_kit_repo_dpath))?;
-        log::debug!("[end] pulling latest tpch-kit repo");
-        // make sure to do this so that get_optd_root() doesn't break
-        Ok(())
     }
 
     pub fn make(&self, dbms: &str) -> io::Result<()> {
         log::debug!("[start] building dbgen");
         // we need to call "make clean" because we might have called make earlier with
         //   a different dbms
-        shell::run_command_with_status_check_in_dir("make clean", Some(&self.dbgen_dpath))?;
+        shell::run_command_with_status_check_in_dir("make clean", &self.dbgen_dpath)?;
         shell::run_command_with_status_check_in_dir(
             &format!("make MACHINE={} DATABASE={}", TpchKit::get_machine(), dbms),
-            Some(&self.dbgen_dpath),
+            &self.dbgen_dpath,
         )?;
         log::debug!("[end] building dbgen");
         Ok(())
@@ -156,7 +134,7 @@ impl TpchKit {
             log::debug!("[start] generating tables for {}", tpch_config);
             shell::run_command_with_status_check_in_dir(
                 &format!("./dbgen -s{}", tpch_config.scale_factor),
-                Some(&self.dbgen_dpath),
+                &self.dbgen_dpath,
             )?;
             File::create(done_fpath)?;
             log::debug!("[end] generating tables for {}", tpch_config);
@@ -181,7 +159,7 @@ impl TpchKit {
                         "./qgen -s{} -r{} {}",
                         tpch_config.scale_factor, tpch_config.seed, query_i
                     ),
-                    Some(&self.dbgen_dpath),
+                    &self.dbgen_dpath,
                 )?;
                 let this_genned_queries_fpath =
                     this_genned_queries_dpath.join(format!("{}.sql", query_i));

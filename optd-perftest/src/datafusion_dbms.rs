@@ -54,8 +54,8 @@ impl CardtestRunnerDBMSHelper for DatafusionDBMS {
         let tpch_kit = TpchKit::build(&self.workspace_dpath)?;
         self.create_tpch_tables(&tpch_kit).await?;
         match benchmark {
-            Benchmark::Test => unimplemented!(),
             Benchmark::Tpch(tpch_config) => self.eval_tpch_estcards(tpch_config).await,
+            Benchmark::Job(_job_config) => unimplemented!(),
         }
     }
 }

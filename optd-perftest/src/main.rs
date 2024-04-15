@@ -1,9 +1,9 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use optd_perftest::benchmark::Benchmark;
-use optd_perftest::cardtest;
 use optd_perftest::job::JobConfig;
 use optd_perftest::shell;
 use optd_perftest::tpch::{TpchConfig, TPCH_KIT_POSTGRES};
+use optd_perftest::{cardtest, job, tpch};
 use prettytable::{format, Table};
 use std::fs;
 use std::path::Path;
@@ -46,7 +46,7 @@ enum Commands {
         #[clap(long)]
         #[clap(value_delimiter = ',', num_args = 1..)]
         // This is the current list of all queries that work in perftest
-        #[clap(default_value = "2,3,5,6,7,8,9,10,11,12,13,14,17,19")]
+        #[clap(default_value = None)]
         #[clap(help = "The queries to get the Q-error of")]
         query_ids: Vec<String>,
 
@@ -89,6 +89,18 @@ async fn cardtest<P: AsRef<Path>>(
     pguser: String,
     pgpassword: String,
 ) -> anyhow::Result<()> {
+    let query_ids = if query_ids.is_empty() {
+        Vec::from(match benchmark_name {
+            BenchmarkName::Tpch => tpch::WORKING_QUERY_IDS,
+            BenchmarkName::Job => job::WORKING_QUERY_IDS,
+        })
+        .into_iter()
+        .map(String::from)
+        .collect()
+    } else {
+        query_ids
+    };
+
     let benchmark = match benchmark_name {
         BenchmarkName::Tpch => Benchmark::Tpch(TpchConfig {
             dbms: String::from(TPCH_KIT_POSTGRES),

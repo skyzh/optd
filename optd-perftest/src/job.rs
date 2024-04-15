@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 
 const JOB_KIT_REPO_URL: &str = "https://github.com/wangpatrick57/job-kit.git";
 const JOB_TABLES_URL: &str = "https://homepages.cwi.nl/~boncz/job/imdb.tgz";
+pub const WORKING_QUERY_IDS: &[&str] = &["1a", "1b"];
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct JobConfig {
@@ -44,22 +45,26 @@ impl JobKit {
     pub fn build<P: AsRef<Path>>(workspace_dpath: P) -> io::Result<Self> {
         log::debug!("[start] building JobKit");
 
-        // build paths, sometimes creating them if they don't exist
+        // Build paths, sometimes creating them if they don't exist
         let workspace_dpath = workspace_dpath.as_ref().to_path_buf();
         let job_dpath = workspace_dpath.join("job");
         if !job_dpath.exists() {
             fs::create_dir(&job_dpath)?;
         }
         let job_kit_repo_dpath = job_dpath.join("job-kit");
-        let queries_dpath = job_kit_repo_dpath.join("queries");
+        let queries_dpath = job_kit_repo_dpath.clone();
         let downloaded_tables_dpath = job_dpath.join("downloaded_tables");
         if !downloaded_tables_dpath.exists() {
             fs::create_dir(&downloaded_tables_dpath)?;
         }
+        // Note that the downloaded tables directory has a file called schematext.sql.
+        // I chose to use the schema.sql in the repo itself for one simple reason: since
+        //   we forked the repo, we can modify the schema.sql if necessary.
+        // Note also that I copied schematext.sql into our job-kit fork *for reference only*.
         let schema_fpath = job_kit_repo_dpath.join("schema.sql");
         let indexes_fpath = job_kit_repo_dpath.join("fkindexes.sql");
 
-        // create Self
+        // Create Self
         let kit = JobKit {
             _workspace_dpath: workspace_dpath,
             job_dpath,

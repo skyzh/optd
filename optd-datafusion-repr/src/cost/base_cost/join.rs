@@ -6,9 +6,9 @@ use optd_core::{
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::{
-    cost::{
-        base_cost::stats::{Distribution, MostCommonValues},
-        base_cost::DEFAULT_NUM_DISTINCT,
+    cost::base_cost::{
+        stats::{Distribution, MostCommonValues},
+        DEFAULT_NUM_DISTINCT,
     },
     plan_nodes::{
         BinOpType, ColumnRefExpr, Expr, ExprList, JoinType, LogOpExpr, LogOpType, OptRelNode,
@@ -72,6 +72,9 @@ impl<
                 optimizer.get_property_by_group::<ColumnRefPropertyBuilder>(context.group_id, 1);
             let left_keys_group_id = context.children_group_ids[2];
             let right_keys_group_id = context.children_group_ids[3];
+            let left_col_cnt = optimizer
+                .get_property_by_group::<ColumnRefPropertyBuilder>(context.children_group_ids[0], 1)
+                .len();
             let left_keys_list = optimizer.get_all_group_bindings(left_keys_group_id, false);
             let right_keys_list = optimizer.get_all_group_bindings(right_keys_group_id, false);
             // there may be more than one expression tree in a group. see comment in OptRelNodeTyp::PhysicalFilter(_) for more information
@@ -86,6 +89,7 @@ impl<
                 &column_refs,
                 row_cnt_1,
                 row_cnt_2,
+                left_col_cnt,
             )
         } else {
             DEFAULT_UNK_SEL
@@ -98,6 +102,7 @@ impl<
     }
 
     /// A wrapper to convert the join keys to the format expected by get_join_selectivity_core()
+    #[allow(clippy::too_many_arguments)]
     fn get_join_selectivity_from_keys(
         &self,
         join_typ: JoinType,
@@ -106,6 +111,7 @@ impl<
         column_refs: &GroupColumnRefs,
         left_row_cnt: f64,
         right_row_cnt: f64,
+        left_col_cnt: usize,
     ) -> f64 {
         assert!(left_keys.len() == right_keys.len());
         // I assume that the keys are already in the right order s.t. the ith key of left_keys corresponds with the ith key of right_keys
@@ -129,10 +135,18 @@ impl<
             column_refs,
             left_row_cnt,
             right_row_cnt,
+            left_col_cnt,
         )
     }
 
     /// The core logic of join selectivity which assumes we've already separated the expression into the on conditions and the filters
+    /// Hash join and NLJ reference right table columns differently, hence the `right_col_ref_offset` parameter.
+    /// For hash join, the right table columns indices are with respect to the right table,
+    ///   which means #0 is the first column of the right table.
+    /// For NLJ, the right table columns indices are with respect to the output of the join.
+    ///   For example, if the left table has 3 columns, the first column of the right table
+    ///   is #3 instead of #0.
+    #[allow(clippy::too_many_arguments)]
     fn get_join_selectivity_core(
         &self,
         join_typ: JoinType,
@@ -141,8 +155,10 @@ impl<
         column_refs: &GroupColumnRefs,
         left_row_cnt: f64,
         right_row_cnt: f64,
+        right_col_ref_offset: usize,
     ) -> f64 {
-        let join_on_selectivity = self.get_join_on_selectivity(&on_col_ref_pairs, column_refs);
+        let join_on_selectivity =
+            self.get_join_on_selectivity(&on_col_ref_pairs, column_refs, right_col_ref_offset);
         // Currently, there is no difference in how we handle a join filter and a select filter, so we use the same function
         // One difference (that we *don't* care about right now) is that join filters can contain expressions from multiple
         //   different tables. Currently, this doesn't affect the get_filter_selectivity() function, but this may change in
@@ -210,6 +226,7 @@ impl<
                 column_refs,
                 left_row_cnt,
                 right_row_cnt,
+                0,
             )
         } else {
             #[allow(clippy::collapsible_else_if)]
@@ -222,6 +239,7 @@ impl<
                     column_refs,
                     left_row_cnt,
                     right_row_cnt,
+                    0,
                 )
             } else {
                 self.get_join_selectivity_core(
@@ -231,6 +249,7 @@ impl<
                     column_refs,
                     left_row_cnt,
                     right_row_cnt,
+                    0,
                 )
             }
         }
@@ -291,13 +310,16 @@ impl<
         &self,
         on_col_ref_pairs: &[(ColumnRefExpr, ColumnRefExpr)],
         column_refs: &GroupColumnRefs,
+        right_col_ref_offset: usize,
     ) -> f64 {
         // multiply the selectivities of all individual conditions together
         on_col_ref_pairs.iter().map(|on_col_ref_pair| {
             // the formula for each pair is min(1 / ndistinct1, 1 / ndistinct2) (see https://postgrespro.com/blog/pgsql/5969618)
-            let ndistincts = vec![&on_col_ref_pair.0, &on_col_ref_pair.1].into_iter().map(|on_col_ref_expr| {
-                match self.get_single_column_stats_from_col_ref(&column_refs[on_col_ref_expr.index()]) {
-                    Some(per_col_stats) => per_col_stats.ndistinct,
+            let ndistincts = vec![on_col_ref_pair.0.index(), on_col_ref_pair.1.index() + right_col_ref_offset].into_iter().map(|col_index| {
+                match self.get_single_column_stats_from_col_ref(&column_refs[col_index]) {
+                    Some(per_col_stats) => {
+                        per_col_stats.ndistinct
+                    },
                     None => DEFAULT_NUM_DISTINCT,
                 }
             });

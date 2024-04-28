@@ -155,7 +155,7 @@ impl DatafusionDBMS {
 
         let mut estcards = vec![];
         for (query_id, sql_fpath) in tpch_kit.get_sql_fpath_ordered_iter(tpch_kit_config)? {
-            println!(
+            log::debug!(
                 "about to evaluate datafusion's estcard for TPC-H Q{}",
                 query_id
             );
@@ -177,9 +177,10 @@ impl DatafusionDBMS {
             } else {
                 "JOB-light"
             };
-            println!(
+            log::debug!(
                 "about to evaluate datafusion's estcard for {} Q{}",
-                benchmark_name, query_id
+                benchmark_name,
+                query_id
             );
             let sql = fs::read_to_string(sql_fpath)?;
             let estcard = self.eval_query_estcard(&sql).await?;

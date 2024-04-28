@@ -135,11 +135,15 @@ impl EqBaseTableColumnSets {
         self.eq_predicates.insert(predicate);
     }
 
-    /// Determine if two columns are equal.
+    /// Determine if two columns are in the same set.
     pub fn is_eq(&mut self, left: &BaseTableColumnRef, right: &BaseTableColumnRef) -> bool {
         self.disjoint_eq_col_sets
             .same_set(left, right)
             .unwrap_or(false)
+    }
+
+    pub fn contains(&self, base_col_ref: &BaseTableColumnRef) -> bool {
+        self.disjoint_eq_col_sets.contains(base_col_ref)
     }
 
     /// Get the number of columns that are equal to `col`, including `col` itself.
@@ -163,6 +167,18 @@ impl EqBaseTableColumnSets {
             }
         }
         predicates
+    }
+
+    /// Find the set of columns that define the equality of the set of columns `col` belongs to.
+    pub fn find_cols_for_eq_column_set(
+        &mut self,
+        col: &BaseTableColumnRef,
+    ) -> HashSet<BaseTableColumnRef> {
+        let predicates = self.find_predicates_for_eq_column_set(col);
+        predicates
+            .into_iter()
+            .flat_map(|predicate| vec![predicate.left, predicate.right])
+            .collect()
     }
 
     /// Union two `EqBaseTableColumnSets` to produce a new disjoint sets.

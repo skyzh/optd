@@ -1,10 +1,10 @@
 use clap::{Parser, Subcommand, ValueEnum};
-use optd_perftest::benchmark::Benchmark;
-use optd_perftest::cardtest::Cardinfo;
-use optd_perftest::job::JobKitConfig;
-use optd_perftest::shell;
-use optd_perftest::tpch::{TpchKitConfig, TPCH_KIT_POSTGRES};
-use optd_perftest::{cardtest, job, tpch};
+use optd_perfbench::benchmark::Benchmark;
+use optd_perfbench::cardbench::Cardinfo;
+use optd_perfbench::job::JobKitConfig;
+use optd_perfbench::shell;
+use optd_perfbench::tpch::{TpchKitConfig, TPCH_KIT_POSTGRES};
+use optd_perfbench::{cardbench, job, tpch};
 use prettytable::{format, Table};
 use std::fs;
 use std::path::Path;
@@ -12,7 +12,7 @@ use std::path::Path;
 #[derive(Parser)]
 struct Cli {
     #[clap(long)]
-    #[clap(default_value = "optd_perftest_workspace")]
+    #[clap(default_value = "optd_perfbench_workspace")]
     #[clap(
         help = "The directory where artifacts required for performance testing (such as pgdata or TPC-H queries) are generated. See comment of parse_pathstr() to see what paths are allowed (TLDR: absolute and relative both ok)."
     )]
@@ -31,7 +31,7 @@ enum BenchmarkName {
 
 #[derive(Subcommand)]
 enum Commands {
-    Cardtest {
+    Cardbench {
         #[clap(value_enum)]
         #[clap(default_value = "tpch")]
         benchmark_name: BenchmarkName,
@@ -46,7 +46,7 @@ enum Commands {
 
         #[clap(long)]
         #[clap(value_delimiter = ',', num_args = 1..)]
-        // This is the current list of all queries that work in perftest
+        // This is the current list of all queries that work in perfbench
         #[clap(default_value = None)]
         #[clap(help = "The queries to get the Q-error of")]
         query_ids: Vec<String>,
@@ -87,10 +87,10 @@ fn percentile(sorted_v: &[f64], percentile: f64) -> f64 {
     sorted_v[idx]
 }
 
-/// cardtest::cardtest_core() expects sanitized inputs and returns outputs in their simplest form.
-/// This function wraps around cardtest::cardtest_core() to sanitize the inputs and print the outputs nicely.
+/// cardbench::cardbench_core() expects sanitized inputs and returns outputs in their simplest form.
+/// This function wraps around cardbench::cardbench_core() to sanitize the inputs and print the outputs nicely.
 #[allow(clippy::too_many_arguments)]
-async fn cardtest<P: AsRef<Path>>(
+async fn cardbench<P: AsRef<Path>>(
     workspace_dpath: P,
     benchmark_name: BenchmarkName,
     scale_factor: f64,
@@ -131,7 +131,7 @@ async fn cardtest<P: AsRef<Path>>(
         }),
     };
 
-    let cardinfo_alldbs = cardtest::cardtest_core(
+    let cardinfo_alldbs = cardbench::cardbench_core(
         &workspace_dpath,
         rebuild_cached_optd_stats,
         &pguser,
@@ -268,7 +268,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     match cli.command {
-        Commands::Cardtest {
+        Commands::Cardbench {
             benchmark_name,
             scale_factor,
             seed,
@@ -278,7 +278,7 @@ async fn main() -> anyhow::Result<()> {
             pgpassword,
             adaptive,
         } => {
-            cardtest(
+            cardbench(
                 workspace_dpath,
                 benchmark_name,
                 scale_factor,

@@ -10,9 +10,9 @@ use tracing::trace;
 use crate::{
     cascades::memo::Winner,
     cost::CostModel,
+    nodes::{ArcPlanNode, ArcPredNode, NodeType, PlanNodeMeta, PlanNodeMetaMap, PlanNodeOrGroup},
     optimizer::Optimizer,
     property::{PropertyBuilder, PropertyBuilderAny},
-    rel_node::{ArcPredNode, RelNodeMeta, RelNodeMetaMap, RelNodeRef, RelNodeTyp},
     rules::RuleWrapper,
 };
 
@@ -39,7 +39,7 @@ pub struct OptimizerProperties {
     pub partial_explore_space: Option<usize>,
 }
 
-pub struct CascadesOptimizer<T: RelNodeTyp, M: Memo<T> = NaiveMemo<T>> {
+pub struct CascadesOptimizer<T: NodeType, M: Memo<T> = NaiveMemo<T>> {
     memo: M,
     pub(super) tasks: VecDeque<Box<dyn Task<T, M>>>,
     explored_group: HashSet<GroupId>,
@@ -89,7 +89,7 @@ impl Display for PredId {
     }
 }
 
-impl<T: RelNodeTyp> CascadesOptimizer<T, NaiveMemo<T>> {
+impl<T: NodeType> CascadesOptimizer<T, NaiveMemo<T>> {
     pub fn new(
         rules: Vec<Arc<RuleWrapper<T, Self>>>,
         cost: Box<dyn CostModel<T, NaiveMemo<T>>>,
@@ -137,7 +137,7 @@ impl<T: RelNodeTyp> CascadesOptimizer<T, NaiveMemo<T>> {
     }
 }
 
-impl<T: RelNodeTyp, M: Memo<T>> CascadesOptimizer<T, M> {
+impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
     pub fn panic_on_explore_limit(&mut self, enabled: bool) {
         self.prop.panic_on_budget = enabled;
     }
@@ -199,7 +199,7 @@ impl<T: RelNodeTyp, M: Memo<T>> CascadesOptimizer<T, M> {
     }
 
     /// Optimize a `RelNode`.
-    pub fn step_optimize_rel(&mut self, root_rel: RelNodeRef<T>) -> Result<GroupId> {
+    pub fn step_optimize_rel(&mut self, root_rel: ArcPlanNode<T>) -> Result<GroupId> {
         let (group_id, _) = self.add_new_expr(root_rel);
         self.fire_optimize_tasks(group_id)?;
         Ok(group_id)
@@ -209,14 +209,14 @@ impl<T: RelNodeTyp, M: Memo<T>> CascadesOptimizer<T, M> {
     pub fn step_get_optimize_rel(
         &self,
         group_id: GroupId,
-        meta: &mut Option<RelNodeMetaMap>,
-    ) -> Result<RelNodeRef<T>> {
+        meta: &mut Option<PlanNodeMetaMap>,
+    ) -> Result<ArcPlanNode<T>> {
         let res = self
             .memo
             .get_best_group_binding(group_id, |node, group_id, info| {
                 if let Some(meta) = meta {
                     let node = node.as_ref() as *const _ as usize;
-                    let node_meta = RelNodeMeta::new(
+                    let node_meta = PlanNodeMeta::new(
                         group_id,
                         info.total_weighted_cost,
                         info.total_cost.clone(),
@@ -275,30 +275,27 @@ impl<T: RelNodeTyp, M: Memo<T>> CascadesOptimizer<T, M> {
         Ok(())
     }
 
-    fn optimize_inner(&mut self, root_rel: RelNodeRef<T>) -> Result<RelNodeRef<T>> {
+    fn optimize_inner(&mut self, root_rel: ArcPlanNode<T>) -> Result<ArcPlanNode<T>> {
         let (group_id, _) = self.add_new_expr(root_rel);
         self.fire_optimize_tasks(group_id)?;
         self.memo.get_best_group_binding(group_id, |_, _, _| {})
     }
 
-    pub fn resolve_group_id(&self, root_rel: RelNodeRef<T>) -> GroupId {
-        if let Some(group_id) = T::extract_group(&root_rel.typ) {
-            return group_id;
-        }
-        panic!("This function is deprecated -- you should only pass group id instead of a full expression to this function.")
+    pub fn resolve_group_id(&self, root_rel: PlanNodeOrGroup<T>) -> GroupId {
+        root_rel.unwrap_group()
     }
 
     pub(super) fn get_all_exprs_in_group(&self, group_id: GroupId) -> Vec<ExprId> {
         self.memo.get_all_exprs_in_group(group_id)
     }
 
-    pub fn add_new_expr(&mut self, rel_node: RelNodeRef<T>) -> (GroupId, ExprId) {
+    pub fn add_new_expr(&mut self, rel_node: ArcPlanNode<T>) -> (GroupId, ExprId) {
         self.memo.add_new_expr(rel_node)
     }
 
     pub fn add_expr_to_group(
         &mut self,
-        rel_node: RelNodeRef<T>,
+        rel_node: PlanNodeOrGroup<T>,
         group_id: GroupId,
     ) -> Option<ExprId> {
         self.memo.add_expr_to_group(rel_node, group_id)
@@ -335,7 +332,7 @@ impl<T: RelNodeTyp, M: Memo<T>> CascadesOptimizer<T, M> {
         self.memo.get_expr_memoed(expr_id)
     }
 
-    pub fn get_predicate_binding(&self, group_id: GroupId) -> Option<RelNodeRef<T>> {
+    pub fn get_predicate_binding(&self, group_id: GroupId) -> Option<ArcPlanNode<T>> {
         self.memo.get_predicate_binding(group_id)
     }
 
@@ -382,12 +379,16 @@ impl<T: RelNodeTyp, M: Memo<T>> CascadesOptimizer<T, M> {
     }
 }
 
-impl<T: RelNodeTyp, M: Memo<T>> Optimizer<T> for CascadesOptimizer<T, M> {
-    fn optimize(&mut self, root_rel: RelNodeRef<T>) -> Result<RelNodeRef<T>> {
+impl<T: NodeType, M: Memo<T>> Optimizer<T> for CascadesOptimizer<T, M> {
+    fn optimize(&mut self, root_rel: ArcPlanNode<T>) -> Result<ArcPlanNode<T>> {
         self.optimize_inner(root_rel)
     }
 
-    fn get_property<P: PropertyBuilder<T>>(&self, root_rel: RelNodeRef<T>, idx: usize) -> P::Prop {
+    fn get_property<P: PropertyBuilder<T>>(
+        &self,
+        root_rel: PlanNodeOrGroup<T>,
+        idx: usize,
+    ) -> P::Prop {
         self.get_property_by_group::<P>(self.resolve_group_id(root_rel), idx)
     }
 }

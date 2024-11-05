@@ -1,6 +1,6 @@
 use crate::{
     cascades::{CascadesOptimizer, Memo, RelNodeContext},
-    rel_node::{ArcPredNode, RelNodeTyp, Value},
+    nodes::{ArcPredNode, NodeType},
 };
 
 /// The statistics of a group.
@@ -13,13 +13,12 @@ pub struct Statistics(pub value_bag::OwnedValueBag);
 #[derive(Default, Clone, Debug, PartialOrd, PartialEq)]
 pub struct Cost(pub Vec<f64>);
 
-pub trait CostModel<T: RelNodeTyp, M: Memo<T>>: 'static + Send + Sync {
+pub trait CostModel<T: NodeType, M: Memo<T>>: 'static + Send + Sync {
     /// Compute the cost of a single operation
     #[allow(clippy::too_many_arguments)]
     fn compute_operation_cost(
         &self,
         node: &T,
-        data: &Option<Value>,
         predicates: &[ArcPredNode<T>],
         children_stats: &[Option<&Statistics>],
         children_costs: &[Cost],
@@ -31,7 +30,6 @@ pub trait CostModel<T: RelNodeTyp, M: Memo<T>>: 'static + Send + Sync {
     fn derive_statistics(
         &self,
         node: &T,
-        data: &Option<Value>,
         predicates: &[ArcPredNode<T>],
         children_stats: &[&Statistics],
         context: Option<RelNodeContext>,

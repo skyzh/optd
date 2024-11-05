@@ -4,10 +4,8 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
-use crate::{
-    optimizer::Optimizer,
-    rel_node::{RelNode, RelNodeTyp},
-};
+use crate::nodes::PlanNodeOrGroup;
+use crate::{nodes::NodeType, optimizer::Optimizer};
 
 pub use ir::RuleMatcher;
 
@@ -26,12 +24,12 @@ impl Display for OptimizeType {
     }
 }
 
-pub struct RuleWrapper<T: RelNodeTyp, O: Optimizer<T>> {
+pub struct RuleWrapper<T: NodeType, O: Optimizer<T>> {
     pub rule: Arc<dyn Rule<T, O>>,
     pub optimize_type: OptimizeType,
 }
 
-impl<T: RelNodeTyp, O: Optimizer<T>> RuleWrapper<T, O> {
+impl<T: NodeType, O: Optimizer<T>> RuleWrapper<T, O> {
     pub fn new(rule: Arc<dyn Rule<T, O>>, optimizer_type: OptimizeType) -> Self {
         Self {
             rule,
@@ -58,9 +56,15 @@ impl<T: RelNodeTyp, O: Optimizer<T>> RuleWrapper<T, O> {
     }
 }
 
-pub trait Rule<T: RelNodeTyp, O: Optimizer<T>>: 'static + Send + Sync {
+// TODO: docs, possible renames.
+// TODO: Why do we have all of these match types? Seems like possible overkill.
+pub trait Rule<T: NodeType, O: Optimizer<T>>: 'static + Send + Sync {
     fn matcher(&self) -> &RuleMatcher<T>;
-    fn apply(&self, optimizer: &O, input: HashMap<usize, RelNode<T>>) -> Vec<RelNode<T>>;
+    fn apply(
+        &self,
+        optimizer: &O,
+        input: HashMap<usize, PlanNodeOrGroup<T>>,
+    ) -> Vec<PlanNodeOrGroup<T>>;
     fn name(&self) -> &'static str;
     fn is_impl_rule(&self) -> bool {
         false

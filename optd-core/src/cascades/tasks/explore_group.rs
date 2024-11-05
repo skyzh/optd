@@ -7,7 +7,7 @@ use crate::{
         tasks::OptimizeExpressionTask,
         Memo,
     },
-    rel_node::RelNodeTyp,
+    nodes::NodeType,
 };
 
 use super::Task;
@@ -22,7 +22,7 @@ impl ExploreGroupTask {
     }
 }
 
-impl<T: RelNodeTyp, M: Memo<T>> Task<T, M> for ExploreGroupTask {
+impl<T: NodeType, M: Memo<T>> Task<T, M> for ExploreGroupTask {
     fn execute(&self, optimizer: &mut CascadesOptimizer<T, M>) -> Result<Vec<Box<dyn Task<T, M>>>> {
         trace!(event = "task_begin", task = "explore_group", group_id = %self.group_id);
         let mut tasks = vec![];

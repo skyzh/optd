@@ -10,7 +10,7 @@ use crate::{
         CascadesOptimizer, Memo, RelNodeContext,
     },
     cost::{Cost, Statistics},
-    rel_node::RelNodeTyp,
+    nodes::NodeType,
 };
 
 use super::Task;
@@ -61,7 +61,7 @@ impl OptimizeInputsTask {
         }
     }
 
-    fn update_winner_impossible<T: RelNodeTyp, M: Memo<T>>(
+    fn update_winner_impossible<T: NodeType, M: Memo<T>>(
         &self,
         optimizer: &mut CascadesOptimizer<T, M>,
     ) {
@@ -76,7 +76,7 @@ impl OptimizeInputsTask {
         }
     }
 
-    fn update_winner<T: RelNodeTyp, M: Memo<T>>(
+    fn update_winner<T: NodeType, M: Memo<T>>(
         &self,
         input_statistics: Vec<Option<&Statistics>>,
         operation_cost: Cost,
@@ -105,7 +105,6 @@ impl OptimizeInputsTask {
                 .collect_vec();
             let statistics = cost.derive_statistics(
                 &expr.typ,
-                &expr.data,
                 &preds,
                 &input_statistics
                     .iter()
@@ -135,7 +134,7 @@ impl OptimizeInputsTask {
     }
 }
 
-impl<T: RelNodeTyp, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
+impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
     fn execute(&self, optimizer: &mut CascadesOptimizer<T, M>) -> Result<Vec<Box<dyn Task<T, M>>>> {
         if self.continue_from.is_none() {
             if optimizer.is_expr_explored(self.expr_id) {
@@ -195,7 +194,6 @@ impl<T: RelNodeTyp, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
                 .collect_vec();
             let operation_cost = cost.compute_operation_cost(
                 &expr.typ,
-                &expr.data,
                 &preds,
                 &input_statistics_ref,
                 &input_cost,

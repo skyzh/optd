@@ -1,28 +1,29 @@
-use crate::rel_node::{RelNodeTyp, Value};
+use crate::nodes::{ArcPredNode, NodeType};
 use std::{any::Any, fmt::Debug};
 
-pub trait PropertyBuilderAny<T: RelNodeTyp>: 'static + Send + Sync {
+pub trait PropertyBuilderAny<T: NodeType>: 'static + Send + Sync {
     fn derive_any(
         &self,
         typ: T,
-        data: Option<Value>,
+        predicates: &[ArcPredNode<T>],
         children: &[&dyn Any],
     ) -> Box<dyn Any + Send + Sync + 'static>;
     fn display(&self, prop: &dyn Any) -> String;
     fn property_name(&self) -> &'static str;
 }
 
-pub trait PropertyBuilder<T: RelNodeTyp>: 'static + Send + Sync + Sized {
+pub trait PropertyBuilder<T: NodeType>: 'static + Send + Sync + Sized {
     type Prop: 'static + Send + Sync + Sized + Clone + Debug;
-    fn derive(&self, typ: T, data: Option<Value>, children: &[&Self::Prop]) -> Self::Prop;
+    fn derive(&self, typ: T, predicates: &[ArcPredNode<T>], children: &[&Self::Prop])
+        -> Self::Prop;
     fn property_name(&self) -> &'static str;
 }
 
-impl<T: RelNodeTyp, P: PropertyBuilder<T>> PropertyBuilderAny<T> for P {
+impl<T: NodeType, P: PropertyBuilder<T>> PropertyBuilderAny<T> for P {
     fn derive_any(
         &self,
         typ: T,
-        data: Option<Value>,
+        predicates: &[ArcPredNode<T>],
         children: &[&dyn Any],
     ) -> Box<dyn Any + Send + Sync + 'static> {
         let children: Vec<&P::Prop> = children
@@ -33,7 +34,7 @@ impl<T: RelNodeTyp, P: PropertyBuilder<T>> PropertyBuilderAny<T> for P {
                     .expect("Failed to downcast child")
             })
             .collect();
-        Box::new(self.derive(typ, data, &children))
+        Box::new(self.derive(typ, predicates, &children))
     }
 
     fn display(&self, prop: &dyn Any) -> String {

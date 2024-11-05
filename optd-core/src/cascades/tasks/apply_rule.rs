@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -11,7 +11,7 @@ use crate::{
         tasks::{OptimizeExpressionTask, OptimizeInputsTask},
         GroupId, Memo,
     },
-    rel_node::{RelNode, RelNodeTyp},
+    nodes::{NodeType, PlanNode, PlanNodeOrGroup},
     rules::{OptimizeType, RuleMatcher},
 };
 
@@ -33,13 +33,13 @@ impl ApplyRuleTask {
     }
 }
 
-fn match_node<T: RelNodeTyp, M: Memo<T>>(
+fn match_node<T: NodeType, M: Memo<T>>(
     typ: &T,
     children: &[RuleMatcher<T>],
     pick_to: Option<usize>,
     node: RelMemoNodeRef<T>,
     optimizer: &CascadesOptimizer<T, M>,
-) -> Vec<HashMap<usize, RelNode<T>>> {
+) -> Vec<HashMap<usize, PlanNodeOrGroup<T>>> {
     if let RuleMatcher::PickMany { .. } | RuleMatcher::IgnoreMany = children.last().unwrap() {
     } else {
         assert_eq!(
@@ -65,29 +65,17 @@ fn match_node<T: RelNodeTyp, M: Memo<T>>(
                     let binding = optimizer
                         .get_predicate_binding(group_id)
                         .expect("empty group, what's going wrong?");
-                    binding.as_ref().clone()
+                    PlanNodeOrGroup::PlanNode(binding)
                 } else {
-                    RelNode::new_group(group_id)
+                    PlanNodeOrGroup::Group(group_id)
                 };
                 for pick in &mut picks {
                     let res = pick.insert(*pick_to, node.clone());
                     assert!(res.is_none(), "dup pick");
                 }
             }
-            RuleMatcher::PickMany { pick_to } => {
-                for pick in &mut picks {
-                    let res = pick.insert(
-                        *pick_to,
-                        RelNode::new_list(
-                            node.children[idx..]
-                                .iter()
-                                .map(|x| Arc::new(RelNode::new_group(*x)))
-                                .collect_vec(),
-                        ),
-                    );
-                    assert!(res.is_none(), "dup pick");
-                }
-                should_end = true;
+            RuleMatcher::PickMany { .. } => {
+                panic!("PickMany not supported currently");
             }
             _ => {
                 let new_picks = match_and_pick_group(child, node.children[idx], optimizer);
@@ -105,23 +93,25 @@ fn match_node<T: RelNodeTyp, M: Memo<T>>(
     }
     if let Some(pick_to) = pick_to {
         for pick in &mut picks {
-            let res: Option<RelNode<T>> = pick.insert(
+            let res: Option<PlanNodeOrGroup<T>> = pick.insert(
                 pick_to,
-                RelNode {
-                    typ: typ.clone(),
-                    children: node
-                        .children
-                        .iter()
-                        .map(|x| RelNode::new_group(*x).into())
-                        .collect_vec(),
-                    data: node.data.clone(),
-                    // rule engine by default captures all predicates
-                    predicates: node
-                        .predicates
-                        .iter()
-                        .map(|x| optimizer.get_pred(*x))
-                        .collect(),
-                },
+                PlanNodeOrGroup::PlanNode(
+                    PlanNode {
+                        typ: typ.clone(),
+                        children: node
+                            .children
+                            .iter()
+                            .map(|x| PlanNodeOrGroup::Group(*x))
+                            .collect_vec(),
+                        // rule engine by default captures all predicates
+                        predicates: node
+                            .predicates
+                            .iter()
+                            .map(|x| optimizer.get_pred(*x))
+                            .collect(),
+                    }
+                    .into(),
+                ),
             );
             assert!(res.is_none(), "dup pick");
         }
@@ -129,20 +119,20 @@ fn match_node<T: RelNodeTyp, M: Memo<T>>(
     picks
 }
 
-fn match_and_pick_expr<T: RelNodeTyp, M: Memo<T>>(
+fn match_and_pick_expr<T: NodeType, M: Memo<T>>(
     matcher: &RuleMatcher<T>,
     expr_id: ExprId,
     optimizer: &CascadesOptimizer<T, M>,
-) -> Vec<HashMap<usize, RelNode<T>>> {
+) -> Vec<HashMap<usize, PlanNodeOrGroup<T>>> {
     let node = optimizer.get_expr_memoed(expr_id);
     match_and_pick(matcher, node, optimizer)
 }
 
-fn match_and_pick_group<T: RelNodeTyp, M: Memo<T>>(
+fn match_and_pick_group<T: NodeType, M: Memo<T>>(
     matcher: &RuleMatcher<T>,
     group_id: GroupId,
     optimizer: &CascadesOptimizer<T, M>,
-) -> Vec<HashMap<usize, RelNode<T>>> {
+) -> Vec<HashMap<usize, PlanNodeOrGroup<T>>> {
     let mut matches = vec![];
     for expr_id in optimizer.get_all_exprs_in_group(group_id) {
         let node = optimizer.get_expr_memoed(expr_id);
@@ -151,11 +141,11 @@ fn match_and_pick_group<T: RelNodeTyp, M: Memo<T>>(
     matches
 }
 
-fn match_and_pick<T: RelNodeTyp, M: Memo<T>>(
+fn match_and_pick<T: NodeType, M: Memo<T>>(
     matcher: &RuleMatcher<T>,
     node: RelMemoNodeRef<T>,
     optimizer: &CascadesOptimizer<T, M>,
-) -> Vec<HashMap<usize, RelNode<T>>> {
+) -> Vec<HashMap<usize, PlanNodeOrGroup<T>>> {
     match matcher {
         RuleMatcher::MatchAndPickNode {
             typ,
@@ -177,7 +167,7 @@ fn match_and_pick<T: RelNodeTyp, M: Memo<T>>(
     }
 }
 
-impl<T: RelNodeTyp, M: Memo<T>> Task<T, M> for ApplyRuleTask {
+impl<T: NodeType, M: Memo<T>> Task<T, M> for ApplyRuleTask {
     fn execute(&self, optimizer: &mut CascadesOptimizer<T, M>) -> Result<Vec<Box<dyn Task<T, M>>>> {
         if optimizer.is_rule_fired(self.expr_id, self.rule_id) {
             return Ok(vec![]);
@@ -205,9 +195,10 @@ impl<T: RelNodeTyp, M: Memo<T>> Task<T, M> for ApplyRuleTask {
 
             for expr in applied {
                 trace!(event = "after_apply_rule", task = "apply_rule", binding=%expr);
-                let expr_typ = expr.typ.clone();
-                if let Some(expr_id) = optimizer.add_expr_to_group(expr.into(), group_id) {
-                    if expr_typ.is_logical() {
+                // TODO: remove clone in the below line
+                if let Some(expr_id) = optimizer.add_expr_to_group(expr.clone(), group_id) {
+                    let typ = expr.unwrap_typ();
+                    if typ.is_logical() {
                         tasks.push(
                             Box::new(OptimizeExpressionTask::new(expr_id, self.exploring))
                                 as Box<dyn Task<T, M>>,

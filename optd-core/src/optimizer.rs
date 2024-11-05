@@ -1,11 +1,15 @@
 use anyhow::Result;
 
 use crate::{
+    nodes::{ArcPlanNode, NodeType, PlanNodeOrGroup},
     property::PropertyBuilder,
-    rel_node::{RelNodeRef, RelNodeTyp},
 };
 
-pub trait Optimizer<T: RelNodeTyp> {
-    fn optimize(&mut self, root_rel: RelNodeRef<T>) -> Result<RelNodeRef<T>>;
-    fn get_property<P: PropertyBuilder<T>>(&self, root_rel: RelNodeRef<T>, idx: usize) -> P::Prop;
+pub trait Optimizer<T: NodeType> {
+    fn optimize(&mut self, root_rel: ArcPlanNode<T>) -> Result<ArcPlanNode<T>>;
+    fn get_property<P: PropertyBuilder<T>>(
+        &self,
+        root_rel: PlanNodeOrGroup<T>,
+        idx: usize,
+    ) -> P::Prop;
 }

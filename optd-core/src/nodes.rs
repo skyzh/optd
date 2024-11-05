@@ -18,22 +18,6 @@ use crate::{
     cost::{Cost, Statistics},
 };
 
-pub type RelNodeRef<T> = Arc<RelNode<T>>;
-
-pub trait RelNodeTyp:
-    PartialEq + Eq + Hash + Clone + 'static + Display + Debug + Send + Sync
-{
-    type PredType: PartialEq + Eq + Hash + Clone + 'static + Display + Debug + Send + Sync;
-
-    fn is_logical(&self) -> bool;
-
-    fn group_typ(group_id: GroupId) -> Self;
-
-    fn extract_group(&self) -> Option<GroupId>;
-
-    fn list_typ() -> Self;
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SerializableOrderedF64(pub OrderedFloat<f64>);
 
@@ -220,28 +204,76 @@ impl Value {
     }
 }
 
+pub trait NodeType:
+    PartialEq + Eq + Hash + Clone + 'static + Display + Debug + Send + Sync
+{
+    type PredType: PartialEq + Eq + Hash + Clone + 'static + Display + Debug + Send + Sync;
+
+    fn is_logical(&self) -> bool;
+}
+
+/// A pointer to a plan node
+pub type ArcPlanNode<T> = Arc<PlanNode<T>>;
+
+/// A pointer to a predicate node
 pub type ArcPredNode<T> = Arc<PredNode<T>>;
 
-/// A RelNode is consisted of a plan node type and some children.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct RelNode<T: RelNodeTyp> {
+pub enum PlanNodeOrGroup<T: NodeType> {
+    PlanNode(ArcPlanNode<T>),
+    Group(GroupId),
+}
+
+impl<T: NodeType> PlanNodeOrGroup<T> {
+    pub fn is_materialized(&self) -> bool {
+        match self {
+            PlanNodeOrGroup::PlanNode(_) => true,
+            PlanNodeOrGroup::Group(_) => false,
+        }
+    }
+
+    pub fn unwrap_typ(&self) -> T {
+        self.unwrap_plan_node().typ.clone()
+    }
+
+    pub fn unwrap_plan_node(&self) -> ArcPlanNode<T> {
+        match self {
+            PlanNodeOrGroup::PlanNode(node) => node.clone(),
+            PlanNodeOrGroup::Group(_) => panic!("Expected PlanNode, found Group"),
+        }
+    }
+
+    pub fn unwrap_group(&self) -> GroupId {
+        match self {
+            PlanNodeOrGroup::PlanNode(_) => panic!("Expected Group, found PlanNode"),
+            PlanNodeOrGroup::Group(group_id) => *group_id,
+        }
+    }
+}
+
+impl<T: NodeType> std::fmt::Display for PlanNodeOrGroup<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PlanNodeOrGroup::PlanNode(node) => write!(f, "{}", node),
+            PlanNodeOrGroup::Group(group_id) => write!(f, "{}", group_id),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct PlanNode<T: NodeType> {
     /// A generic plan node type
     pub typ: T,
     /// Child plan nodes, which may be materialized or placeholder group IDs
     /// based on how this node was initialized
-    pub children: Vec<RelNodeRef<T>>,
+    pub children: Vec<PlanNodeOrGroup<T>>,
     /// Predicate nodes, which are always materialized
     pub predicates: Vec<ArcPredNode<T>>,
-    /// The to-be-removed data field
-    pub data: Option<Value>,
 }
 
-impl<T: RelNodeTyp> std::fmt::Display for RelNode<T> {
+impl<T: NodeType> std::fmt::Display for PlanNode<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({}", self.typ)?;
-        if let Some(ref data) = self.data {
-            write!(f, " {}", data)?;
-        }
         for child in &self.children {
             write!(f, " {}", child)?;
         }
@@ -249,43 +281,34 @@ impl<T: RelNodeTyp> std::fmt::Display for RelNode<T> {
     }
 }
 
-impl<T: RelNodeTyp> RelNode<T> {
-    pub fn child(&self, idx: usize) -> RelNodeRef<T> {
-        if idx >= self.children.len() {
-            panic!("child index {} out of range: {}", idx, self);
-        }
+impl<T: NodeType> PlanNode<T> {
+    pub fn child(&self, idx: usize) -> PlanNodeOrGroup<T> {
         self.children[idx].clone()
+    }
+
+    pub fn child_rel(&self, idx: usize) -> ArcPlanNode<T> {
+        self.child(idx).unwrap_plan_node()
     }
 
     pub fn predicate(&self, idx: usize) -> ArcPredNode<T> {
         self.predicates[idx].clone()
     }
+}
 
-    pub fn new_leaf(typ: T) -> Self {
-        Self {
-            typ,
-            data: None,
-            children: Vec::new(),
-            predicates: Vec::new(), /* TODO: refactor */
-        }
+impl<T: NodeType> From<PlanNode<T>> for PlanNodeOrGroup<T> {
+    fn from(value: PlanNode<T>) -> Self {
+        Self::PlanNode(value.into())
     }
+}
 
-    pub fn new_group(group_id: GroupId) -> Self {
-        Self::new_leaf(T::group_typ(group_id))
-    }
-
-    pub fn new_list(items: Vec<RelNodeRef<T>>) -> Self {
-        Self {
-            typ: T::list_typ(),
-            data: None,
-            children: items,
-            predicates: Vec::new(), /* TODO: refactor */
-        }
+impl<T: NodeType> From<ArcPlanNode<T>> for PlanNodeOrGroup<T> {
+    fn from(value: ArcPlanNode<T>) -> Self {
+        Self::PlanNode(value)
     }
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct PredNode<T: RelNodeTyp> {
+pub struct PredNode<T: NodeType> {
     /// A generic predicate node type
     pub typ: T::PredType,
     /// Child predicate nodes, always materialized
@@ -294,7 +317,7 @@ pub struct PredNode<T: RelNodeTyp> {
     pub data: Option<Value>,
 }
 
-impl<T: RelNodeTyp> PredNode<T> {
+impl<T: NodeType> PredNode<T> {
     pub fn child(&self, idx: usize) -> ArcPredNode<T> {
         self.children[idx].clone()
     }
@@ -306,7 +329,7 @@ impl<T: RelNodeTyp> PredNode<T> {
 
 /// Metadata for a rel node.
 #[derive(Clone, Debug)]
-pub struct RelNodeMeta {
+pub struct PlanNodeMeta {
     /// The group (id) of the `RelNode`
     pub group_id: GroupId,
     /// Weighted cost of the `RelNode`
@@ -323,7 +346,7 @@ pub struct RelNodeMeta {
     pub stat_display: String,
 }
 
-impl RelNodeMeta {
+impl PlanNodeMeta {
     pub fn new(
         group_id: GroupId,
         weighted_cost: f64,
@@ -332,7 +355,7 @@ impl RelNodeMeta {
         cost_display: String,
         stat_display: String,
     ) -> Self {
-        RelNodeMeta {
+        Self {
             group_id,
             weighted_cost,
             cost,
@@ -344,4 +367,4 @@ impl RelNodeMeta {
 }
 
 /// A hash table storing `RelNode` (memory address, metadata) pairs.
-pub type RelNodeMetaMap = HashMap<usize, RelNodeMeta>;
+pub type PlanNodeMetaMap = HashMap<usize, PlanNodeMeta>;

@@ -1,7 +1,10 @@
-use optd_core::cascades::{CascadesOptimizer, RelNodeContext};
+use optd_core::{
+    cascades::{BindingType, CascadesOptimizer, RelNodeContext},
+    cost::Cost,
+};
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::adv_stats::{
+use crate::adv_cost::{
     stats::{Distribution, MostCommonValues},
     DEFAULT_NUM_DISTINCT,
 };
@@ -10,17 +13,34 @@ use optd_datafusion_repr::{
     properties::column_ref::{BaseTableColumnRef, ColumnRef, ColumnRefPropertyBuilder},
 };
 
-use super::{AdvStats, DEFAULT_UNK_SEL};
+use super::{OptCostModel, DEFAULT_UNK_SEL};
 
 impl<
         M: MostCommonValues + Serialize + DeserializeOwned,
         D: Distribution + Serialize + DeserializeOwned,
-    > AdvStats<M, D>
+    > OptCostModel<M, D>
 {
-    pub(crate) fn get_agg_row_cnt(
+    pub(super) fn get_agg_cost(
+        &self,
+        children: &[Cost],
+        context: Option<RelNodeContext>,
+        optimizer: Option<&CascadesOptimizer<DfNodeType>>,
+    ) -> Cost {
+        let child_row_cnt = Self::row_cnt(&children[0]);
+        let row_cnt = self.get_agg_row_cnt(context, optimizer, child_row_cnt);
+        let (_, compute_cost_1, _) = Self::cost_tuple(&children[1]);
+        let (_, compute_cost_2, _) = Self::cost_tuple(&children[2]);
+        Self::cost(
+            row_cnt,
+            child_row_cnt * (compute_cost_1 + compute_cost_2),
+            0.0,
+        )
+    }
+
+    fn get_agg_row_cnt(
         &self,
         context: Option<RelNodeContext>,
-        optimizer: Option<&CascadesOptimizer<OptRelNodeTyp>>,
+        optimizer: Option<&CascadesOptimizer<DfNodeType>>,
         child_row_cnt: f64,
     ) -> f64 {
         if let (Some(context), Some(optimizer)) = (context, optimizer) {

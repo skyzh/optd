@@ -36,30 +36,30 @@ impl<
     /// part of the pattern.
     pub(super) fn get_like_selectivity(
         &self,
-        like_expr: &LikeExpr,
+        like_expr: &LikePred,
         column_refs: &BaseTableColumnRefs,
     ) -> f64 {
         let child = like_expr.child();
 
         // Check child is a column ref.
-        if !matches!(child.typ(), OptRelNodeTyp::ColumnRef) {
+        if !matches!(child.typ(), DfNodeType::ColumnRef) {
             return UNIMPLEMENTED_SEL;
         }
 
         // Check pattern is a constant.
         let pattern = like_expr.pattern();
-        if !matches!(pattern.typ(), OptRelNodeTyp::Constant(_)) {
+        if !matches!(pattern.typ(), DfNodeType::Constant(_)) {
             return UNIMPLEMENTED_SEL;
         }
 
-        let col_ref_idx = ColumnRefExpr::from_rel_node(child.into_rel_node())
+        let col_ref_idx = ColumnRefPred::from_rel_node(child.into_rel_node())
             .unwrap()
             .index();
 
         if let ColumnRef::BaseTableColumnRef(BaseTableColumnRef { table, col_idx }) =
             &column_refs[col_ref_idx]
         {
-            let pattern = ConstantExpr::from_rel_node(pattern.into_rel_node())
+            let pattern = ConstantPred::from_rel_node(pattern.into_rel_node())
                 .expect("we already checked pattern is a constant")
                 .value()
                 .as_str();
@@ -111,7 +111,7 @@ impl<
 
 #[cfg(test)]
 mod tests {
-    use optd_core::rel_node::Value;
+    use optd_core::nodes::Value;
 
     use crate::adv_stats::{
         filter::like::{FIXED_CHAR_SEL_FACTOR, FULL_WILDCARD_SEL_FACTOR},

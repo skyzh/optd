@@ -1,17 +1,20 @@
 use std::collections::HashSet;
 
 use itertools::Itertools;
-use optd_core::cascades::{CascadesOptimizer, RelNodeContext};
+use optd_core::{
+    cascades::{BindingType, CascadesOptimizer, RelNodeContext},
+    cost::Cost,
+};
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::adv_stats::{
+use crate::adv_cost::{
     stats::{Distribution, MostCommonValues},
     DEFAULT_NUM_DISTINCT,
 };
 use optd_datafusion_repr::{
     plan_nodes::{
-        BinOpType, ColumnRefExpr, Expr, ExprList, JoinType, LogOpExpr, LogOpType, OptRelNode,
-        OptRelNodeRef, OptRelNodeTyp,
+        ArcDfPlanNode, BinOpType, ColumnRefPred, DfNodeType, DfReprPlanNode, Expr, JoinType,
+        ListPred, LogOpPred, LogOpType,
     },
     properties::{
         column_ref::{
@@ -22,21 +25,23 @@ use optd_datafusion_repr::{
     },
 };
 
-use super::{AdvStats, DEFAULT_UNK_SEL};
+use super::{OptCostModel, DEFAULT_UNK_SEL};
 
 impl<
         M: MostCommonValues + Serialize + DeserializeOwned,
         D: Distribution + Serialize + DeserializeOwned,
-    > AdvStats<M, D>
+    > OptCostModel<M, D>
 {
-    pub(crate) fn get_nlj_row_cnt(
+    pub(super) fn get_nlj_cost(
         &self,
         join_typ: JoinType,
-        left_row_cnt: f64,
-        right_row_cnt: f64,
+        children: &[Cost],
         context: Option<RelNodeContext>,
-        optimizer: Option<&CascadesOptimizer<OptRelNodeTyp>>,
-    ) -> f64 {
+        optimizer: Option<&CascadesOptimizer<DfNodeType>>,
+    ) -> Cost {
+        let (row_cnt_1, _, _) = Self::cost_tuple(&children[0]);
+        let (row_cnt_2, _, _) = Self::cost_tuple(&children[1]);
+        let (_, compute_cost, _) = Self::cost_tuple(&children[2]);
         let selectivity = if let (Some(context), Some(optimizer)) = (context, optimizer) {
             let schema =
                 optimizer.get_property_by_group::<SchemaPropertyBuilder>(context.group_id, 0);
@@ -54,23 +59,28 @@ impl<
                 &schema,
                 column_refs,
                 input_correlation,
-                left_row_cnt,
-                right_row_cnt,
+                row_cnt_1,
+                row_cnt_2,
             )
         } else {
             DEFAULT_UNK_SEL
         };
-        (left_row_cnt * right_row_cnt * selectivity).max(1.0)
+        Self::cost(
+            (row_cnt_1 * row_cnt_2 * selectivity).max(1.0),
+            row_cnt_1 * row_cnt_2 * compute_cost + row_cnt_1,
+            0.0,
+        )
     }
 
-    pub(crate) fn get_hash_join_row_cnt(
+    pub(super) fn get_hash_join_cost(
         &self,
         join_typ: JoinType,
-        left_row_cnt: f64,
-        right_row_cnt: f64,
+        children: &[Cost],
         context: Option<RelNodeContext>,
-        optimizer: Option<&CascadesOptimizer<OptRelNodeTyp>>,
-    ) -> f64 {
+        optimizer: Option<&CascadesOptimizer<DfNodeType>>,
+    ) -> Cost {
+        let (row_cnt_1, _, _) = Self::cost_tuple(&children[0]);
+        let (row_cnt_2, _, _) = Self::cost_tuple(&children[1]);
         let selectivity = if let (Some(context), Some(optimizer)) = (context, optimizer) {
             let schema =
                 optimizer.get_property_by_group::<SchemaPropertyBuilder>(context.group_id, 0);
@@ -94,27 +104,31 @@ impl<
             let input_correlation = self.get_input_correlation(&context, optimizer);
             self.get_join_selectivity_from_keys(
                 join_typ,
-                ExprList::from_rel_node(left_keys.clone())
+                ListPred::from_rel_node(left_keys.clone())
                     .expect("left_keys should be an ExprList"),
-                ExprList::from_rel_node(right_keys.clone())
+                ListPred::from_rel_node(right_keys.clone())
                     .expect("right_keys should be an ExprList"),
                 &schema,
                 column_refs,
                 input_correlation,
-                left_row_cnt,
-                right_row_cnt,
+                row_cnt_1,
+                row_cnt_2,
                 left_col_cnt,
             )
         } else {
             DEFAULT_UNK_SEL
         };
-        (left_row_cnt * right_row_cnt * selectivity).max(1.0)
+        Self::cost(
+            (row_cnt_1 * row_cnt_2 * selectivity).max(1.0),
+            row_cnt_1 * 2.0 + row_cnt_2,
+            0.0,
+        )
     }
 
     fn get_input_correlation(
         &self,
         context: &RelNodeContext,
-        optimizer: &CascadesOptimizer<OptRelNodeTyp>,
+        optimizer: &CascadesOptimizer<DfNodeType>,
     ) -> Option<SemanticCorrelation> {
         let left_group_id = context.children_group_ids[0];
         let right_group_id = context.children_group_ids[1];
@@ -134,8 +148,8 @@ impl<
     fn get_join_selectivity_from_keys(
         &self,
         join_typ: JoinType,
-        left_keys: ExprList,
-        right_keys: ExprList,
+        left_keys: ListPred,
+        right_keys: ListPred,
         schema: &Schema,
         column_refs: &BaseTableColumnRefs,
         input_correlation: Option<SemanticCorrelation>,
@@ -152,9 +166,9 @@ impl<
             .zip(right_keys.to_vec())
             .map(|(left_key, right_key)| {
                 (
-                    ColumnRefExpr::from_rel_node(left_key.into_rel_node())
+                    ColumnRefPred::from_rel_node(left_key.into_rel_node())
                         .expect("keys should be ColumnRefExprs"),
-                    ColumnRefExpr::from_rel_node(right_key.into_rel_node())
+                    ColumnRefPred::from_rel_node(right_key.into_rel_node())
                         .expect("keys should be ColumnRefExprs"),
                 )
             })
@@ -188,8 +202,8 @@ impl<
     fn get_join_selectivity_core(
         &self,
         join_typ: JoinType,
-        on_col_ref_pairs: Vec<(ColumnRefExpr, ColumnRefExpr)>,
-        filter_expr_tree: Option<OptRelNodeRef>,
+        on_col_ref_pairs: Vec<(ColumnRefPred, ColumnRefPred)>,
+        filter_expr_tree: Option<ArcDfPlanNode>,
         schema: &Schema,
         column_refs: &BaseTableColumnRefs,
         input_correlation: Option<SemanticCorrelation>,
@@ -239,7 +253,7 @@ impl<
     fn get_join_selectivity_from_expr_tree(
         &self,
         join_typ: JoinType,
-        expr_tree: OptRelNodeRef,
+        expr_tree: ArcDfPlanNode,
         schema: &Schema,
         column_refs: &BaseTableColumnRefs,
         input_correlation: Option<SemanticCorrelation>,
@@ -247,7 +261,7 @@ impl<
         right_row_cnt: f64,
     ) -> f64 {
         assert!(expr_tree.typ.is_expression());
-        if expr_tree.typ == OptRelNodeTyp::LogOp(LogOpType::And) {
+        if expr_tree.typ == DfNodeType::LogOp(LogOpType::And) {
             let mut on_col_ref_pairs = vec![];
             let mut filter_expr_trees = vec![];
             for child_expr_tree in &expr_tree.children {
@@ -267,7 +281,7 @@ impl<
                 None
             } else {
                 Some(
-                    LogOpExpr::new(LogOpType::And, ExprList::new(filter_expr_trees))
+                    LogOpPred::new(LogOpType::And, ListPred::new(filter_expr_trees))
                         .into_rel_node(),
                 )
             };
@@ -317,21 +331,19 @@ impl<
     /// The reason the check and the info are in the same function is because their code is almost identical.
     /// It only picks out equality conditions between two column refs on different tables
     fn get_on_col_ref_pair(
-        expr_tree: OptRelNodeRef,
+        expr_tree: ArcDfPlanNode,
         column_refs: &BaseTableColumnRefs,
-    ) -> Option<(ColumnRefExpr, ColumnRefExpr)> {
+    ) -> Option<(ColumnRefPred, ColumnRefPred)> {
         // 1. Check that it's equality
-        if expr_tree.typ == OptRelNodeTyp::BinOp(BinOpType::Eq) {
+        if expr_tree.typ == DfNodeType::BinOp(BinOpType::Eq) {
             let left_child = expr_tree.child(0);
             let right_child = expr_tree.child(1);
             // 2. Check that both sides are column refs
-            if left_child.typ == OptRelNodeTyp::ColumnRef
-                && right_child.typ == OptRelNodeTyp::ColumnRef
-            {
+            if left_child.typ == DfNodeType::ColumnRef && right_child.typ == DfNodeType::ColumnRef {
                 // 3. Check that both sides don't belong to the same table (if we don't know, that means they don't belong)
-                let left_col_ref_expr = ColumnRefExpr::from_rel_node(left_child)
+                let left_col_ref_expr = ColumnRefPred::from_rel_node(left_child)
                     .expect("we already checked that the type is ColumnRef");
-                let right_col_ref_expr = ColumnRefExpr::from_rel_node(right_child)
+                let right_col_ref_expr = ColumnRefPred::from_rel_node(right_child)
                     .expect("we already checked that the type is ColumnRef");
                 let left_col_ref = &column_refs[left_col_ref_expr.index()];
                 let right_col_ref = &column_refs[right_col_ref_expr.index()];
@@ -495,7 +507,7 @@ impl<
     /// For details on how we do this, see `get_join_selectivity_from_redundant_predicates`.
     fn get_join_on_selectivity(
         &self,
-        on_col_ref_pairs: &[(ColumnRefExpr, ColumnRefExpr)],
+        on_col_ref_pairs: &[(ColumnRefPred, ColumnRefPred)],
         column_refs: &BaseTableColumnRefs,
         input_correlation: Option<SemanticCorrelation>,
         right_col_ref_offset: usize,
@@ -532,9 +544,9 @@ impl<
 mod tests {
     use std::collections::HashSet;
 
-    use optd_core::rel_node::Value;
+    use optd_core::nodes::Value;
 
-    use crate::adv_stats::{tests::*, DEFAULT_EQ_SEL};
+    use crate::adv_cost::{tests::*, DEFAULT_EQ_SEL};
     use optd_datafusion_repr::{
         plan_nodes::{BinOpType, JoinType, LogOpType, OptRelNodeRef},
         properties::{
@@ -552,7 +564,7 @@ mod tests {
         cost_model: &TestOptCostModel,
         reverse_tables: bool,
         join_typ: JoinType,
-        expr_tree: OptRelNodeRef,
+        expr_tree: ArcDfPlanNode,
         schema: &Schema,
         column_refs: &BaseTableColumnRefs,
         input_correlation: Option<SemanticCorrelation>,
@@ -854,8 +866,8 @@ mod tests {
     /// I made this helper function to avoid copying all eight lines over and over
     fn assert_outer_selectivities(
         cost_model: &TestOptCostModel,
-        expr_tree: OptRelNodeRef,
-        expr_tree_rev: OptRelNodeRef,
+        expr_tree: ArcDfPlanNode,
+        expr_tree_rev: ArcDfPlanNode,
         schema: &Schema,
         column_refs: &BaseTableColumnRefs,
         expected_table1_outer_sel: f64,

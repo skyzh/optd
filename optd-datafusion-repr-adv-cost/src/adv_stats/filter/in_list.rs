@@ -18,13 +18,13 @@ impl<
     /// val1, val2, val3 are constants.
     pub(super) fn get_in_list_selectivity(
         &self,
-        expr: &InListExpr,
+        expr: &InListPred,
         column_refs: &BaseTableColumnRefs,
     ) -> f64 {
         let child = expr.child();
 
         // Check child is a column ref.
-        if !matches!(child.typ(), OptRelNodeTyp::ColumnRef) {
+        if !matches!(child.typ(), DfNodeType::ColumnRef) {
             return UNIMPLEMENTED_SEL;
         }
 
@@ -32,19 +32,19 @@ impl<
         let list_exprs = expr.list().to_vec();
         if list_exprs
             .iter()
-            .any(|expr| !matches!(expr.typ(), OptRelNodeTyp::Constant(_)))
+            .any(|expr| !matches!(expr.typ(), DfNodeType::Constant(_)))
         {
             return UNIMPLEMENTED_SEL;
         }
 
         // Convert child and const expressions to concrete types.
-        let col_ref_idx = ColumnRefExpr::from_rel_node(child.into_rel_node())
+        let col_ref_idx = ColumnRefPred::from_rel_node(child.into_rel_node())
             .unwrap()
             .index();
         let list_exprs = list_exprs
             .into_iter()
             .map(|expr| {
-                ConstantExpr::from_rel_node(expr.into_rel_node())
+                ConstantPred::from_rel_node(expr.into_rel_node())
                     .expect("we already checked all list elements are constants")
             })
             .collect::<Vec<_>>();
@@ -74,7 +74,7 @@ impl<
 
 #[cfg(test)]
 mod tests {
-    use optd_core::rel_node::Value;
+    use optd_core::nodes::Value;
 
     use crate::adv_stats::tests::{
         create_one_column_cost_model, in_list, TestDistribution, TestMostCommonValues,

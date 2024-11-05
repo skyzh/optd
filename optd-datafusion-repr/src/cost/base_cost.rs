@@ -1,15 +1,15 @@
 use std::collections::HashMap;
 
-use crate::plan_nodes::OptRelNodeTyp;
+use crate::plan_nodes::{ArcDfPredNode, ConstantPred, DfNodeType, DfPredType, DfReprPredNode};
 use itertools::Itertools;
 use optd_core::{
     cascades::{CascadesOptimizer, NaiveMemo, RelNodeContext},
     cost::{Cost, CostModel, Statistics},
-    rel_node::{ArcPredNode, Value},
+    nodes::Value,
 };
 use value_bag::ValueBag;
 
-pub struct OptCostModel {
+pub struct DfCostModel {
     table_stat: HashMap<String, usize>,
 }
 
@@ -18,7 +18,7 @@ pub const IO_COST: usize = 1;
 
 pub(crate) const DEFAULT_TABLE_ROW_CNT: usize = 1000;
 
-impl OptCostModel {
+impl DfCostModel {
     pub fn compute_cost(Cost(cost): &Cost) -> f64 {
         cost[COMPUTE_COST]
     }
@@ -43,8 +43,11 @@ impl OptCostModel {
         (cost[COMPUTE_COST], cost[IO_COST])
     }
 
-    fn get_row_cnt(&self, data: &Option<Value>) -> f64 {
-        let table_name = data.as_ref().unwrap().as_str();
+    fn get_row_cnt(&self, predicates: &[ArcDfPredNode]) -> f64 {
+        let table_name = ConstantPred::from_pred_node(predicates[0])
+            .unwrap()
+            .value()
+            .as_str();
         self.table_stat
             .get(table_name.as_ref())
             .copied()
@@ -52,7 +55,7 @@ impl OptCostModel {
     }
 }
 
-impl CostModel<OptRelNodeTyp, NaiveMemo<OptRelNodeTyp>> for OptCostModel {
+impl CostModel<DfNodeType, NaiveMemo<DfNodeType>> for DfCostModel {
     fn explain_cost(&self, cost: &Cost) -> String {
         format!(
             "{{compute={},io={}}}",
@@ -76,127 +79,100 @@ impl CostModel<OptRelNodeTyp, NaiveMemo<OptRelNodeTyp>> for OptCostModel {
 
     fn derive_statistics(
         &self,
-        node: &OptRelNodeTyp,
-        data: &Option<Value>,
-        _predicates: &[ArcPredNode<OptRelNodeTyp>],
-        children_stats: &[&Statistics],
+        node: &DfNodeType,
+        predicates: &[ArcDfPredNode],
+        children: &[&Statistics],
         _context: Option<RelNodeContext>,
-        _optimizer: Option<&CascadesOptimizer<OptRelNodeTyp>>,
+        _optimizer: Option<&CascadesOptimizer<DfNodeType>>,
     ) -> Statistics {
         match node {
-            OptRelNodeTyp::PhysicalScan => {
-                let row_cnt = self.get_row_cnt(data);
+            DfNodeType::PhysicalScan => {
+                let row_cnt = self.get_row_cnt(predicates);
                 Self::stat(row_cnt)
             }
-            OptRelNodeTyp::PhysicalLimit => {
-                let row_cnt = Self::row_cnt(children_stats[0]);
+            DfNodeType::PhysicalLimit => {
+                let row_cnt = Self::row_cnt(children[0]);
                 let selectivity = 0.001;
                 Self::stat((row_cnt * selectivity).max(1.0))
             }
-            OptRelNodeTyp::PhysicalEmptyRelation => Self::stat(0.01),
-            OptRelNodeTyp::PhysicalFilter => {
-                let row_cnt = Self::row_cnt(children_stats[0]);
+            DfNodeType::PhysicalEmptyRelation => Self::stat(0.01),
+            DfNodeType::PhysicalFilter => {
+                let row_cnt = Self::row_cnt(children[0]);
                 let selectivity = 0.001;
                 Self::stat((row_cnt * selectivity).max(1.0))
             }
-            OptRelNodeTyp::PhysicalNestedLoopJoin(_) => {
-                let row_cnt_1 = Self::row_cnt(children_stats[0]);
-                let row_cnt_2 = Self::row_cnt(children_stats[1]);
+            DfNodeType::PhysicalNestedLoopJoin(_) => {
+                let row_cnt_1 = Self::row_cnt(children[0]);
+                let row_cnt_2 = Self::row_cnt(children[1]);
                 let selectivity = 0.01;
                 Self::stat((row_cnt_1 * row_cnt_2 * selectivity).max(1.0))
             }
-            OptRelNodeTyp::PhysicalHashJoin(_) => {
-                let row_cnt_1 = Self::row_cnt(children_stats[0]);
-                let row_cnt_2 = Self::row_cnt(children_stats[1]);
+            DfNodeType::PhysicalHashJoin(_) => {
+                let row_cnt_1 = Self::row_cnt(children[0]);
+                let row_cnt_2 = Self::row_cnt(children[1]);
                 Self::stat(row_cnt_1.min(row_cnt_2).max(1.0))
             }
-            OptRelNodeTyp::PhysicalSort
-            | OptRelNodeTyp::PhysicalAgg
-            | OptRelNodeTyp::PhysicalProjection => {
-                let row_cnt = Self::row_cnt(children_stats[0]);
+            DfNodeType::PhysicalSort | DfNodeType::PhysicalAgg | DfNodeType::PhysicalProjection => {
+                let row_cnt = Self::row_cnt(children[0]);
                 Self::stat(row_cnt)
             }
-            OptRelNodeTyp::List => Self::stat(1.0),
-            _ if node.is_expression() => Self::stat(1.0),
             x => unimplemented!("cannot derive statistics for {}", x),
         }
     }
 
     fn compute_operation_cost(
         &self,
-        node: &OptRelNodeTyp,
-        data: &Option<Value>,
-        _predicates: &[ArcPredNode<OptRelNodeTyp>],
-        children_stats: &[Option<&Statistics>],
-        children_costs: &[Cost],
+        node: &DfNodeType,
+        predicates: &[ArcDfPredNode],
+        children: &[Option<&Statistics>],
+        children_cost: &[Cost],
         _context: Option<RelNodeContext>,
-        _optimizer: Option<&CascadesOptimizer<OptRelNodeTyp>>,
+        _optimizer: Option<&CascadesOptimizer<DfNodeType>>,
     ) -> Cost {
-        let row_cnts = children_stats
+        let row_cnts = children
             .iter()
             .map(|child| child.map(Self::row_cnt).unwrap_or(0 as f64))
             .collect_vec();
         match node {
-            OptRelNodeTyp::PhysicalScan => {
-                let row_cnt = self.get_row_cnt(data);
+            DfNodeType::PhysicalScan => {
+                let row_cnt = self.get_row_cnt(predicates);
                 Self::cost(0.0, row_cnt)
             }
-            OptRelNodeTyp::PhysicalLimit => {
+            DfNodeType::PhysicalLimit => {
                 let row_cnt = row_cnts[0];
                 Self::cost(row_cnt, 0.0)
             }
-            OptRelNodeTyp::PhysicalEmptyRelation => Self::cost(0.01, 0.0),
-            OptRelNodeTyp::PhysicalFilter => {
+            DfNodeType::PhysicalEmptyRelation => Self::cost(0.01, 0.0),
+            DfNodeType::PhysicalFilter => {
                 let row_cnt = row_cnts[0];
-                let (compute_cost, _) = Self::cost_tuple(&children_costs[1]);
+                let (compute_cost, _) = Self::cost_tuple(&derive_pred_cost(&predicates[0]));
                 Self::cost(row_cnt * compute_cost, 0.0)
             }
-            OptRelNodeTyp::PhysicalNestedLoopJoin(_) => {
+            DfNodeType::PhysicalNestedLoopJoin(_) => {
                 let row_cnt_1 = row_cnts[0];
                 let row_cnt_2 = row_cnts[1];
-                let (compute_cost, _) = Self::cost_tuple(&children_costs[2]);
+                let (compute_cost, _) = Self::cost_tuple(&derive_pred_cost(&predicates[0]));
                 Self::cost(row_cnt_1 * row_cnt_2 * compute_cost + row_cnt_1, 0.0)
             }
-            OptRelNodeTyp::PhysicalProjection => {
+            DfNodeType::PhysicalProjection => {
                 let row_cnt = row_cnts[0];
-                let (compute_cost, _) = Self::cost_tuple(&children_costs[1]);
+                let (compute_cost, _) = Self::cost_tuple(&derive_pred_cost(&predicates[0]));
                 Self::cost(row_cnt * compute_cost, 0.0)
             }
-            OptRelNodeTyp::PhysicalHashJoin(_) => {
+            DfNodeType::PhysicalHashJoin(_) => {
                 let row_cnt_1 = row_cnts[0];
                 let row_cnt_2 = row_cnts[1];
                 Self::cost(row_cnt_1 * 2.0 + row_cnt_2, 0.0)
             }
-            OptRelNodeTyp::PhysicalSort => {
+            DfNodeType::PhysicalSort => {
                 let row_cnt = row_cnts[0];
                 Self::cost(row_cnt * row_cnt.ln_1p().max(1.0), 0.0)
             }
-            OptRelNodeTyp::PhysicalAgg => {
+            DfNodeType::PhysicalAgg => {
                 let row_cnt = row_cnts[0];
-                let (compute_cost_1, _) = Self::cost_tuple(&children_costs[1]);
-                let (compute_cost_2, _) = Self::cost_tuple(&children_costs[2]);
+                let (compute_cost_1, _) = Self::cost_tuple(&derive_pred_cost(&predicates[0]));
+                let (compute_cost_2, _) = Self::cost_tuple(&derive_pred_cost(&predicates[1]));
                 Self::cost(row_cnt * (compute_cost_1 + compute_cost_2), 0.0)
-            }
-            // List and expressions are computed in the same way -- but list has much fewer cost
-            OptRelNodeTyp::List => {
-                let compute_cost = children_costs
-                    .iter()
-                    .map(|child| {
-                        let (compute_cost, _) = Self::cost_tuple(child);
-                        compute_cost
-                    })
-                    .sum::<f64>();
-                Self::cost(compute_cost + 0.01, 0.0)
-            }
-            _ if node.is_expression() => {
-                let compute_cost = children_costs
-                    .iter()
-                    .map(|child| {
-                        let (compute_cost, _) = Self::cost_tuple(child);
-                        compute_cost
-                    })
-                    .sum::<f64>();
-                Self::cost(compute_cost + 1.0, 0.0)
             }
             x => unimplemented!("cannot compute cost for {}", x),
         }
@@ -207,7 +183,19 @@ impl CostModel<OptRelNodeTyp, NaiveMemo<OptRelNodeTyp>> for OptCostModel {
     }
 }
 
-impl OptCostModel {
+fn derive_pred_cost(pred: &ArcDfPredNode) -> Cost {
+    let compute_cost = pred
+        .children
+        .iter()
+        .map(|child| {
+            let (compute_cost, _) = DfCostModel::cost_tuple(&derive_pred_cost(child));
+            compute_cost
+        })
+        .sum::<f64>();
+    DfCostModel::cost(compute_cost + 1.0, 0.0)
+}
+
+impl DfCostModel {
     pub fn new(table_stat: HashMap<String, usize>) -> Self {
         Self { table_stat }
     }

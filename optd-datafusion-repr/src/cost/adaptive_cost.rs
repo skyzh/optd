@@ -3,11 +3,14 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::{cost::OptCostModel, plan_nodes::OptRelNodeTyp};
+use crate::{
+    cost::DfCostModel,
+    plan_nodes::{ArcDfPredNode, DfNodeType, DfPredNode},
+};
 use optd_core::{
     cascades::{CascadesOptimizer, GroupId, NaiveMemo, RelNodeContext},
     cost::{Cost, CostModel, Statistics},
-    rel_node::{ArcPredNode, Value},
+    nodes::Value,
 };
 
 use super::base_cost::DEFAULT_TABLE_ROW_CNT;
@@ -22,12 +25,12 @@ pub struct RuntimeAdaptionStorageInner {
 
 pub struct AdaptiveCostModel {
     runtime_row_cnt: RuntimeAdaptionStorage,
-    base_model: OptCostModel,
+    base_model: DfCostModel,
     decay: usize,
 }
 
 impl AdaptiveCostModel {
-    fn get_row_cnt(&self, _: &Option<Value>, context: &Option<RelNodeContext>) -> f64 {
+    fn get_row_cnt(&self, context: &Option<RelNodeContext>) -> f64 {
         let guard = self.runtime_row_cnt.lock().unwrap();
         if let Some((runtime_row_cnt, iter)) =
             guard.history.get(&context.as_ref().unwrap().group_id)
@@ -40,7 +43,7 @@ impl AdaptiveCostModel {
     }
 }
 
-impl CostModel<OptRelNodeTyp, NaiveMemo<OptRelNodeTyp>> for AdaptiveCostModel {
+impl CostModel<DfNodeType, NaiveMemo<DfNodeType>> for AdaptiveCostModel {
     fn explain_cost(&self, cost: &Cost) -> String {
         self.base_model.explain_cost(cost)
     }
@@ -63,24 +66,22 @@ impl CostModel<OptRelNodeTyp, NaiveMemo<OptRelNodeTyp>> for AdaptiveCostModel {
 
     fn compute_operation_cost(
         &self,
-        node: &OptRelNodeTyp,
-        data: &Option<Value>,
-        predicates: &[ArcPredNode<OptRelNodeTyp>],
-        children_stats: &[Option<&Statistics>],
-        children_costs: &[Cost],
+        node: &DfNodeType,
+        predicates: &[ArcDfPredNode],
+        children: &[Option<&Statistics>],
+        children_cost: &[Cost],
         context: Option<RelNodeContext>,
-        optimizer: Option<&CascadesOptimizer<OptRelNodeTyp>>,
+        optimizer: Option<&CascadesOptimizer<DfNodeType>>,
     ) -> Cost {
-        if let OptRelNodeTyp::PhysicalScan = node {
-            let row_cnt = self.get_row_cnt(data, &context);
-            return OptCostModel::cost(0.0, row_cnt);
+        if let DfNodeType::PhysicalScan = node {
+            let row_cnt = self.get_row_cnt(&context);
+            return DfCostModel::cost(0.0, row_cnt);
         }
         self.base_model.compute_operation_cost(
             node,
-            data,
             predicates,
-            children_stats,
-            children_costs,
+            children,
+            children_cost,
             context,
             optimizer,
         )
@@ -88,25 +89,18 @@ impl CostModel<OptRelNodeTyp, NaiveMemo<OptRelNodeTyp>> for AdaptiveCostModel {
 
     fn derive_statistics(
         &self,
-        node: &OptRelNodeTyp,
-        data: &Option<Value>,
-        predicates: &[ArcPredNode<OptRelNodeTyp>],
-        children_stats: &[&Statistics],
+        node: &DfNodeType,
+        predicates: &[ArcDfPredNode],
+        children: &[&Statistics],
         context: Option<RelNodeContext>,
-        optimizer: Option<&CascadesOptimizer<OptRelNodeTyp>>,
+        optimizer: Option<&CascadesOptimizer<DfNodeType>>,
     ) -> Statistics {
-        if let OptRelNodeTyp::PhysicalScan = node {
-            let row_cnt = self.get_row_cnt(data, &context);
-            return OptCostModel::stat(row_cnt);
+        if let DfNodeType::PhysicalScan = node {
+            let row_cnt = self.get_row_cnt(&context);
+            return DfCostModel::stat(row_cnt);
         }
-        self.base_model.derive_statistics(
-            node,
-            data,
-            predicates,
-            children_stats,
-            context,
-            optimizer,
-        )
+        self.base_model
+            .derive_statistics(node, predicates, children, context, optimizer)
     }
 }
 
@@ -114,7 +108,7 @@ impl AdaptiveCostModel {
     pub fn new(decay: usize) -> Self {
         Self {
             runtime_row_cnt: Arc::new(Mutex::new(RuntimeAdaptionStorageInner::default())),
-            base_model: OptCostModel::new(HashMap::new()),
+            base_model: DfCostModel::new(HashMap::new()),
             decay,
         }
     }

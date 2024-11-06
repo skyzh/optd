@@ -5,7 +5,7 @@ use itertools::Itertools;
 use std::any::Any;
 
 use crate::{
-    nodes::{ArcPlanNode, NodeType, PlanNode, PlanNodeOrGroup},
+    nodes::{ArcPlanNode, ArcPredNode, NodeType, PlanNode, PlanNodeOrGroup},
     optimizer::Optimizer,
     property::PropertyBuilderAny,
     rules::{Rule, RuleMatcher},
@@ -26,9 +26,13 @@ pub struct HeuristicsOptimizer<T: NodeType> {
 fn match_node<T: NodeType>(
     typ: &T,
     children: &[RuleMatcher<T>],
+    predicates: &[RuleMatcher<T>],
     pick_to: Option<usize>,
     node: ArcPlanNode<T>,
-) -> Option<HashMap<usize, PlanNodeOrGroup<T>>> {
+) -> Option<(
+    HashMap<usize, PlanNodeOrGroup<T>>,
+    HashMap<usize, ArcPredNode<T>>,
+)> {
     if let RuleMatcher::PickMany { .. } | RuleMatcher::IgnoreMany = children.last().unwrap() {
     } else {
         assert_eq!(
@@ -40,7 +44,8 @@ fn match_node<T: NodeType>(
     }
 
     let mut should_end = false;
-    let mut pick = HashMap::new();
+    let mut pick: HashMap<usize, PlanNodeOrGroup<T>> = HashMap::new();
+    let mut pred_pick: HashMap<usize, ArcPredNode<T>> = HashMap::new();
     for (idx, child) in children.iter().enumerate() {
         assert!(!should_end, "many matcher should be at the end");
         match child {
@@ -48,7 +53,7 @@ fn match_node<T: NodeType>(
             RuleMatcher::IgnoreMany => {
                 should_end = true;
             }
-            RuleMatcher::PickOne { pick_to, expand: _ } => {
+            RuleMatcher::PickOne { pick_to } => {
                 // Heuristics always keep the full plan without group placeholders, therefore we can ignore expand property.
                 let res = pick.insert(*pick_to, node.child(idx));
                 assert!(res.is_none(), "dup pick");
@@ -57,11 +62,25 @@ fn match_node<T: NodeType>(
                 panic!("PickMany not supported currently");
             }
             _ => {
-                if let Some(new_picks) = match_and_pick(child, node.child_rel(idx)) {
+                if let Some((new_picks, new_pred_picks)) =
+                    match_and_pick(child, node.child_rel(idx))
+                {
                     pick.extend(new_picks.iter().map(|(k, v)| (*k, v.clone())));
+                    pred_pick.extend(new_pred_picks);
                 } else {
                     return None;
                 }
+            }
+        }
+    }
+    for (idx, pred) in predicates.iter().enumerate() {
+        match pred {
+            RuleMatcher::PickPred { pick_to } => {
+                let res = pred_pick.insert(*pick_to, node.predicate(idx));
+                assert!(res.is_none(), "dup pick");
+            }
+            _ => {
+                panic!("only PickPred is supported for predicates");
             }
         }
     }
@@ -79,29 +98,37 @@ fn match_node<T: NodeType>(
         );
         assert!(res.is_none(), "dup pick");
     }
-    Some(pick)
+    Some((pick, pred_pick))
 }
 
 fn match_and_pick<T: NodeType>(
     matcher: &RuleMatcher<T>,
     node: ArcPlanNode<T>,
-) -> Option<HashMap<usize, PlanNodeOrGroup<T>>> {
+) -> Option<(
+    HashMap<usize, PlanNodeOrGroup<T>>,
+    HashMap<usize, ArcPredNode<T>>,
+)> {
     match matcher {
         RuleMatcher::MatchAndPickNode {
             typ,
             children,
+            predicates,
             pick_to,
         } => {
             if &node.typ != typ {
                 return None;
             }
-            match_node(typ, children, Some(*pick_to), node)
+            match_node(typ, children, predicates, Some(*pick_to), node)
         }
-        RuleMatcher::MatchNode { typ, children } => {
+        RuleMatcher::MatchNode {
+            typ,
+            children,
+            predicates,
+        } => {
             if &node.typ != typ {
                 return None;
             }
-            match_node(typ, children, None, node)
+            match_node(typ, children, predicates, None, node)
         }
         _ => panic!("top node should be match node"),
     }
@@ -138,9 +165,9 @@ impl<T: NodeType> HeuristicsOptimizer<T> {
         for rule in self.rules.clone().as_ref() {
             // Properties only matter for applying rules, therefore applying it before each rule invoke.
             let matcher = rule.matcher();
-            if let Some(picks) = match_and_pick(matcher, root_rel.clone()) {
+            if let Some((picks, pred_picks)) = match_and_pick(matcher, root_rel.clone()) {
                 self.infer_properties(root_rel.clone());
-                let mut results = rule.apply(self, picks);
+                let mut results = rule.apply(self, picks, pred_picks);
                 assert!(results.len() <= 1);
                 if !results.is_empty() {
                     root_rel = results.remove(0).unwrap_plan_node();
@@ -187,7 +214,7 @@ impl<T: NodeType> HeuristicsOptimizer<T> {
             .children
             .iter()
             .map(|child| {
-                let child = (*child).clone().unwrap_plan_node();
+                let child = child.unwrap_plan_node();
                 self.infer_properties(child.clone());
                 self.properties.get(&child).unwrap().clone()
             })

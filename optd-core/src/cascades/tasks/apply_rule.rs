@@ -6,12 +6,12 @@ use tracing::trace;
 
 use crate::{
     cascades::{
-        memo::RelMemoNodeRef,
+        memo::ArcMemoPlanNode,
         optimizer::{CascadesOptimizer, ExprId, RuleId},
         tasks::{OptimizeExpressionTask, OptimizeInputsTask},
         GroupId, Memo,
     },
-    nodes::{NodeType, PlanNode, PlanNodeOrGroup},
+    nodes::{ArcPredNode, NodeType, PlanNode, PlanNodeOrGroup},
     rules::{OptimizeType, RuleMatcher},
 };
 
@@ -33,13 +33,20 @@ impl ApplyRuleTask {
     }
 }
 
+// Pick/match logic, to get pieces of info to pass to the rule apply function
+// TODO: I would like to see this moved elsewhere
+
 fn match_node<T: NodeType, M: Memo<T>>(
     typ: &T,
     children: &[RuleMatcher<T>],
+    predicates: &[RuleMatcher<T>],
     pick_to: Option<usize>,
-    node: RelMemoNodeRef<T>,
+    node: ArcMemoPlanNode<T>,
     optimizer: &CascadesOptimizer<T, M>,
-) -> Vec<HashMap<usize, PlanNodeOrGroup<T>>> {
+) -> Vec<(
+    HashMap<usize, PlanNodeOrGroup<T>>,
+    HashMap<usize, ArcPredNode<T>>,
+)> {
     if let RuleMatcher::PickMany { .. } | RuleMatcher::IgnoreMany = children.last().unwrap() {
     } else {
         assert_eq!(
@@ -51,7 +58,7 @@ fn match_node<T: NodeType, M: Memo<T>>(
     }
 
     let mut should_end = false;
-    let mut picks = vec![HashMap::new()];
+    let mut picks = vec![(HashMap::new(), HashMap::new())];
     for (idx, child) in children.iter().enumerate() {
         assert!(!should_end, "many matcher should be at the end");
         match child {
@@ -59,17 +66,10 @@ fn match_node<T: NodeType, M: Memo<T>>(
             RuleMatcher::IgnoreMany => {
                 should_end = true;
             }
-            RuleMatcher::PickOne { pick_to, expand } => {
+            RuleMatcher::PickOne { pick_to } => {
                 let group_id = node.children[idx];
-                let node = if *expand {
-                    let binding = optimizer
-                        .get_predicate_binding(group_id)
-                        .expect("empty group, what's going wrong?");
-                    PlanNodeOrGroup::PlanNode(binding)
-                } else {
-                    PlanNodeOrGroup::Group(group_id)
-                };
-                for pick in &mut picks {
+                let node = PlanNodeOrGroup::Group(group_id);
+                for (pick, _) in &mut picks {
                     let res = pick.insert(*pick_to, node.clone());
                     assert!(res.is_none(), "dup pick");
                 }
@@ -80,19 +80,36 @@ fn match_node<T: NodeType, M: Memo<T>>(
             _ => {
                 let new_picks = match_and_pick_group(child, node.children[idx], optimizer);
                 let mut merged_picks = vec![];
-                for old_pick in &picks {
-                    for new_picks in &new_picks {
+                for (old_pick, old_pred_pick) in &picks {
+                    for (new_pick, new_pred_pick) in &new_picks {
                         let mut pick = old_pick.clone();
-                        pick.extend(new_picks.iter().map(|(k, v)| (*k, v.clone())));
-                        merged_picks.push(pick);
+                        let mut pred_pick = old_pred_pick.clone();
+                        pick.extend(new_pick.iter().map(|(k, v)| (*k, v.clone())));
+                        pred_pick.extend(new_pred_pick.iter().map(|(k, v)| (*k, v.clone())));
+                        merged_picks.push((pick, pred_pick));
                     }
                 }
                 picks = merged_picks;
             }
         }
     }
+    for (idx, pred) in predicates.iter().enumerate() {
+        match pred {
+            RuleMatcher::PickPred { pick_to } => {
+                for (_, pred_pick) in &mut picks {
+                    let res = pred_pick
+                        .insert(*pick_to, optimizer.get_pred(node.predicates[idx].clone()));
+                    assert!(res.is_none(), "dup pred pick?");
+                }
+            }
+            _ => {
+                panic!("only PickPred is supported for predicates");
+            }
+        }
+    }
+
     if let Some(pick_to) = pick_to {
-        for pick in &mut picks {
+        for (pick, _) in &mut picks {
             let res: Option<PlanNodeOrGroup<T>> = pick.insert(
                 pick_to,
                 PlanNodeOrGroup::PlanNode(
@@ -103,7 +120,6 @@ fn match_node<T: NodeType, M: Memo<T>>(
                             .iter()
                             .map(|x| PlanNodeOrGroup::Group(*x))
                             .collect_vec(),
-                        // rule engine by default captures all predicates
                         predicates: node
                             .predicates
                             .iter()
@@ -123,7 +139,10 @@ fn match_and_pick_expr<T: NodeType, M: Memo<T>>(
     matcher: &RuleMatcher<T>,
     expr_id: ExprId,
     optimizer: &CascadesOptimizer<T, M>,
-) -> Vec<HashMap<usize, PlanNodeOrGroup<T>>> {
+) -> Vec<(
+    HashMap<usize, PlanNodeOrGroup<T>>,
+    HashMap<usize, ArcPredNode<T>>,
+)> {
     let node = optimizer.get_expr_memoed(expr_id);
     match_and_pick(matcher, node, optimizer)
 }
@@ -132,7 +151,10 @@ fn match_and_pick_group<T: NodeType, M: Memo<T>>(
     matcher: &RuleMatcher<T>,
     group_id: GroupId,
     optimizer: &CascadesOptimizer<T, M>,
-) -> Vec<HashMap<usize, PlanNodeOrGroup<T>>> {
+) -> Vec<(
+    HashMap<usize, PlanNodeOrGroup<T>>,
+    HashMap<usize, ArcPredNode<T>>,
+)> {
     let mut matches = vec![];
     for expr_id in optimizer.get_all_exprs_in_group(group_id) {
         let node = optimizer.get_expr_memoed(expr_id);
@@ -143,25 +165,68 @@ fn match_and_pick_group<T: NodeType, M: Memo<T>>(
 
 fn match_and_pick<T: NodeType, M: Memo<T>>(
     matcher: &RuleMatcher<T>,
-    node: RelMemoNodeRef<T>,
+    node: ArcMemoPlanNode<T>,
     optimizer: &CascadesOptimizer<T, M>,
-) -> Vec<HashMap<usize, PlanNodeOrGroup<T>>> {
+) -> Vec<(
+    HashMap<usize, PlanNodeOrGroup<T>>,
+    HashMap<usize, ArcPredNode<T>>,
+)> {
     match matcher {
         RuleMatcher::MatchAndPickNode {
             typ,
             children,
+            predicates,
             pick_to,
         } => {
             if &node.typ != typ {
                 return vec![];
             }
-            match_node(typ, children, Some(*pick_to), node, optimizer)
+            match_node(typ, children, predicates, Some(*pick_to), node, optimizer)
         }
-        RuleMatcher::MatchNode { typ, children } => {
+        RuleMatcher::MatchNode {
+            typ,
+            children,
+            predicates,
+        } => {
             if &node.typ != typ {
                 return vec![];
             }
-            match_node(typ, children, None, node, optimizer)
+            match_node(typ, children, predicates, None, node, optimizer)
+        }
+        RuleMatcher::MatchDiscriminant {
+            typ_discriminant,
+            children,
+            predicates,
+        } => {
+            if std::mem::discriminant(&node.typ) != *typ_discriminant {
+                return vec![];
+            }
+            match_node(
+                &node.typ.clone(),
+                children,
+                predicates,
+                None,
+                node,
+                optimizer,
+            )
+        }
+        RuleMatcher::MatchAndPickDiscriminant {
+            typ_discriminant,
+            children,
+            predicates,
+            pick_to,
+        } => {
+            if std::mem::discriminant(&node.typ) != *typ_discriminant {
+                return vec![];
+            }
+            match_node(
+                &node.typ.clone(),
+                children,
+                predicates,
+                Some(*pick_to),
+                node,
+                optimizer,
+            )
         }
         _ => panic!("top node should be match node"),
     }
@@ -185,9 +250,9 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for ApplyRuleTask {
         let group_id = optimizer.get_group_id(self.expr_id);
         let mut tasks = vec![];
         let binding_exprs = match_and_pick_expr(rule.matcher(), self.expr_id, optimizer);
-        for expr in binding_exprs {
-            trace!(event = "before_apply_rule", task = "apply_rule", binding = ?expr.iter().map(|(k, v)| format!("{}=>{}", k, v)).join(","));
-            let applied = rule.apply(optimizer, expr);
+        for (expr, preds) in binding_exprs {
+            trace!(event = "before_apply_rule", task = "apply_rule");
+            let applied = rule.apply(optimizer, expr, preds);
 
             if rule_wrapper.optimize_type() == OptimizeType::Heuristics {
                 panic!("no more heuristics rule in cascades");

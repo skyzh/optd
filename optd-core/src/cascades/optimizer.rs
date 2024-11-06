@@ -17,7 +17,7 @@ use crate::{
 };
 
 use super::{
-    memo::{GroupInfo, Memo, RelMemoNodeRef},
+    memo::{ArcMemoPlanNode, GroupInfo, Memo},
     tasks::OptimizeGroupTask,
     NaiveMemo, Task,
 };
@@ -328,7 +328,7 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
         self.memo.get_group_id(expr_id)
     }
 
-    pub(super) fn get_expr_memoed(&self, expr_id: ExprId) -> RelMemoNodeRef<T> {
+    pub(super) fn get_expr_memoed(&self, expr_id: ExprId) -> ArcMemoPlanNode<T> {
         self.memo.get_expr_memoed(expr_id)
     }
 

@@ -16,17 +16,17 @@ use crate::{
 
 use super::optimizer::{ExprId, GroupId, PredId};
 
-pub type RelMemoNodeRef<T> = Arc<RelMemoNode<T>>;
+pub type ArcMemoPlanNode<T> = Arc<MemoPlanNode<T>>;
 
 /// The RelNode representation in the memo table. Store children as group IDs. Equivalent to MExpr in Columbia/Cascades.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct RelMemoNode<T: NodeType> {
+pub struct MemoPlanNode<T: NodeType> {
     pub typ: T,
     pub children: Vec<GroupId>,
     pub predicates: Vec<PredId>,
 }
 
-impl<T: NodeType> RelMemoNode<T> {
+impl<T: NodeType> MemoPlanNode<T> {
     pub fn into_plan_node_no_predicates(self) -> PlanNode<T> {
         PlanNode {
             typ: self.typ,
@@ -40,7 +40,7 @@ impl<T: NodeType> RelMemoNode<T> {
     }
 }
 
-impl<T: NodeType> std::fmt::Display for RelMemoNode<T> {
+impl<T: NodeType> std::fmt::Display for MemoPlanNode<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({}", self.typ)?;
         for child in &self.children {
@@ -126,7 +126,7 @@ pub trait Memo<T: NodeType>: 'static + Send + Sync {
     fn get_group_id(&self, expr_id: ExprId) -> GroupId;
 
     /// Get the memoized representation of a node.
-    fn get_expr_memoed(&self, expr_id: ExprId) -> RelMemoNodeRef<T>;
+    fn get_expr_memoed(&self, expr_id: ExprId) -> ArcMemoPlanNode<T>;
 
     /// Get all groups IDs in the memo table.
     fn get_all_group_ids(&self) -> Vec<GroupId>;
@@ -258,7 +258,7 @@ fn get_predicate_binding_group_inner<M: Memo<T> + ?Sized, T: NodeType>(
 pub struct NaiveMemo<T: NodeType> {
     // Source of truth.
     groups: HashMap<GroupId, Group>,
-    expr_id_to_expr_node: HashMap<ExprId, RelMemoNodeRef<T>>,
+    expr_id_to_expr_node: HashMap<ExprId, ArcMemoPlanNode<T>>,
 
     // Predicate stuff. We don't find logically equivalent predicates. Duplicate predicates
     // will have different IDs.
@@ -269,7 +269,7 @@ pub struct NaiveMemo<T: NodeType> {
     property_builders: Arc<[Box<dyn PropertyBuilderAny<T>>]>,
 
     // Indexes.
-    expr_node_to_expr_id: HashMap<RelMemoNode<T>, ExprId>,
+    expr_node_to_expr_id: HashMap<MemoPlanNode<T>, ExprId>,
     expr_id_to_group_id: HashMap<ExprId, GroupId>,
 
     // We update all group IDs in the memo table upon group merging, but
@@ -332,7 +332,7 @@ impl<T: NodeType> Memo<T> for NaiveMemo<T> {
             .expect("expr not found in group mapping")
     }
 
-    fn get_expr_memoed(&self, mut expr_id: ExprId) -> RelMemoNodeRef<T> {
+    fn get_expr_memoed(&self, mut expr_id: ExprId) -> ArcMemoPlanNode<T> {
         while let Some(new_expr_id) = self.dup_expr_mapping.get(&expr_id) {
             expr_id = *new_expr_id;
         }
@@ -546,7 +546,7 @@ impl<T: NodeType> NaiveMemo<T> {
                 }
             })
             .collect::<Vec<_>>();
-        let memo_node = RelMemoNode {
+        let memo_node = MemoPlanNode {
             typ: rel_node.typ.clone(),
             children: children_group_ids,
             predicates: rel_node
@@ -590,7 +590,7 @@ impl<T: NodeType> NaiveMemo<T> {
                 PlanNodeOrGroup::PlanNode(child) => self.get_expr_info(child.clone()).0,
             })
             .collect::<Vec<_>>();
-        let memo_node = RelMemoNode {
+        let memo_node = MemoPlanNode {
             typ: rel_node.typ.clone(),
             children: children_group_ids,
             predicates: Vec::new(), /* TODO: refactor */
@@ -604,7 +604,7 @@ impl<T: NodeType> NaiveMemo<T> {
 
     fn infer_properties(
         &self,
-        memo_node: RelMemoNode<T>,
+        memo_node: MemoPlanNode<T>,
     ) -> Vec<Box<dyn Any + 'static + Send + Sync>> {
         let child_properties = memo_node
             .children
@@ -638,7 +638,7 @@ impl<T: NodeType> NaiveMemo<T> {
         &mut self,
         expr_id: ExprId,
         group_id: GroupId,
-        memo_node: RelMemoNode<T>,
+        memo_node: MemoPlanNode<T>,
     ) {
         trace!(event = "add_expr_to_group", group_id = %group_id, expr_id = %expr_id, memo_node = %memo_node);
         if let Entry::Occupied(mut entry) = self.groups.entry(group_id) {

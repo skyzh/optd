@@ -1,12 +1,9 @@
 use std::fmt::Display;
 
-use optd_core::nodes::{PlanNode, PlanNodeMetaMap};
+use optd_core::nodes::PlanNodeMetaMap;
 use pretty_xmlish::Pretty;
 
-use crate::plan_nodes::{
-    ArcDfPlanNode, ArcDfPredNode, DfNodeType, DfPredNode, DfPredType, DfReprPlanNode,
-    DfReprPredNode,
-};
+use crate::plan_nodes::{ArcDfPredNode, DfPredNode, DfPredType, DfReprPredNode};
 
 use super::ListPred;
 

@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use arrow_schema::{DataType, IntervalUnit};
-use optd_core::nodes::{PlanNode, PlanNodeMetaMap, SerializableOrderedF64, Value};
+use optd_core::nodes::{PlanNodeMetaMap, SerializableOrderedF64, Value};
 use pretty_xmlish::Pretty;
 use serde::{Deserialize, Serialize};
 
-use crate::plan_nodes::{ArcDfPredNode, DfPredNode, DfPredType, DfReprPlanNode, DfReprPredNode};
+use crate::plan_nodes::{ArcDfPredNode, DfPredNode, DfPredType, DfReprPredNode};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub enum ConstantType {

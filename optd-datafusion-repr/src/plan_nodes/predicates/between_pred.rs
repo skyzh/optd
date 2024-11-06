@@ -1,7 +1,7 @@
-use optd_core::nodes::{PlanNode, PlanNodeMetaMap};
+use optd_core::nodes::PlanNodeMetaMap;
 use pretty_xmlish::Pretty;
 
-use crate::plan_nodes::{ArcDfPredNode, DfPredNode, DfPredType, DfReprPlanNode, DfReprPredNode};
+use crate::plan_nodes::{ArcDfPredNode, DfPredNode, DfPredType, DfReprPredNode};
 
 #[derive(Clone, Debug)]
 pub struct BetweenPred(pub ArcDfPredNode);

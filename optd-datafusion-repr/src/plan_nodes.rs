@@ -13,16 +13,10 @@ mod sort;
 mod subquery;
 
 use std::fmt::Debug;
-use std::sync::Arc;
 
 use arrow_schema::DataType;
-use itertools::Itertools;
-use optd_core::{
-    cascades::{CascadesOptimizer, GroupId},
-    nodes::{
-        ArcPlanNode, ArcPredNode, NodeType, PlanNode, PlanNodeMeta, PlanNodeMetaMap, PredNode,
-    },
-    optimizer::Optimizer,
+use optd_core::nodes::{
+    ArcPlanNode, ArcPredNode, NodeType, PlanNode, PlanNodeMeta, PlanNodeMetaMap, PredNode,
 };
 
 pub use agg::{LogicalAgg, PhysicalAgg};
@@ -44,10 +38,7 @@ pub use predicates::{
 };
 use pretty_xmlish::{Pretty, PrettyConfig};
 
-use crate::{
-    explain::{explain_plan_node, explain_pred_node},
-    properties::schema::{Schema, SchemaPropertyBuilder},
-};
+use crate::explain::{explain_plan_node, explain_pred_node};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DfPredType {

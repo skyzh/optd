@@ -3,11 +3,9 @@ use std::sync::Arc;
 use pretty_xmlish::Pretty;
 
 use crate::explain::Insertable;
-use optd_core::nodes::{PlanNode, PlanNodeMetaMap, PredNode, Value};
+use optd_core::nodes::PlanNodeMetaMap;
 
-use super::{
-    ArcDfPlanNode, ConstantPred, DfNodeType, DfPlanNode, DfPredType, DfReprPlanNode, DfReprPredNode,
-};
+use super::{ArcDfPlanNode, ConstantPred, DfNodeType, DfPlanNode, DfReprPlanNode, DfReprPredNode};
 
 #[derive(Clone, Debug)]
 pub struct LogicalScan(pub ArcDfPlanNode);
@@ -45,13 +43,9 @@ impl LogicalScan {
     }
 
     pub fn table(&self) -> Arc<str> {
-        self.0
-            .predicates
-            .first()
+        ConstantPred::from_pred_node(self.0.predicates.first().unwrap().clone())
             .unwrap()
-            .data
-            .as_ref()
-            .unwrap()
+            .value()
             .as_str()
     }
 }

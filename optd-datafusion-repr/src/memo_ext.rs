@@ -11,7 +11,7 @@ use optd_core::{
     nodes::NodeType,
 };
 
-use crate::plan_nodes::{DfNodeType, DfReprPlanNode, LogicalScan};
+use crate::plan_nodes::{ConstantPred, DfNodeType, DfReprPredNode};
 
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub enum LogicalJoinOrder {
@@ -39,20 +39,20 @@ fn enumerate_join_order_expr_inner<M: Memo<DfNodeType> + ?Sized>(
     current: ExprId,
     visited: &mut HashMap<GroupId, Vec<LogicalJoinOrder>>,
 ) -> Vec<LogicalJoinOrder> {
-    let expr = memo
-        .get_expr_memoed(current)
-        .as_ref()
-        .clone()
-        .into_plan_node_no_predicates();
+    let expr = memo.get_expr_memoed(current);
     match expr.typ {
         DfNodeType::Scan => {
-            let scan = LogicalScan::from_plan_node(Arc::new(expr)).unwrap();
-            vec![LogicalJoinOrder::Table(scan.table())]
+            let table = memo.get_pred(expr.predicates[0]); /* TODO: use unified repr */
+            let table = ConstantPred::from_pred_node(table)
+                .unwrap()
+                .value()
+                .as_str();
+            vec![LogicalJoinOrder::Table(table)]
         }
         DfNodeType::Join(_) | DfNodeType::DepJoin(_) | DfNodeType::RawDepJoin(_) => {
             // Assume child 0 == left, child 1 == right
-            let left = expr.children[0].unwrap_group();
-            let right = expr.children[1].unwrap_group();
+            let left = expr.children[0];
+            let right = expr.children[1];
             let left_join_orders = enumerate_join_order_group_inner(memo, left, visited);
             let right_join_orders = enumerate_join_order_group_inner(memo, right, visited);
             let mut join_orders = BTreeSet::new();
@@ -69,8 +69,7 @@ fn enumerate_join_order_expr_inner<M: Memo<DfNodeType> + ?Sized>(
         typ if typ.is_logical() => {
             let mut join_orders = BTreeSet::new();
             for (idx, child) in expr.children.iter().enumerate() {
-                let child_join_orders =
-                    enumerate_join_order_group_inner(memo, child.unwrap_group(), visited);
+                let child_join_orders = enumerate_join_order_group_inner(memo, *child, visited);
                 if idx == 0 {
                     for child_join_order in child_join_orders {
                         join_orders.insert(child_join_order);
@@ -128,7 +127,7 @@ mod tests {
 
     use crate::plan_nodes::{
         ConstantPred, DfReprPlanNode, DfReprPredNode, JoinType, ListPred, LogicalJoin,
-        LogicalProjection,
+        LogicalProjection, LogicalScan,
     };
 
     use super::*;

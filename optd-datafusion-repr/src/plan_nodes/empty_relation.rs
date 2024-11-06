@@ -1,8 +1,7 @@
 use pretty_xmlish::Pretty;
 
 use bincode;
-use optd_core::nodes::{PlanNode, PlanNodeMetaMap, Value};
-use serde::{Deserialize, Serialize};
+use optd_core::nodes::PlanNodeMetaMap;
 use std::sync::Arc;
 
 use crate::explain::Insertable;

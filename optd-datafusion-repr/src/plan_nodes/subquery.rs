@@ -1,6 +1,3 @@
-use optd_core::nodes::{PlanNode, PlanNodeMetaMap, Value};
-use pretty_xmlish::Pretty;
-
 use super::macros::define_plan_node;
 use super::{ArcDfPlanNode, ArcDfPredNode, DfNodeType, DfPlanNode, DfReprPlanNode, JoinType};
 

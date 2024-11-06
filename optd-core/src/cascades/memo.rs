@@ -26,20 +26,6 @@ pub struct MemoPlanNode<T: NodeType> {
     pub predicates: Vec<PredId>,
 }
 
-impl<T: NodeType> MemoPlanNode<T> {
-    pub fn into_plan_node_no_predicates(self) -> PlanNode<T> {
-        PlanNode {
-            typ: self.typ,
-            children: self
-                .children
-                .into_iter()
-                .map(|x| PlanNodeOrGroup::Group(x))
-                .collect(),
-            predicates: Vec::new(),
-        }
-    }
-}
-
 impl<T: NodeType> std::fmt::Display for MemoPlanNode<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "({}", self.typ)?;

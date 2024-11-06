@@ -1,9 +1,8 @@
-use datafusion_expr::EmptyRelation;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use optd_core::{nodes::ArcPredNode, property::PropertyBuilder};
+use optd_core::property::PropertyBuilder;
 
 use super::DEFAULT_NAME;
 use crate::plan_nodes::{

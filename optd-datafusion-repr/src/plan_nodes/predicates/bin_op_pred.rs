@@ -1,11 +1,7 @@
-use std::fmt::Display;
-
-use optd_core::nodes::{PlanNode, PlanNodeMetaMap};
+use optd_core::nodes::PlanNodeMetaMap;
 use pretty_xmlish::Pretty;
 
-use crate::plan_nodes::{
-    ArcDfPlanNode, ArcDfPredNode, DfPredNode, DfPredType, DfReprPlanNode, DfReprPredNode,
-};
+use crate::plan_nodes::{ArcDfPredNode, DfPredNode, DfPredType, DfReprPredNode};
 
 /// The pattern of storing numerical, comparison, and logical operators in the same type with is_*() functions
 ///     to distinguish between them matches how datafusion::logical_expr::Operator does things
@@ -29,7 +25,7 @@ pub enum BinOpType {
     Leq,
 }
 
-impl Display for BinOpType {
+impl std::fmt::Display for BinOpType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
     }

@@ -5,12 +5,11 @@ use std::{
 
 use crate::{
     cost::DfCostModel,
-    plan_nodes::{ArcDfPredNode, DfNodeType, DfPredNode},
+    plan_nodes::{ArcDfPredNode, DfNodeType},
 };
 use optd_core::{
     cascades::{CascadesOptimizer, GroupId, NaiveMemo, RelNodeContext},
     cost::{Cost, CostModel, Statistics},
-    nodes::Value,
 };
 
 use super::base_cost::DEFAULT_TABLE_ROW_CNT;

@@ -3,13 +3,13 @@ use std::sync::Arc;
 
 use super::macros::define_rule;
 use crate::plan_nodes::{
-    ConstantExpr, ConstantType, Expr, ExprList, JoinType, LogOpExpr, LogOpType,
-    LogicalEmptyRelation, LogicalJoin, OptRelNode, OptRelNodeTyp, PlanNode,
+    ConstantPred, ConstantType, DfNodeType, DfReprPlanNode, DfReprPlanNode, Expr, JoinType,
+    ListPred, LogOpPred, LogOpType, LogicalEmptyRelation, LogicalJoin,
 };
 use crate::properties::schema::SchemaPropertyBuilder;
-use crate::OptRelNodeRef;
+use crate::ArcDfPlanNode;
 use optd_core::rules::{Rule, RuleMatcher};
-use optd_core::{optimizer::Optimizer, rel_node::RelNode};
+use optd_core::{nodes::PlanNode, optimizer::Optimizer};
 
 define_rule!(
     SimplifyFilterRule,
@@ -22,8 +22,8 @@ define_rule!(
 //    - Replaces the Or operator with True if any operand is True
 //    - Replaces the And operator with False if any operand is False
 //    - Removes Duplicates
-pub(crate) fn simplify_log_expr(log_expr: OptRelNodeRef, changed: &mut bool) -> OptRelNodeRef {
-    let log_expr = LogOpExpr::from_rel_node(log_expr).unwrap();
+pub(crate) fn simplify_log_expr(log_expr: ArcDfPlanNode, changed: &mut bool) -> ArcDfPlanNode {
+    let log_expr = LogOpPred::from_rel_node(log_expr).unwrap();
     let op = log_expr.op_type();
     // we need a new children vec to output deterministic order
     let mut new_children_set = HashSet::new();
@@ -31,11 +31,11 @@ pub(crate) fn simplify_log_expr(log_expr: OptRelNodeRef, changed: &mut bool) -> 
     let children_size = log_expr.children().len();
     for child in log_expr.children() {
         let mut new_child = child;
-        if let OptRelNodeTyp::LogOp(_) = new_child.typ() {
+        if let DfNodeType::LogOp(_) = new_child.typ() {
             let new_expr = simplify_log_expr(new_child.into_rel_node().clone(), changed);
             new_child = Expr::from_rel_node(new_expr).unwrap();
         }
-        if let OptRelNodeTyp::Constant(ConstantType::Bool) = new_child.typ() {
+        if let DfNodeType::Constant(ConstantType::Bool) = new_child.typ() {
             let data = new_child.into_rel_node().data.clone().unwrap();
             *changed = true;
             // TrueExpr
@@ -46,14 +46,14 @@ pub(crate) fn simplify_log_expr(log_expr: OptRelNodeRef, changed: &mut bool) -> 
                 }
                 if op == LogOpType::Or {
                     // replace whole exprList with True
-                    return ConstantExpr::bool(true).into_rel_node().clone();
+                    return ConstantPred::bool(true).into_rel_node().clone();
                 }
                 unreachable!("no other type in logOp");
             }
             // FalseExpr
             if op == LogOpType::And {
                 // replace whole exprList with False
-                return ConstantExpr::bool(false).into_rel_node().clone();
+                return ConstantPred::bool(false).into_rel_node().clone();
             }
             if op == LogOpType::Or {
                 // skip False in Or
@@ -67,10 +67,10 @@ pub(crate) fn simplify_log_expr(log_expr: OptRelNodeRef, changed: &mut bool) -> 
     }
     if new_children.is_empty() {
         if op == LogOpType::And {
-            return ConstantExpr::bool(true).into_rel_node().clone();
+            return ConstantPred::bool(true).into_rel_node().clone();
         }
         if op == LogOpType::Or {
-            return ConstantExpr::bool(false).into_rel_node().clone();
+            return ConstantPred::bool(false).into_rel_node().clone();
         }
         unreachable!("no other type in logOp");
     }
@@ -86,7 +86,7 @@ pub(crate) fn simplify_log_expr(log_expr: OptRelNodeRef, changed: &mut bool) -> 
     if children_size != new_children.len() {
         *changed = true;
     }
-    LogOpExpr::new(op, ExprList::new(new_children))
+    LogOpPred::new(op, ListPred::new(new_children))
         .into_rel_node()
         .clone()
 }
@@ -97,19 +97,18 @@ pub(crate) fn simplify_log_expr(log_expr: OptRelNodeRef, changed: &mut bool) -> 
 //    - Replaces the And operator with False if any operand is False
 //    - Removes Duplicates
 fn apply_simplify_filter(
-    _optimizer: &impl Optimizer<OptRelNodeTyp>,
+    _optimizer: &impl Optimizer<DfNodeType>,
     SimplifyFilterRulePicks { child, cond }: SimplifyFilterRulePicks,
-) -> Vec<RelNode<OptRelNodeTyp>> {
+) -> Vec<PlanNodeOrGroup<DfNodeType>> {
     match cond.typ {
-        OptRelNodeTyp::LogOp(_) => {
+        DfNodeType::LogOp(_) => {
             let mut changed = false;
             let new_log_expr = simplify_log_expr(Arc::new(cond), &mut changed);
             if changed {
-                let filter_node = RelNode {
-                    typ: OptRelNodeTyp::Filter,
+                let filter_node = PlanNode {
+                    typ: DfNodeType::Filter,
                     children: vec![child.into(), new_log_expr],
                     data: None,
-                    predicates: Vec::new(), /* TODO: refactor */
                 };
                 return vec![filter_node];
             }
@@ -129,17 +128,17 @@ define_rule!(
 );
 
 fn apply_simplify_join_cond(
-    _optimizer: &impl Optimizer<OptRelNodeTyp>,
+    _optimizer: &impl Optimizer<DfNodeType>,
     SimplifyJoinCondRulePicks { left, right, cond }: SimplifyJoinCondRulePicks,
-) -> Vec<RelNode<OptRelNodeTyp>> {
+) -> Vec<PlanNodeOrGroup<DfNodeType>> {
     match cond.typ {
-        OptRelNodeTyp::LogOp(_) => {
+        DfNodeType::LogOp(_) => {
             let mut changed = false;
             let new_log_expr = simplify_log_expr(Arc::new(cond), &mut changed);
             if changed {
                 let join_node = LogicalJoin::new(
-                    PlanNode::from_group(left.into()),
-                    PlanNode::from_group(right.into()),
+                    DfReprPlanNode::from_group(left.into()),
+                    DfReprPlanNode::from_group(right.into()),
                     Expr::from_rel_node(new_log_expr).unwrap(),
                     JoinType::Inner,
                 );
@@ -163,10 +162,10 @@ define_rule!(
 ///     - Filter node w/ false pred -> EmptyRelation
 ///     - Filter node w/ true pred  -> Eliminate from the tree
 fn apply_eliminate_filter(
-    optimizer: &impl Optimizer<OptRelNodeTyp>,
+    optimizer: &impl Optimizer<DfNodeType>,
     EliminateFilterRulePicks { child, cond }: EliminateFilterRulePicks,
-) -> Vec<RelNode<OptRelNodeTyp>> {
-    if let OptRelNodeTyp::Constant(ConstantType::Bool) = cond.typ {
+) -> Vec<PlanNodeOrGroup<DfNodeType>> {
+    if let DfNodeType::Constant(ConstantType::Bool) = cond.typ {
         if let Some(data) = cond.data {
             if data.as_bool() {
                 // If the condition is true, eliminate the filter node, as it

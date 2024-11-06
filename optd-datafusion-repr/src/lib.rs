@@ -14,25 +14,15 @@ use optd_core::{
     rules::{Rule, RuleWrapper},
 };
 
-use plan_nodes::{dispatch_plan_explain_to_string, ArcDfPlanNode, DfNodeType};
+pub use optd_core::nodes::Value;
+use plan_nodes::{ArcDfPlanNode, DfNodeType};
 use properties::{
     column_ref::ColumnRefPropertyBuilder,
     schema::{Catalog, SchemaPropertyBuilder},
 };
-// use rules::{
-//     EliminateDuplicatedAggExprRule, EliminateDuplicatedSortExprRule, EliminateFilterRule,
-//     EliminateJoinRule, EliminateLimitRule, EliminateProjectRule, FilterAggTransposeRule,
-//     FilterCrossJoinTransposeRule, FilterInnerJoinTransposeRule, FilterMergeRule,
-//     FilterProjectTransposeRule, FilterSortTransposeRule, HashJoinRule, JoinAssocRule,
-//     JoinCommuteRule, PhysicalConversionRule, ProjectFilterTransposeRule, ProjectMergeRule,
-//     ProjectionPullUpJoin, SimplifyFilterRule, SimplifyJoinCondRule,
-//     DepInitialDistinct, DepJoinEliminate, DepJoinPastAgg, DepJoinPastFilter, DepJoinPastProj,
-// };
-
-pub use optd_core::nodes::Value;
+use rules::*;
 
 pub use memo_ext::{LogicalJoinOrder, MemoExt};
-use rules::PhysicalConversionRule;
 
 pub mod cost;
 mod explain;
@@ -108,7 +98,7 @@ impl DatafusionOptimizer {
         for rule in rules {
             rule_wrappers.push(RuleWrapper::new_cascades(rule));
         }
-        // // add all filter pushdown rules as heuristic rules
+        // add all filter pushdown rules as heuristic rules
         // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
         //     FilterProjectTransposeRule::new(),
         // )));
@@ -125,7 +115,7 @@ impl DatafusionOptimizer {
         //     FilterAggTransposeRule::new(),
         // )));
         // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(HashJoinRule::new())));
-        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(JoinCommuteRule::new())));
+        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(JoinCommuteRule::new())));
         // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(JoinAssocRule::new())));
         // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
         //     ProjectionPullUpJoin::new(),

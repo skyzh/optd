@@ -2,8 +2,8 @@
 // mod eliminate_limit;
 // mod filter;
 // mod filter_pushdown;
-// mod joins;
-// mod macros;
+mod joins;
+mod macros;
 mod physical;
 // mod project_transpose;
 // mod subquery;
@@ -17,7 +17,8 @@ mod physical;
 //     FilterAggTransposeRule, FilterCrossJoinTransposeRule, FilterInnerJoinTransposeRule,
 //     FilterMergeRule, FilterSortTransposeRule,
 // };
-// pub use joins::{EliminateJoinRule, HashJoinRule, JoinAssocRule, JoinCommuteRule};
+pub use joins::*;
+pub use physical::PhysicalConversionRule;
 // pub use project_transpose::{
 //     project_filter_transpose::{FilterProjectTransposeRule, ProjectFilterTransposeRule},
 //     project_join_transpose::ProjectionPullUpJoin,
@@ -26,5 +27,3 @@ mod physical;
 // pub use subquery::{
 //     DepInitialDistinct, DepJoinEliminate, DepJoinPastAgg, DepJoinPastFilter, DepJoinPastProj,
 // };
-
-pub use physical::PhysicalConversionRule;

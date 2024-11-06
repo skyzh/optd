@@ -16,8 +16,7 @@ use std::fmt::Debug;
 
 use arrow_schema::DataType;
 use optd_core::nodes::{
-    ArcPlanNode, ArcPredNode, NodeType, PlanNode, PlanNodeMeta, PlanNodeMetaMap, PlanNodeOrGroup,
-    PredNode,
+    ArcPlanNode, ArcPredNode, NodeType, PlanNode, PlanNodeMeta, PlanNodeMetaMap, PredNode,
 };
 
 pub use agg::{LogicalAgg, PhysicalAgg};
@@ -33,9 +32,9 @@ pub use sort::{LogicalSort, PhysicalSort};
 pub use subquery::{DependentJoin, RawDependentJoin}; // Add missing import
 
 pub use predicates::{
-    BetweenPred, BinOpPred, BinOpType, CastPred, ColumnRefPred, ConstantPred, ConstantType,
-    DataTypePred, ExternColumnRefPred, FuncPred, FuncType, InListPred, LikePred, ListPred,
-    LogOpPred, LogOpType, SortOrderPred, SortOrderType, UnOpPred, UnOpType,
+    rewrite_column_refs, BetweenPred, BinOpPred, BinOpType, CastPred, ColumnRefPred, ConstantPred,
+    ConstantType, DataTypePred, ExternColumnRefPred, FuncPred, FuncType, InListPred, LikePred,
+    ListPred, LogOpPred, LogOpType, SortOrderPred, SortOrderType, UnOpPred, UnOpType,
 };
 use pretty_xmlish::{Pretty, PrettyConfig};
 

@@ -1,12 +1,9 @@
 use std::collections::HashMap;
 
 use optd_core::rules::{Rule, RuleMatcher};
-use optd_core::{optimizer::Optimizer, rel_node::RelNode};
+use optd_core::{nodes::PlanNode, optimizer::Optimizer};
 
-use crate::plan_nodes::{
-    ColumnRefExpr, ExprList, LogicalProjection, OptRelNode, OptRelNodeTyp, PlanNode,
-};
-use crate::properties::schema::SchemaPropertyBuilder;
+use crate::plan_nodes::{DfNodeType, DfReprPlanNode, DfReprPlanNode, ListPred, LogicalProjection};
 use crate::rules::macros::define_rule;
 
 use super::project_transpose_common::ProjectionMapping;
@@ -20,16 +17,16 @@ define_rule!(
 );
 
 fn apply_projection_merge(
-    _optimizer: &impl Optimizer<OptRelNodeTyp>,
+    _optimizer: &impl Optimizer<DfNodeType>,
     ProjectMergeRulePicks {
         child,
         exprs1,
         exprs2,
     }: ProjectMergeRulePicks,
-) -> Vec<RelNode<OptRelNodeTyp>> {
-    let child = PlanNode::from_group(child.into());
-    let exprs1 = ExprList::from_rel_node(exprs1.into()).unwrap();
-    let exprs2 = ExprList::from_rel_node(exprs2.into()).unwrap();
+) -> Vec<PlanNodeOrGroup<DfNodeType>> {
+    let child = DfReprPlanNode::from_group(child.into());
+    let exprs1 = ListPred::from_rel_node(exprs1.into()).unwrap();
+    let exprs2 = ListPred::from_rel_node(exprs2.into()).unwrap();
 
     let Some(mapping) = ProjectionMapping::build(&exprs1) else {
         return vec![];
@@ -52,9 +49,9 @@ define_rule!(
 );
 
 fn apply_eliminate_project(
-    optimizer: &impl Optimizer<OptRelNodeTyp>,
+    optimizer: &impl Optimizer<DfNodeType>,
     EliminateProjectRulePicks { child, expr }: EliminateProjectRulePicks,
-) -> Vec<RelNode<OptRelNodeTyp>> {
+) -> Vec<RelNode<DfNodeType>> {
     let exprs = ExprList::from_rel_node(expr.into()).unwrap();
     let child_columns = optimizer
         .get_property::<SchemaPropertyBuilder>(child.clone().into(), 0)
@@ -64,7 +61,7 @@ fn apply_eliminate_project(
     }
     for i in 0..exprs.len() {
         let child_expr = exprs.child(i);
-        if child_expr.typ() == OptRelNodeTyp::ColumnRef {
+        if child_expr.typ() == DfNodeType::ColumnRef {
             let child_expr = ColumnRefExpr::from_rel_node(child_expr.into_rel_node()).unwrap();
             if child_expr.index() != i {
                 return Vec::new();
@@ -84,7 +81,7 @@ mod tests {
 
     use crate::{
         plan_nodes::{
-            ColumnRefExpr, ExprList, LogicalProjection, LogicalScan, OptRelNode, OptRelNodeTyp,
+            ColumnRefPred, DfNodeType, DfReprPlanNode, ListPred, LogicalProjection, LogicalScan,
         },
         rules::ProjectMergeRule,
         testing::new_test_optimizer,
@@ -97,15 +94,15 @@ mod tests {
 
         let scan = LogicalScan::new("customer".into());
 
-        let top_proj_exprs = ExprList::new(vec![
-            ColumnRefExpr::new(2).into_expr(),
-            ColumnRefExpr::new(0).into_expr(),
+        let top_proj_exprs = ListPred::new(vec![
+            ColumnRefPred::new(2).into_expr(),
+            ColumnRefPred::new(0).into_expr(),
         ]);
 
-        let bot_proj_exprs = ExprList::new(vec![
-            ColumnRefExpr::new(2).into_expr(),
-            ColumnRefExpr::new(0).into_expr(),
-            ColumnRefExpr::new(4).into_expr(),
+        let bot_proj_exprs = ListPred::new(vec![
+            ColumnRefPred::new(2).into_expr(),
+            ColumnRefPred::new(0).into_expr(),
+            ColumnRefPred::new(4).into_expr(),
         ]);
 
         let bot_proj = LogicalProjection::new(scan.into_plan_node(), bot_proj_exprs);
@@ -113,15 +110,15 @@ mod tests {
 
         let plan = test_optimizer.optimize(top_proj.into_rel_node()).unwrap();
 
-        let res_proj_exprs = ExprList::new(vec![
-            ColumnRefExpr::new(4).into_expr(),
-            ColumnRefExpr::new(2).into_expr(),
+        let res_proj_exprs = ListPred::new(vec![
+            ColumnRefPred::new(4).into_expr(),
+            ColumnRefPred::new(2).into_expr(),
         ])
         .into_rel_node();
 
-        assert_eq!(plan.typ, OptRelNodeTyp::Projection);
+        assert_eq!(plan.typ, DfNodeType::Projection);
         assert_eq!(plan.child(1), res_proj_exprs);
-        assert!(matches!(plan.child(0).typ, OptRelNodeTyp::Scan));
+        assert!(matches!(plan.child(0).typ, DfNodeType::Scan));
     }
 
     #[test]
@@ -131,23 +128,23 @@ mod tests {
 
         let scan = LogicalScan::new("customer".into());
 
-        let proj_exprs_1 = ExprList::new(vec![
-            ColumnRefExpr::new(2).into_expr(),
-            ColumnRefExpr::new(0).into_expr(),
-            ColumnRefExpr::new(4).into_expr(),
-            ColumnRefExpr::new(3).into_expr(),
+        let proj_exprs_1 = ListPred::new(vec![
+            ColumnRefPred::new(2).into_expr(),
+            ColumnRefPred::new(0).into_expr(),
+            ColumnRefPred::new(4).into_expr(),
+            ColumnRefPred::new(3).into_expr(),
         ]);
 
-        let proj_exprs_2 = ExprList::new(vec![
-            ColumnRefExpr::new(1).into_expr(),
-            ColumnRefExpr::new(0).into_expr(),
-            ColumnRefExpr::new(3).into_expr(),
+        let proj_exprs_2 = ListPred::new(vec![
+            ColumnRefPred::new(1).into_expr(),
+            ColumnRefPred::new(0).into_expr(),
+            ColumnRefPred::new(3).into_expr(),
         ]);
 
-        let proj_exprs_3 = ExprList::new(vec![
-            ColumnRefExpr::new(1).into_expr(),
-            ColumnRefExpr::new(0).into_expr(),
-            ColumnRefExpr::new(2).into_expr(),
+        let proj_exprs_3 = ListPred::new(vec![
+            ColumnRefPred::new(1).into_expr(),
+            ColumnRefPred::new(0).into_expr(),
+            ColumnRefPred::new(2).into_expr(),
         ]);
 
         let proj_1 = LogicalProjection::new(scan.into_plan_node(), proj_exprs_1);
@@ -158,16 +155,16 @@ mod tests {
         let plan = test_optimizer.optimize(proj_3.into_rel_node()).unwrap();
         let plan = test_optimizer.optimize(plan).unwrap();
 
-        let res_proj_exprs = ExprList::new(vec![
-            ColumnRefExpr::new(2).into_expr(),
-            ColumnRefExpr::new(0).into_expr(),
-            ColumnRefExpr::new(3).into_expr(),
+        let res_proj_exprs = ListPred::new(vec![
+            ColumnRefPred::new(2).into_expr(),
+            ColumnRefPred::new(0).into_expr(),
+            ColumnRefPred::new(3).into_expr(),
         ])
         .into_rel_node();
 
-        assert_eq!(plan.typ, OptRelNodeTyp::Projection);
+        assert_eq!(plan.typ, DfNodeType::Projection);
         assert_eq!(plan.child(1), res_proj_exprs);
-        assert!(matches!(plan.child(0).typ, OptRelNodeTyp::Scan));
+        assert!(matches!(plan.child(0).typ, DfNodeType::Scan));
     }
 
     #[test]
@@ -177,29 +174,29 @@ mod tests {
 
         let scan = LogicalScan::new("customer".into());
 
-        let proj_exprs_1 = ExprList::new(vec![
-            ColumnRefExpr::new(2).into_expr(),
-            ColumnRefExpr::new(0).into_expr(),
-            ColumnRefExpr::new(4).into_expr(),
-            ColumnRefExpr::new(3).into_expr(),
+        let proj_exprs_1 = ListPred::new(vec![
+            ColumnRefPred::new(2).into_expr(),
+            ColumnRefPred::new(0).into_expr(),
+            ColumnRefPred::new(4).into_expr(),
+            ColumnRefPred::new(3).into_expr(),
         ]);
 
-        let proj_exprs_2 = ExprList::new(vec![
-            ColumnRefExpr::new(1).into_expr(),
-            ColumnRefExpr::new(0).into_expr(),
-            ColumnRefExpr::new(3).into_expr(),
+        let proj_exprs_2 = ListPred::new(vec![
+            ColumnRefPred::new(1).into_expr(),
+            ColumnRefPred::new(0).into_expr(),
+            ColumnRefPred::new(3).into_expr(),
         ]);
 
-        let proj_exprs_3 = ExprList::new(vec![
-            ColumnRefExpr::new(1).into_expr(),
-            ColumnRefExpr::new(0).into_expr(),
-            ColumnRefExpr::new(2).into_expr(),
+        let proj_exprs_3 = ListPred::new(vec![
+            ColumnRefPred::new(1).into_expr(),
+            ColumnRefPred::new(0).into_expr(),
+            ColumnRefPred::new(2).into_expr(),
         ]);
 
-        let proj_exprs_4 = ExprList::new(vec![
-            ColumnRefExpr::new(0).into_expr(),
-            ColumnRefExpr::new(1).into_expr(),
-            ColumnRefExpr::new(2).into_expr(),
+        let proj_exprs_4 = ListPred::new(vec![
+            ColumnRefPred::new(0).into_expr(),
+            ColumnRefPred::new(1).into_expr(),
+            ColumnRefPred::new(2).into_expr(),
         ]);
 
         let proj_1 = LogicalProjection::new(scan.into_plan_node(), proj_exprs_1);
@@ -212,15 +209,15 @@ mod tests {
         let plan = test_optimizer.optimize(plan).unwrap();
         let plan = test_optimizer.optimize(plan).unwrap();
 
-        let res_proj_exprs = ExprList::new(vec![
-            ColumnRefExpr::new(2).into_expr(),
-            ColumnRefExpr::new(0).into_expr(),
-            ColumnRefExpr::new(3).into_expr(),
+        let res_proj_exprs = ListPred::new(vec![
+            ColumnRefPred::new(2).into_expr(),
+            ColumnRefPred::new(0).into_expr(),
+            ColumnRefPred::new(3).into_expr(),
         ])
         .into_rel_node();
 
-        assert_eq!(plan.typ, OptRelNodeTyp::Projection);
+        assert_eq!(plan.typ, DfNodeType::Projection);
         assert_eq!(plan.child(1), res_proj_exprs);
-        assert!(matches!(plan.child(0).typ, OptRelNodeTyp::Scan));
+        assert!(matches!(plan.child(0).typ, DfNodeType::Scan));
     }
 }

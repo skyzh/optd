@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::Result;
 use itertools::Itertools;
@@ -11,7 +11,7 @@ use crate::{
         tasks::{OptimizeExpressionTask, OptimizeInputsTask},
         GroupId, Memo,
     },
-    nodes::{ArcPlanNode, ArcPredNode, NodeType, PlanNode, PlanNodeOrGroup},
+    nodes::{ArcPlanNode, NodeType, PlanNode, PlanNodeOrGroup},
     rules::{OptimizeType, RuleMatcher},
 };
 
@@ -172,7 +172,7 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for ApplyRuleTask {
         let mut tasks = vec![];
         let binding_exprs = match_and_pick_expr(rule.matcher(), self.expr_id, optimizer);
         for binding in binding_exprs {
-            trace!(event = "before_apply_rule", task = "apply_rule");
+            trace!(event = "before_apply_rule", task = "apply_rule", input_binding=%binding);
             let applied = rule.apply(optimizer, binding);
 
             if rule_wrapper.optimize_type() == OptimizeType::Heuristics {
@@ -180,7 +180,7 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for ApplyRuleTask {
             }
 
             for expr in applied {
-                trace!(event = "after_apply_rule", task = "apply_rule", binding=%expr);
+                trace!(event = "after_apply_rule", task = "apply_rule", output_binding=%expr);
                 // TODO: remove clone in the below line
                 if let Some(expr_id) = optimizer.add_expr_to_group(expr.clone(), group_id) {
                     let typ = expr.unwrap_typ();

@@ -116,6 +116,9 @@ impl DatafusionOptimizer {
         // )));
         // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(HashJoinRule::new())));
         rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(JoinCommuteRule::new())));
+        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+            InnerCrossJoinRule::new(),
+        )));
         // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(JoinAssocRule::new())));
         // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
         //     ProjectionPullUpJoin::new(),

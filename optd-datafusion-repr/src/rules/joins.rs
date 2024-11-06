@@ -14,6 +14,21 @@ use crate::plan_nodes::{
 };
 use crate::properties::schema::{Schema, SchemaPropertyBuilder};
 
+define_rule!(
+    InnerCrossJoinRule,
+    apply_inner_cross_join,
+    (DfNodeType::Join(JoinType::Cross), left, right)
+);
+
+fn apply_inner_cross_join(
+    _: &impl Optimizer<DfNodeType>,
+    binding: ArcDfPlanNode,
+) -> Vec<PlanNodeOrGroup<DfNodeType>> {
+    let join = LogicalJoin::from_plan_node(binding).unwrap();
+    let node = LogicalJoin::new_unchecked(join.left(), join.right(), join.cond(), JoinType::Inner);
+    vec![node.into_plan_node().into()]
+}
+
 // A join B -> B join A
 define_rule!(
     JoinCommuteRule,

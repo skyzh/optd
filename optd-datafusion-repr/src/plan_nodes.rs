@@ -16,7 +16,8 @@ use std::fmt::Debug;
 
 use arrow_schema::DataType;
 use optd_core::nodes::{
-    ArcPlanNode, ArcPredNode, NodeType, PlanNode, PlanNodeMeta, PlanNodeMetaMap, PredNode,
+    ArcPlanNode, ArcPredNode, NodeType, PlanNode, PlanNodeMeta, PlanNodeMetaMap, PlanNodeOrGroup,
+    PredNode,
 };
 
 pub use agg::{LogicalAgg, PhysicalAgg};
@@ -193,4 +194,19 @@ impl DfReprPredNode for ArcDfPredNode {
     fn explain(&self, meta_map: Option<&PlanNodeMetaMap>) -> Pretty<'static> {
         explain_pred_node(self.clone(), meta_map)
     }
+}
+
+pub fn dispatch_plan_explain_to_string(
+    plan_node: ArcDfPlanNode,
+    meta_map: Option<&PlanNodeMetaMap>,
+) -> String {
+    let mut config = PrettyConfig {
+        need_boundaries: false,
+        reduced_spaces: false,
+        width: 300,
+        ..Default::default()
+    };
+    let mut out = String::new();
+    config.unicode(&mut out, &plan_node.explain(meta_map));
+    out
 }

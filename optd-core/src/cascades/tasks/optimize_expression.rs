@@ -28,6 +28,9 @@ fn top_matches<T: NodeType>(matcher: &RuleMatcher<T>, match_typ: T) -> bool {
     match matcher {
         RuleMatcher::MatchAndPickNode { typ, .. } => typ == &match_typ,
         RuleMatcher::MatchNode { typ, .. } => typ == &match_typ,
+        RuleMatcher::MatchAndPickDiscriminant {
+            typ_discriminant, ..
+        } => std::mem::discriminant(&match_typ) == *typ_discriminant,
         _ => panic!("IR should have root node of match"),
     }
 }

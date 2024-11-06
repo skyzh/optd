@@ -102,6 +102,11 @@ fn match_node<T: NodeType, M: Memo<T>>(
                     assert!(res.is_none(), "dup pred pick?");
                 }
             }
+            // TODO: sanity check
+            RuleMatcher::IgnoreOne => {}
+            RuleMatcher::IgnoreMany => {
+                break;
+            }
             _ => {
                 panic!("only PickPred is supported for predicates");
             }

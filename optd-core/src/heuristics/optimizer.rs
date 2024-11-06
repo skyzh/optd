@@ -79,6 +79,10 @@ fn match_node<T: NodeType>(
                 let res = pred_pick.insert(*pick_to, node.predicate(idx));
                 assert!(res.is_none(), "dup pick");
             }
+            RuleMatcher::IgnoreOne => {}
+            RuleMatcher::IgnoreMany => {
+                break;
+            }
             _ => {
                 panic!("only PickPred is supported for predicates");
             }

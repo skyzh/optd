@@ -154,7 +154,7 @@ mod tests {
                     JoinType::Inner,
                 )
                 .into_plan_node(),
-                ListPred::new(Vec::new()).into_pred_node(),
+                ListPred::new(Vec::new()),
             )
             .into_plan_node()
             .into(),
@@ -164,7 +164,7 @@ mod tests {
         memo.add_expr_to_group(
             LogicalProjection::new_unchecked(
                 PlanNodeOrGroup::Group(group),
-                ListPred::new(Vec::new()).into_pred_node(),
+                ListPred::new(Vec::new()),
             )
             .into_plan_node()
             .into(),

@@ -1,6 +1,6 @@
 use super::macros::define_plan_node;
 
-use super::{ArcDfPlanNode, ArcDfPredNode, DfNodeType, DfPlanNode, DfReprPlanNode};
+use super::{ArcDfPlanNode, ArcDfPredNode, DfNodeType, DfPlanNode, DfReprPlanNode, ListPred};
 
 #[derive(Clone, Debug)]
 pub struct LogicalSort(pub ArcDfPlanNode);
@@ -14,7 +14,7 @@ define_plan_node!(
     Sort, [
         { 0, child: ArcDfPlanNode }
     ], [
-        { 0, exprs: ArcDfPredNode }
+        { 0, exprs: ListPred }
     ]
 );
 
@@ -26,6 +26,6 @@ define_plan_node!(
     PhysicalSort, [
         { 0, child: ArcDfPlanNode }
     ], [
-        { 0, exprs: ArcDfPredNode }
+        { 0, exprs: ListPred }
     ]
 );

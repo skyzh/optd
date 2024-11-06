@@ -1476,7 +1476,6 @@ dependencies = [
  "object_store",
  "optd-datafusion-bridge",
  "optd-datafusion-repr",
- "optd-datafusion-repr-adv-cost",
  "parking_lot",
  "predicates",
  "regex",

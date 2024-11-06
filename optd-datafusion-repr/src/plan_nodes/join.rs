@@ -2,7 +2,7 @@ use core::fmt;
 use std::fmt::Display;
 
 use super::macros::define_plan_node;
-use super::{ArcDfPlanNode, ArcDfPredNode, DfNodeType, DfPlanNode, DfReprPlanNode};
+use super::{ArcDfPlanNode, ArcDfPredNode, DfNodeType, DfPlanNode, DfReprPlanNode, ListPred};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum JoinType {
@@ -58,8 +58,8 @@ define_plan_node!(
         { 0, left: ArcDfPlanNode },
         { 1, right: ArcDfPlanNode }
     ], [
-        { 0, left_keys: ArcDfPredNode },
-        { 1, right_keys: ArcDfPredNode }
+        { 0, left_keys: ListPred },
+        { 1, right_keys: ListPred }
     ], { join_type: JoinType }
 );
 

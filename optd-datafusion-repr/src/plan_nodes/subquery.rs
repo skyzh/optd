@@ -1,5 +1,5 @@
 use super::macros::define_plan_node;
-use super::{ArcDfPlanNode, ArcDfPredNode, DfNodeType, DfPlanNode, DfReprPlanNode, JoinType};
+use super::{ArcDfPlanNode, ArcDfPredNode, DfNodeType, DfPlanNode, DfReprPlanNode, JoinType, ListPred};
 
 #[derive(Clone, Debug)]
 pub struct RawDependentJoin(pub ArcDfPlanNode);
@@ -11,7 +11,7 @@ define_plan_node!(
         { 1, right: ArcDfPlanNode }
     ], [
         { 0, cond: ArcDfPredNode },
-        { 1, extern_cols: ArcDfPredNode }
+        { 1, extern_cols: ListPred }
     ], { join_type: JoinType }
 );
 
@@ -25,6 +25,6 @@ define_plan_node!(
         { 1, right: ArcDfPlanNode }
     ], [
         { 0, cond: ArcDfPredNode },
-        { 1, extern_cols: ArcDfPredNode }
+        { 1, extern_cols: ListPred }
     ], { join_type: JoinType }
 );

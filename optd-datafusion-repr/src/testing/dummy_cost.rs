@@ -1,8 +1,7 @@
-use crate::plan_nodes::OptRelNodeTyp;
+use crate::plan_nodes::{ArcDfPredNode, DfNodeType};
 use optd_core::{
     cascades::{CascadesOptimizer, NaiveMemo, RelNodeContext},
     cost::{Cost, CostModel, Statistics},
-    rel_node::{ArcPredNode, Value},
 };
 use value_bag::ValueBag;
 
@@ -10,17 +9,16 @@ use value_bag::ValueBag;
 /// Intended for testing with the cascades optimizer.
 pub struct DummyCostModel;
 
-impl CostModel<OptRelNodeTyp, NaiveMemo<OptRelNodeTyp>> for DummyCostModel {
+impl CostModel<DfNodeType, NaiveMemo<DfNodeType>> for DummyCostModel {
     /// Compute the cost of a single operation
     fn compute_operation_cost(
         &self,
-        _: &OptRelNodeTyp,
-        _: &Option<Value>,
-        _: &[ArcPredNode<OptRelNodeTyp>],
+        _: &DfNodeType,
+        _: &[ArcDfPredNode],
         _: &[Option<&Statistics>],
         _: &[Cost],
         _: Option<RelNodeContext>,
-        _: Option<&CascadesOptimizer<OptRelNodeTyp>>,
+        _: Option<&CascadesOptimizer<DfNodeType>>,
     ) -> Cost {
         Cost(vec![1.0])
     }
@@ -28,12 +26,11 @@ impl CostModel<OptRelNodeTyp, NaiveMemo<OptRelNodeTyp>> for DummyCostModel {
     /// Derive the statistics of a single operation
     fn derive_statistics(
         &self,
-        _: &OptRelNodeTyp,
-        _: &Option<Value>,
-        _: &[ArcPredNode<OptRelNodeTyp>],
+        _: &DfNodeType,
+        _: &[ArcDfPredNode],
         _: &[&Statistics],
         _: Option<RelNodeContext>,
-        _: Option<&CascadesOptimizer<OptRelNodeTyp>>,
+        _: Option<&CascadesOptimizer<DfNodeType>>,
     ) -> Statistics {
         Statistics(ValueBag::empty().to_owned())
     }

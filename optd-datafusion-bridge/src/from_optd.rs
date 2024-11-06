@@ -20,14 +20,15 @@ use datafusion::{
     },
     scalar::ScalarValue,
 };
-use optd_core::rel_node::RelNodeMetaMap;
+use optd_core::nodes::{PlanNodeMetaMap, PlanNodeOrGroup};
 use optd_datafusion_repr::{
     plan_nodes::{
-        BetweenExpr, BinOpExpr, BinOpType, CastExpr, ColumnRefExpr, ConstantExpr, ConstantType,
-        Expr, ExprList, FuncExpr, FuncType, InListExpr, JoinType, LikeExpr, LogOpExpr, LogOpType,
-        OptRelNode, OptRelNodeRef, OptRelNodeTyp, PhysicalAgg, PhysicalEmptyRelation,
-        PhysicalFilter, PhysicalHashJoin, PhysicalLimit, PhysicalNestedLoopJoin,
-        PhysicalProjection, PhysicalScan, PhysicalSort, PlanNode, SortOrderExpr, SortOrderType,
+        ArcDfPlanNode, ArcDfPredNode, BetweenPred, BinOpPred, BinOpType, CastPred, ColumnRefPred,
+        ConstantPred, ConstantType, DfNodeType, DfPlanNode, DfPredType, DfReprPlanNode,
+        DfReprPredNode, FuncPred, FuncType, InListPred, JoinType, LikePred, ListPred, LogOpPred,
+        LogOpType, PhysicalAgg, PhysicalEmptyRelation, PhysicalFilter, PhysicalHashJoin,
+        PhysicalLimit, PhysicalNestedLoopJoin, PhysicalProjection, PhysicalScan, PhysicalSort,
+        SortOrderPred, SortOrderType,
     },
     properties::schema::Schema as OptdSchema,
 };
@@ -61,7 +62,7 @@ impl OptdPlanContext<'_> {
 
     fn conv_from_optd_sort_order_expr(
         &mut self,
-        sort_expr: SortOrderExpr,
+        sort_expr: SortOrderPred,
         context: &SchemaRef,
     ) -> Result<physical_expr::PhysicalSortExpr> {
         let expr = Self::conv_from_optd_expr(sort_expr.child(), context)?;
@@ -82,10 +83,10 @@ impl OptdPlanContext<'_> {
 
     fn conv_from_optd_agg_expr(
         &mut self,
-        expr: Expr,
+        expr: ArcDfPredNode,
         context: &SchemaRef,
     ) -> Result<Arc<dyn AggregateExpr>> {
-        let expr = FuncExpr::from_rel_node(expr.into_rel_node()).unwrap();
+        let expr = FuncPred::from_pred_node(expr).unwrap();
         let typ = expr.func();
         let FuncType::Agg(func) = typ else {
             unreachable!()
@@ -106,17 +107,21 @@ impl OptdPlanContext<'_> {
         )?)
     }
 
-    fn conv_from_optd_expr(expr: Expr, context: &SchemaRef) -> Result<Arc<dyn PhysicalExpr>> {
-        match expr.typ() {
-            OptRelNodeTyp::ColumnRef => {
-                let expr = ColumnRefExpr::from_rel_node(expr.into_rel_node()).unwrap();
+    fn conv_from_optd_expr(
+        expr: impl DfReprPredNode,
+        context: &SchemaRef,
+    ) -> Result<Arc<dyn PhysicalExpr>> {
+        let expr = expr.into_pred_node();
+        match expr.typ {
+            DfPredType::ColumnRef => {
+                let expr = ColumnRefPred::from_pred_node(expr).unwrap();
                 let idx = expr.index();
                 Ok(Arc::new(
                     datafusion::physical_plan::expressions::Column::new("<expr>", idx),
                 ))
             }
-            OptRelNodeTyp::Constant(typ) => {
-                let expr = ConstantExpr::from_rel_node(expr.into_rel_node()).unwrap();
+            DfPredType::Constant(typ) => {
+                let expr = ConstantPred::from_pred_node(expr).unwrap();
                 let value = expr.value();
                 let value = match typ {
                     ConstantType::Bool => ScalarValue::Boolean(Some(value.as_bool())),
@@ -138,14 +143,14 @@ impl OptdPlanContext<'_> {
                         ScalarValue::IntervalMonthDayNano(Some(value.as_i128()))
                     }
                     ConstantType::Utf8String => ScalarValue::Utf8(Some(value.as_str().to_string())),
-                    ConstantType::Any => unimplemented!(),
+                    ConstantType::Binary => unimplemented!(),
                 };
                 Ok(Arc::new(
                     datafusion::physical_plan::expressions::Literal::new(value),
                 ))
             }
-            OptRelNodeTyp::Func(_) => {
-                let expr = FuncExpr::from_rel_node(expr.into_rel_node()).unwrap();
+            DfPredType::Func(_) => {
+                let expr = FuncPred::from_pred_node(expr).unwrap();
                 let func = expr.func();
                 let args = expr
                     .children()
@@ -175,9 +180,8 @@ impl OptdPlanContext<'_> {
                     _ => unreachable!(),
                 }
             }
-            OptRelNodeTyp::Sort => unreachable!(),
-            OptRelNodeTyp::LogOp(typ) => {
-                let expr = LogOpExpr::from_rel_node(expr.into_rel_node()).unwrap();
+            DfPredType::LogOp(typ) => {
+                let expr = LogOpPred::from_pred_node(expr).unwrap();
                 let mut children = expr.children().into_iter();
                 let first_expr = Self::conv_from_optd_expr(children.next().unwrap(), context)?;
                 let op = match typ {
@@ -193,8 +197,8 @@ impl OptdPlanContext<'_> {
                     )
                 })
             }
-            OptRelNodeTyp::BinOp(op) => {
-                let expr = BinOpExpr::from_rel_node(expr.into_rel_node()).unwrap();
+            DfPredType::BinOp(op) => {
+                let expr = BinOpPred::from_pred_node(expr).unwrap();
                 let left = Self::conv_from_optd_expr(expr.left_child(), context)?;
                 let right = Self::conv_from_optd_expr(expr.right_child(), context)?;
                 let op = match op {
@@ -216,23 +220,25 @@ impl OptdPlanContext<'_> {
                     )) as Arc<dyn PhysicalExpr>,
                 )
             }
-            OptRelNodeTyp::Between => {
+            DfPredType::Between => {
                 // TODO: should we just convert between to x <= c1 and x >= c2?
-                let expr = BetweenExpr::from_rel_node(expr.into_rel_node()).unwrap();
+                let expr = BetweenPred::from_pred_node(expr).unwrap();
                 Self::conv_from_optd_expr(
-                    LogOpExpr::new(
+                    LogOpPred::new(
                         LogOpType::And,
-                        ExprList::new(vec![
-                            BinOpExpr::new(expr.child(), expr.lower(), BinOpType::Geq).into_expr(),
-                            BinOpExpr::new(expr.child(), expr.upper(), BinOpType::Leq).into_expr(),
-                        ]),
+                        vec![
+                            BinOpPred::new(expr.child(), expr.lower(), BinOpType::Geq)
+                                .into_pred_node(),
+                            BinOpPred::new(expr.child(), expr.upper(), BinOpType::Leq)
+                                .into_pred_node(),
+                        ],
                     )
-                    .into_expr(),
+                    .into_pred_node(),
                     context,
                 )
             }
-            OptRelNodeTyp::Cast => {
-                let expr = CastExpr::from_rel_node(expr.into_rel_node()).unwrap();
+            DfPredType::Cast => {
+                let expr = CastPred::from_pred_node(expr).unwrap();
                 let child = Self::conv_from_optd_expr(expr.child(), context)?;
                 Ok(Arc::new(
                     datafusion::physical_plan::expressions::CastExpr::new(
@@ -242,8 +248,8 @@ impl OptdPlanContext<'_> {
                     ),
                 ))
             }
-            OptRelNodeTyp::Like => {
-                let expr = LikeExpr::from_rel_node(expr.into_rel_node()).unwrap();
+            DfPredType::Like => {
+                let expr = LikePred::from_pred_node(expr).unwrap();
                 let child = Self::conv_from_optd_expr(expr.child(), context)?;
                 let pattern = Self::conv_from_optd_expr(expr.pattern(), context)?;
                 Ok(Arc::new(
@@ -255,8 +261,8 @@ impl OptdPlanContext<'_> {
                     ),
                 ))
             }
-            OptRelNodeTyp::InList => {
-                let expr = InListExpr::from_rel_node(expr.into_rel_node()).unwrap();
+            DfPredType::InList => {
+                let expr = InListPred::from_pred_node(expr).unwrap();
                 let child = Self::conv_from_optd_expr(expr.child(), context)?;
                 let list = expr
                     .list()
@@ -271,7 +277,7 @@ impl OptdPlanContext<'_> {
                     ),
                 ))
             }
-            _ => unimplemented!("{}", expr.into_rel_node()),
+            _ => unimplemented!("{:?}", expr), // TODO display?
         }
     }
 
@@ -279,7 +285,7 @@ impl OptdPlanContext<'_> {
     async fn conv_from_optd_projection(
         &mut self,
         node: PhysicalProjection,
-        meta: &RelNodeMetaMap,
+        meta: &PlanNodeMetaMap,
     ) -> Result<Arc<dyn ExecutionPlan + 'static>> {
         let input_exec = self.conv_from_optd_plan_node(node.child(), meta).await?;
         let physical_exprs = node
@@ -305,7 +311,7 @@ impl OptdPlanContext<'_> {
     async fn conv_from_optd_filter(
         &mut self,
         node: PhysicalFilter,
-        meta: &RelNodeMetaMap,
+        meta: &PlanNodeMetaMap,
     ) -> Result<Arc<dyn ExecutionPlan + 'static>> {
         let input_exec = self.conv_from_optd_plan_node(node.child(), meta).await?;
         let physical_expr = Self::conv_from_optd_expr(node.cond(), &input_exec.schema())?;
@@ -321,22 +327,22 @@ impl OptdPlanContext<'_> {
     async fn conv_from_optd_limit(
         &mut self,
         node: PhysicalLimit,
-        meta: &RelNodeMetaMap,
+        meta: &PlanNodeMetaMap,
     ) -> Result<Arc<dyn ExecutionPlan + 'static>> {
         let child = self.conv_from_optd_plan_node(node.child(), meta).await?;
 
         // Limit skip/fetch expressions are only allowed to be constant int
-        assert!(node.skip().typ() == OptRelNodeTyp::Constant(ConstantType::UInt64));
+        assert!(node.skip().typ == DfPredType::Constant(ConstantType::UInt64));
         // Conversion from u64 -> usize could fail (also the case in into_optd)
-        let skip = ConstantExpr::from_rel_node(node.skip().into_rel_node())
+        let skip = ConstantPred::from_pred_node(node.skip())
             .unwrap()
             .value()
             .as_u64()
             .try_into()
             .unwrap();
 
-        assert!(node.fetch().typ() == OptRelNodeTyp::Constant(ConstantType::UInt64));
-        let fetch = ConstantExpr::from_rel_node(node.fetch().into_rel_node())
+        assert!(node.fetch().typ == DfPredType::Constant(ConstantType::UInt64));
+        let fetch = ConstantPred::from_pred_node(node.fetch())
             .unwrap()
             .value()
             .as_u64();
@@ -357,7 +363,7 @@ impl OptdPlanContext<'_> {
     async fn conv_from_optd_sort(
         &mut self,
         node: PhysicalSort,
-        meta: &RelNodeMetaMap,
+        meta: &PlanNodeMetaMap,
     ) -> Result<Arc<dyn ExecutionPlan + 'static>> {
         let input_exec = self.conv_from_optd_plan_node(node.child(), meta).await?;
         let physical_exprs = node
@@ -366,7 +372,7 @@ impl OptdPlanContext<'_> {
             .into_iter()
             .map(|expr| {
                 self.conv_from_optd_sort_order_expr(
-                    SortOrderExpr::from_rel_node(expr.into_rel_node()).unwrap(),
+                    SortOrderPred::from_pred_node(expr).unwrap(),
                     &input_exec.schema(),
                 )
             })
@@ -383,7 +389,7 @@ impl OptdPlanContext<'_> {
     async fn conv_from_optd_agg(
         &mut self,
         node: PhysicalAgg,
-        meta: &RelNodeMetaMap,
+        meta: &PlanNodeMetaMap,
     ) -> Result<Arc<dyn ExecutionPlan + 'static>> {
         let input_exec = self.conv_from_optd_plan_node(node.child(), meta).await?;
         let agg_exprs = node
@@ -423,7 +429,7 @@ impl OptdPlanContext<'_> {
     async fn conv_from_optd_nested_loop_join(
         &mut self,
         node: PhysicalNestedLoopJoin,
-        meta: &RelNodeMetaMap,
+        meta: &PlanNodeMetaMap,
     ) -> Result<Arc<dyn ExecutionPlan + 'static>> {
         let left_exec = self.conv_from_optd_plan_node(node.left(), meta).await?;
         let right_exec = self.conv_from_optd_plan_node(node.right(), meta).await?;
@@ -480,7 +486,7 @@ impl OptdPlanContext<'_> {
     async fn conv_from_optd_hash_join(
         &mut self,
         node: PhysicalHashJoin,
-        meta: &RelNodeMetaMap,
+        meta: &PlanNodeMetaMap,
     ) -> Result<Arc<dyn ExecutionPlan + 'static>> {
         let left_exec = self.conv_from_optd_plan_node(node.left(), meta).await?;
         let right_exec = self.conv_from_optd_plan_node(node.right(), meta).await?;
@@ -489,14 +495,15 @@ impl OptdPlanContext<'_> {
             _ => unimplemented!(),
         };
         let left_exprs = node.left_keys().to_vec();
-        let right_exprs = node.right_keys().to_vec();
+        let right_exprs: Vec<Arc<optd_core::nodes::PredNode<DfNodeType>>> =
+            node.right_keys().to_vec();
         assert_eq!(left_exprs.len(), right_exprs.len());
         let mut on = Vec::with_capacity(left_exprs.len());
         for (left_expr, right_expr) in left_exprs.into_iter().zip(right_exprs.into_iter()) {
-            let Some(left_expr) = ColumnRefExpr::from_rel_node(left_expr.into_rel_node()) else {
+            let Some(left_expr) = ColumnRefPred::from_pred_node(left_expr) else {
                 bail!("left expr is not column ref")
             };
-            let Some(right_expr) = ColumnRefExpr::from_rel_node(right_expr.into_rel_node()) else {
+            let Some(right_expr) = ColumnRefPred::from_pred_node(right_expr) else {
                 bail!("right expr is not column ref")
             };
             on.push((
@@ -525,56 +532,57 @@ impl OptdPlanContext<'_> {
 
     async fn conv_from_optd_plan_node(
         &mut self,
-        node: PlanNode,
-        meta: &RelNodeMetaMap,
+        rel_node: PlanNodeOrGroup<DfNodeType>,
+        meta: &PlanNodeMetaMap,
     ) -> Result<Arc<dyn ExecutionPlan>> {
-        let rel_node = node.into_rel_node();
-
+        let PlanNodeOrGroup::PlanNode(rel_node) = rel_node else {
+            unreachable!("Tried to convert a non-fully materialized plan")
+        };
         let group_id = meta
             .get(&(rel_node.as_ref() as *const _ as usize))
             .expect("group id not found")
             .group_id;
         let rel_node_dbg = rel_node.clone();
         let bare = match &rel_node.typ {
-            OptRelNodeTyp::PhysicalScan => {
-                self.conv_from_optd_table_scan(PhysicalScan::from_rel_node(rel_node).unwrap())
+            DfNodeType::PhysicalScan => {
+                self.conv_from_optd_table_scan(PhysicalScan::from_plan_node(rel_node).unwrap())
                     .await?
             }
-            OptRelNodeTyp::PhysicalProjection => {
+            DfNodeType::PhysicalProjection => {
                 self.conv_from_optd_projection(
-                    PhysicalProjection::from_rel_node(rel_node).unwrap(),
+                    PhysicalProjection::from_plan_node(rel_node).unwrap(),
                     meta,
                 )
                 .await?
             }
-            OptRelNodeTyp::PhysicalFilter => {
-                self.conv_from_optd_filter(PhysicalFilter::from_rel_node(rel_node).unwrap(), meta)
+            DfNodeType::PhysicalFilter => {
+                self.conv_from_optd_filter(PhysicalFilter::from_plan_node(rel_node).unwrap(), meta)
                     .await?
             }
-            OptRelNodeTyp::PhysicalSort => {
-                self.conv_from_optd_sort(PhysicalSort::from_rel_node(rel_node).unwrap(), meta)
+            DfNodeType::PhysicalSort => {
+                self.conv_from_optd_sort(PhysicalSort::from_plan_node(rel_node).unwrap(), meta)
                     .await?
             }
-            OptRelNodeTyp::PhysicalAgg => {
-                self.conv_from_optd_agg(PhysicalAgg::from_rel_node(rel_node).unwrap(), meta)
+            DfNodeType::PhysicalAgg => {
+                self.conv_from_optd_agg(PhysicalAgg::from_plan_node(rel_node).unwrap(), meta)
                     .await?
             }
-            OptRelNodeTyp::PhysicalNestedLoopJoin(_) => {
+            DfNodeType::PhysicalNestedLoopJoin(_) => {
                 self.conv_from_optd_nested_loop_join(
-                    PhysicalNestedLoopJoin::from_rel_node(rel_node).unwrap(),
+                    PhysicalNestedLoopJoin::from_plan_node(rel_node).unwrap(),
                     meta,
                 )
                 .await?
             }
-            OptRelNodeTyp::PhysicalHashJoin(_) => {
+            DfNodeType::PhysicalHashJoin(_) => {
                 self.conv_from_optd_hash_join(
-                    PhysicalHashJoin::from_rel_node(rel_node).unwrap(),
+                    PhysicalHashJoin::from_plan_node(rel_node).unwrap(),
                     meta,
                 )
                 .await?
             }
-            OptRelNodeTyp::PhysicalEmptyRelation => {
-                let physical_node = PhysicalEmptyRelation::from_rel_node(rel_node).unwrap();
+            DfNodeType::PhysicalEmptyRelation => {
+                let physical_node = PhysicalEmptyRelation::from_plan_node(rel_node).unwrap();
                 let schema = physical_node.empty_relation_schema();
                 let datafusion_schema: Schema = from_optd_schema(schema);
                 Arc::new(datafusion::physical_plan::empty::EmptyExec::new(
@@ -582,8 +590,8 @@ impl OptdPlanContext<'_> {
                     Arc::new(datafusion_schema),
                 )) as Arc<dyn ExecutionPlan>
             }
-            OptRelNodeTyp::PhysicalLimit => {
-                self.conv_from_optd_limit(PhysicalLimit::from_rel_node(rel_node).unwrap(), meta)
+            DfNodeType::PhysicalLimit => {
+                self.conv_from_optd_limit(PhysicalLimit::from_plan_node(rel_node).unwrap(), meta)
                     .await?
             }
             typ => unimplemented!("{}", typ),
@@ -605,10 +613,10 @@ impl OptdPlanContext<'_> {
 
     pub async fn conv_from_optd(
         &mut self,
-        root_rel: OptRelNodeRef,
-        meta: RelNodeMetaMap,
+        root_rel: ArcDfPlanNode,
+        meta: PlanNodeMetaMap,
     ) -> Result<Arc<dyn ExecutionPlan>> {
-        self.conv_from_optd_plan_node(PlanNode::from_rel_node(root_rel).unwrap(), &meta)
+        self.conv_from_optd_plan_node(PlanNodeOrGroup::PlanNode(root_rel), &meta)
             .await
     }
 }

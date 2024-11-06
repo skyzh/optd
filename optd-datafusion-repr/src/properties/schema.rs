@@ -142,7 +142,7 @@ impl PropertyBuilder<DfNodeType> for SchemaPropertyBuilder {
                 group_by_schema
             }
             DfNodeType::Projection => Self::derive_for_predicate(predicates[0].clone()),
-            DfNodeType::Filter => children[0].clone(),
+            DfNodeType::Filter | DfNodeType::Limit | DfNodeType::Sort => children[0].clone(),
             DfNodeType::RawDepJoin(join_type)
             | DfNodeType::Join(join_type)
             | DfNodeType::DepJoin(join_type) => {

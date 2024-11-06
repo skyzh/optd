@@ -1,6 +1,6 @@
 use super::macros::define_plan_node;
 
-use super::{ArcDfPlanNode, ArcDfPredNode, DfNodeType, DfPlanNode, DfReprPlanNode};
+use super::{ArcDfPlanNode, ArcDfPredNode, DfNodeType, DfPlanNode, DfReprPlanNode, ListPred};
 
 #[derive(Clone, Debug)]
 pub struct LogicalProjection(pub ArcDfPlanNode);
@@ -10,7 +10,7 @@ define_plan_node!(
     Projection, [
         { 0, child: ArcDfPlanNode }
     ], [
-        { 0, exprs: ArcDfPredNode }
+        { 0, exprs: ListPred }
     ]
 );
 
@@ -22,6 +22,6 @@ define_plan_node!(
     PhysicalProjection, [
         { 0, child: ArcDfPlanNode }
     ], [
-        { 0, exprs: ArcDfPredNode }
+        { 0, exprs: ListPred }
     ]
 );

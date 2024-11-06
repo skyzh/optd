@@ -44,7 +44,10 @@ pub use predicates::{
 };
 use pretty_xmlish::{Pretty, PrettyConfig};
 
-use crate::properties::schema::{Schema, SchemaPropertyBuilder};
+use crate::{
+    explain::{explain_plan_node, explain_pred_node},
+    properties::schema::{Schema, SchemaPropertyBuilder},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DfPredType {
@@ -160,7 +163,7 @@ impl DfReprPlanNode for ArcDfPlanNode {
     }
 
     fn explain(&self, meta_map: Option<&PlanNodeMetaMap>) -> Pretty<'static> {
-        Pretty::Text("i'm a plan node!".into())
+        explain_plan_node(self.clone(), meta_map)
     }
 }
 
@@ -197,6 +200,6 @@ impl DfReprPredNode for ArcDfPredNode {
     }
 
     fn explain(&self, meta_map: Option<&PlanNodeMetaMap>) -> Pretty<'static> {
-        Pretty::Text("i'm a pred node!".into())
+        explain_pred_node(self.clone(), meta_map)
     }
 }

@@ -125,7 +125,7 @@ impl CostModel<DfNodeType, NaiveMemo<DfNodeType>> for DfCostModel {
         node: &DfNodeType,
         predicates: &[ArcDfPredNode],
         children: &[Option<&Statistics>],
-        children_cost: &[Cost],
+        _: &[Cost],
         _context: Option<RelNodeContext>,
         _optimizer: Option<&CascadesOptimizer<DfNodeType>>,
     ) -> Cost {

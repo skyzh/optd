@@ -8,33 +8,31 @@ use optd_core::{
     cascades::{CascadesOptimizer, GroupId, NaiveMemo, OptimizerProperties},
     cost::CostModel,
     heuristics::{ApplyOrder, HeuristicsOptimizer},
+    nodes::PlanNodeMetaMap,
     optimizer::Optimizer,
     property::PropertyBuilderAny,
-    rel_node::RelNodeMetaMap,
     rules::{Rule, RuleWrapper},
 };
 
-use plan_nodes::{OptRelNodeRef, OptRelNodeTyp};
+use plan_nodes::{ArcDfPlanNode, DfNodeType};
 use properties::{
     column_ref::ColumnRefPropertyBuilder,
     schema::{Catalog, SchemaPropertyBuilder},
 };
-use rules::{
-    EliminateDuplicatedAggExprRule, EliminateDuplicatedSortExprRule, EliminateFilterRule,
-    EliminateJoinRule, EliminateLimitRule, EliminateProjectRule, FilterAggTransposeRule,
-    FilterCrossJoinTransposeRule, FilterInnerJoinTransposeRule, FilterMergeRule,
-    FilterProjectTransposeRule, FilterSortTransposeRule, HashJoinRule, JoinAssocRule,
-    JoinCommuteRule, PhysicalConversionRule, ProjectFilterTransposeRule, ProjectMergeRule,
-    ProjectionPullUpJoin, SimplifyFilterRule, SimplifyJoinCondRule,
-};
+// use rules::{
+//     EliminateDuplicatedAggExprRule, EliminateDuplicatedSortExprRule, EliminateFilterRule,
+//     EliminateJoinRule, EliminateLimitRule, EliminateProjectRule, FilterAggTransposeRule,
+//     FilterCrossJoinTransposeRule, FilterInnerJoinTransposeRule, FilterMergeRule,
+//     FilterProjectTransposeRule, FilterSortTransposeRule, HashJoinRule, JoinAssocRule,
+//     JoinCommuteRule, PhysicalConversionRule, ProjectFilterTransposeRule, ProjectMergeRule,
+//     ProjectionPullUpJoin, SimplifyFilterRule, SimplifyJoinCondRule,
+//     DepInitialDistinct, DepJoinEliminate, DepJoinPastAgg, DepJoinPastFilter, DepJoinPastProj,
+// };
 
-pub use optd_core::rel_node::Value;
-
-use crate::rules::{
-    DepInitialDistinct, DepJoinEliminate, DepJoinPastAgg, DepJoinPastFilter, DepJoinPastProj,
-};
+pub use optd_core::nodes::Value;
 
 pub use memo_ext::{LogicalJoinOrder, MemoExt};
+use rules::PhysicalConversionRule;
 
 pub mod cost;
 mod explain;
@@ -46,8 +44,8 @@ pub mod rules;
 mod testing;
 
 pub struct DatafusionOptimizer {
-    heuristic_optimizer: HeuristicsOptimizer<OptRelNodeTyp>,
-    cascades_optimizer: CascadesOptimizer<OptRelNodeTyp>,
+    heuristic_optimizer: HeuristicsOptimizer<DfNodeType>,
+    cascades_optimizer: CascadesOptimizer<DfNodeType>,
     pub runtime_statistics: RuntimeAdaptionStorage,
     enable_adaptive: bool,
     enable_heuristic: bool,
@@ -70,78 +68,78 @@ impl DatafusionOptimizer {
         self.enable_heuristic
     }
 
-    pub fn optd_cascades_optimizer(&self) -> &CascadesOptimizer<OptRelNodeTyp> {
+    pub fn optd_cascades_optimizer(&self) -> &CascadesOptimizer<DfNodeType> {
         &self.cascades_optimizer
     }
 
-    pub fn optd_hueristic_optimizer(&self) -> &HeuristicsOptimizer<OptRelNodeTyp> {
+    pub fn optd_hueristic_optimizer(&self) -> &HeuristicsOptimizer<DfNodeType> {
         &self.heuristic_optimizer
     }
 
-    pub fn optd_optimizer_mut(&mut self) -> &mut CascadesOptimizer<OptRelNodeTyp> {
+    pub fn optd_optimizer_mut(&mut self) -> &mut CascadesOptimizer<DfNodeType> {
         &mut self.cascades_optimizer
     }
 
     pub fn default_heuristic_rules(
-    ) -> Vec<Arc<dyn Rule<OptRelNodeTyp, HeuristicsOptimizer<OptRelNodeTyp>>>> {
+    ) -> Vec<Arc<dyn Rule<DfNodeType, HeuristicsOptimizer<DfNodeType>>>> {
         vec![
-            Arc::new(EliminateProjectRule::new()),
-            Arc::new(SimplifyFilterRule::new()),
-            Arc::new(SimplifyJoinCondRule::new()),
-            Arc::new(EliminateFilterRule::new()),
-            Arc::new(EliminateJoinRule::new()),
-            Arc::new(EliminateLimitRule::new()),
-            Arc::new(EliminateDuplicatedSortExprRule::new()),
-            Arc::new(EliminateDuplicatedAggExprRule::new()),
-            Arc::new(DepJoinEliminate::new()),
-            Arc::new(DepInitialDistinct::new()),
-            Arc::new(DepJoinPastProj::new()),
-            Arc::new(DepJoinPastFilter::new()),
-            Arc::new(DepJoinPastAgg::new()),
-            Arc::new(ProjectMergeRule::new()),
-            Arc::new(FilterMergeRule::new()),
+            // Arc::new(EliminateProjectRule::new()),
+            // Arc::new(SimplifyFilterRule::new()),
+            // Arc::new(SimplifyJoinCondRule::new()),
+            // Arc::new(EliminateFilterRule::new()),
+            // Arc::new(EliminateJoinRule::new()),
+            // Arc::new(EliminateLimitRule::new()),
+            // Arc::new(EliminateDuplicatedSortExprRule::new()),
+            // Arc::new(EliminateDuplicatedAggExprRule::new()),
+            // Arc::new(DepJoinEliminate::new()),
+            // Arc::new(DepInitialDistinct::new()),
+            // Arc::new(DepJoinPastProj::new()),
+            // Arc::new(DepJoinPastFilter::new()),
+            // Arc::new(DepJoinPastAgg::new()),
+            // Arc::new(ProjectMergeRule::new()),
+            // Arc::new(FilterMergeRule::new()),
         ]
     }
 
     pub fn default_cascades_rules(
-    ) -> Vec<Arc<RuleWrapper<OptRelNodeTyp, CascadesOptimizer<OptRelNodeTyp>>>> {
+    ) -> Vec<Arc<RuleWrapper<DfNodeType, CascadesOptimizer<DfNodeType>>>> {
         let rules = PhysicalConversionRule::all_conversions();
         let mut rule_wrappers = vec![];
         for rule in rules {
             rule_wrappers.push(RuleWrapper::new_cascades(rule));
         }
-        // add all filter pushdown rules as heuristic rules
-        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-            FilterProjectTransposeRule::new(),
-        )));
-        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-            FilterCrossJoinTransposeRule::new(),
-        )));
-        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-            FilterInnerJoinTransposeRule::new(),
-        )));
-        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-            FilterSortTransposeRule::new(),
-        )));
-        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-            FilterAggTransposeRule::new(),
-        )));
-        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(HashJoinRule::new())));
-        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(JoinCommuteRule::new())));
-        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(JoinAssocRule::new())));
-        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-            ProjectionPullUpJoin::new(),
-        )));
-        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-            EliminateProjectRule::new(),
-        )));
-        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(ProjectMergeRule::new())));
-        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-            EliminateFilterRule::new(),
-        )));
-        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-            ProjectFilterTransposeRule::new(),
-        )));
+        // // add all filter pushdown rules as heuristic rules
+        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+        //     FilterProjectTransposeRule::new(),
+        // )));
+        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+        //     FilterCrossJoinTransposeRule::new(),
+        // )));
+        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+        //     FilterInnerJoinTransposeRule::new(),
+        // )));
+        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+        //     FilterSortTransposeRule::new(),
+        // )));
+        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+        //     FilterAggTransposeRule::new(),
+        // )));
+        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(HashJoinRule::new())));
+        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(JoinCommuteRule::new())));
+        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(JoinAssocRule::new())));
+        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+        //     ProjectionPullUpJoin::new(),
+        // )));
+        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+        //     EliminateProjectRule::new(),
+        // )));
+        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(ProjectMergeRule::new())));
+        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+        //     EliminateFilterRule::new(),
+        // )));
+        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+        //     ProjectFilterTransposeRule::new(),
+        // )));
         rule_wrappers
     }
 
@@ -155,12 +153,12 @@ impl DatafusionOptimizer {
     pub fn new_physical_with_cost_model(
         catalog: Arc<dyn Catalog>,
         enable_adaptive: bool,
-        cost_model: impl CostModel<OptRelNodeTyp, NaiveMemo<OptRelNodeTyp>>,
+        cost_model: impl CostModel<DfNodeType, NaiveMemo<DfNodeType>>,
         runtime_map: RuntimeAdaptionStorage,
     ) -> Self {
         let cascades_rules = Self::default_cascades_rules();
         let heuristic_rules = Self::default_heuristic_rules();
-        let property_builders: Arc<[Box<dyn PropertyBuilderAny<OptRelNodeTyp>>]> = Arc::new([
+        let property_builders: Arc<[Box<dyn PropertyBuilderAny<DfNodeType>>]> = Arc::new([
             Box::new(SchemaPropertyBuilder::new(catalog.clone())),
             Box::new(ColumnRefPropertyBuilder::new(catalog.clone())),
         ]);
@@ -196,20 +194,20 @@ impl DatafusionOptimizer {
         for rule in rules {
             rule_wrappers.push(RuleWrapper::new_cascades(rule));
         }
-        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(HashJoinRule::new())));
-        rule_wrappers.insert(
-            0,
-            RuleWrapper::new_cascades(Arc::new(JoinCommuteRule::new())),
-        );
-        rule_wrappers.insert(1, RuleWrapper::new_cascades(Arc::new(JoinAssocRule::new())));
-        rule_wrappers.insert(
-            2,
-            RuleWrapper::new_cascades(Arc::new(ProjectionPullUpJoin::new())),
-        );
-        rule_wrappers.insert(
-            3,
-            RuleWrapper::new_heuristic(Arc::new(EliminateFilterRule::new())),
-        );
+        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(HashJoinRule::new())));
+        // rule_wrappers.insert(
+        //     0,
+        //     RuleWrapper::new_cascades(Arc::new(JoinCommuteRule::new())),
+        // );
+        // rule_wrappers.insert(1, RuleWrapper::new_cascades(Arc::new(JoinAssocRule::new())));
+        // rule_wrappers.insert(
+        //     2,
+        //     RuleWrapper::new_cascades(Arc::new(ProjectionPullUpJoin::new())),
+        // );
+        // rule_wrappers.insert(
+        //     3,
+        //     RuleWrapper::new_heuristic(Arc::new(EliminateFilterRule::new())),
+        // );
 
         let cost_model = AdaptiveCostModel::new(1000);
         let runtime_statistics = cost_model.get_runtime_map();
@@ -234,7 +232,7 @@ impl DatafusionOptimizer {
         }
     }
 
-    pub fn heuristic_optimize(&mut self, root_rel: OptRelNodeRef) -> OptRelNodeRef {
+    pub fn heuristic_optimize(&mut self, root_rel: ArcDfPlanNode) -> ArcDfPlanNode {
         self.heuristic_optimizer
             .optimize(root_rel)
             .expect("heuristics returns error")
@@ -242,8 +240,8 @@ impl DatafusionOptimizer {
 
     pub fn cascades_optimize(
         &mut self,
-        root_rel: OptRelNodeRef,
-    ) -> Result<(GroupId, OptRelNodeRef, RelNodeMetaMap)> {
+        root_rel: ArcDfPlanNode,
+    ) -> Result<(GroupId, ArcDfPlanNode, PlanNodeMetaMap)> {
         if self.enable_adaptive {
             self.runtime_statistics.lock().unwrap().iter_cnt += 1;
             self.cascades_optimizer.step_clear_winner();

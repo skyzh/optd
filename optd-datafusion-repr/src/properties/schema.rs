@@ -1,10 +1,15 @@
+use datafusion_expr::EmptyRelation;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use optd_core::property::PropertyBuilder;
+use optd_core::{nodes::ArcPredNode, property::PropertyBuilder};
 
 use super::DEFAULT_NAME;
-use crate::plan_nodes::{ConstantType, EmptyRelationData, FuncType, OptRelNodeTyp};
+use crate::plan_nodes::{
+    decode_empty_relation_schema, ArcDfPredNode, ConstantPred, ConstantType, DfNodeType,
+    DfPredType, DfReprPredNode, FuncType,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Field {
@@ -18,7 +23,7 @@ impl Field {
     fn placeholder() -> Self {
         Self {
             name: DEFAULT_NAME.to_string(),
-            typ: ConstantType::Any,
+            typ: ConstantType::Binary,
             nullable: true,
         }
     }
@@ -55,27 +60,93 @@ impl SchemaPropertyBuilder {
     pub fn new(catalog: Arc<dyn Catalog>) -> Self {
         Self { catalog }
     }
+
+    fn derive_for_predicate(predicate: ArcDfPredNode) -> Schema {
+        let children = predicate
+            .children
+            .iter()
+            .map(|x| Self::derive_for_predicate(x.clone()))
+            .collect_vec();
+        let data = &predicate.data;
+        match &predicate.typ {
+            DfPredType::ColumnRef => {
+                let data_typ = ConstantType::get_data_type_from_value(data.as_ref().unwrap());
+                Schema {
+                    fields: vec![Field {
+                        name: DEFAULT_NAME.to_string(),
+                        typ: data_typ,
+                        nullable: true,
+                    }],
+                }
+            }
+            DfPredType::List => {
+                let mut fields = vec![];
+                for child in children {
+                    fields.extend(child.fields.clone());
+                }
+                Schema { fields }
+            }
+            DfPredType::LogOp(_) => Schema {
+                fields: vec![Field::placeholder(); children.len()],
+            },
+
+            DfPredType::Cast => Schema {
+                fields: children[0]
+                    .fields
+                    .iter()
+                    .map(|field| Field {
+                        typ: children[1].fields[0].typ,
+                        ..field.clone()
+                    })
+                    .collect(),
+            },
+            DfPredType::DataType(data_type) => Schema {
+                fields: vec![Field {
+                    // name and nullable are just placeholders since
+                    // they'll be overwritten by Cast
+                    name: DEFAULT_NAME.to_string(),
+                    typ: ConstantType::from_data_type(data_type.clone()),
+                    nullable: true,
+                }],
+            },
+            DfPredType::Func(FuncType::Agg(_)) => Schema {
+                // TODO: this is just a place holder now.
+                // The real type should be the column type.
+                fields: vec![Field::placeholder()],
+            },
+            _ => Schema { fields: vec![] },
+        }
+    }
 }
 
-impl PropertyBuilder<OptRelNodeTyp> for SchemaPropertyBuilder {
+impl PropertyBuilder<DfNodeType> for SchemaPropertyBuilder {
     type Prop = Schema;
 
     fn derive(
         &self,
-        typ: OptRelNodeTyp,
-        data: Option<optd_core::rel_node::Value>,
+        typ: DfNodeType,
+        predicates: &[ArcDfPredNode],
         children: &[&Self::Prop],
     ) -> Self::Prop {
         match typ {
-            OptRelNodeTyp::Scan => {
-                let name = data.unwrap().as_str().to_string();
-                self.catalog.get(&name)
+            DfNodeType::Scan => {
+                let table_name = ConstantPred::from_pred_node(predicates[0].clone())
+                    .unwrap()
+                    .value()
+                    .as_str();
+                self.catalog.get(&table_name)
             }
-            OptRelNodeTyp::Projection => children[1].clone(),
-            OptRelNodeTyp::Filter => children[0].clone(),
-            OptRelNodeTyp::RawDepJoin(join_type)
-            | OptRelNodeTyp::Join(join_type)
-            | OptRelNodeTyp::DepJoin(join_type) => {
+            DfNodeType::Agg => {
+                let mut group_by_schema = Self::derive_for_predicate(predicates[0].clone());
+                let agg_schema = Self::derive_for_predicate(predicates[1].clone());
+                group_by_schema.fields.extend(agg_schema.fields);
+                group_by_schema
+            }
+            DfNodeType::Projection => Self::derive_for_predicate(predicates[0].clone()),
+            DfNodeType::Filter => children[0].clone(),
+            DfNodeType::RawDepJoin(join_type)
+            | DfNodeType::Join(join_type)
+            | DfNodeType::DepJoin(join_type) => {
                 use crate::plan_nodes::JoinType::*;
                 match join_type {
                     Inner | LeftOuter | RightOuter | FullOuter | Cross => {
@@ -88,63 +159,8 @@ impl PropertyBuilder<OptRelNodeTyp> for SchemaPropertyBuilder {
                     RightSemi | RightAnti => children[1].clone(),
                 }
             }
-            OptRelNodeTyp::EmptyRelation => {
-                let data = data.unwrap().as_slice();
-                let empty_relation_data: EmptyRelationData =
-                    bincode::deserialize(data.as_ref()).unwrap();
-                empty_relation_data.schema
-            }
-            OptRelNodeTyp::ColumnRef => {
-                let data_typ = ConstantType::get_data_type_from_value(&data.unwrap());
-                Schema {
-                    fields: vec![Field {
-                        name: DEFAULT_NAME.to_string(),
-                        typ: data_typ,
-                        nullable: true,
-                    }],
-                }
-            }
-            OptRelNodeTyp::List => {
-                let mut fields = vec![];
-                for child in children {
-                    fields.extend(child.fields.clone());
-                }
-                Schema { fields }
-            }
-            OptRelNodeTyp::LogOp(_) => Schema {
-                fields: vec![Field::placeholder(); children.len()],
-            },
-            OptRelNodeTyp::Agg => {
-                let mut group_by_schema = children[1].clone();
-                let agg_schema = children[2].clone();
-                group_by_schema.fields.extend(agg_schema.fields);
-                group_by_schema
-            }
-            OptRelNodeTyp::Cast => Schema {
-                fields: children[0]
-                    .fields
-                    .iter()
-                    .map(|field| Field {
-                        typ: children[1].fields[0].typ,
-                        ..field.clone()
-                    })
-                    .collect(),
-            },
-            OptRelNodeTyp::DataType(data_type) => Schema {
-                fields: vec![Field {
-                    // name and nullable are just placeholders since
-                    // they'll be overwritten by Cast
-                    name: DEFAULT_NAME.to_string(),
-                    typ: ConstantType::from_data_type(data_type),
-                    nullable: true,
-                }],
-            },
-            OptRelNodeTyp::Func(FuncType::Agg(_)) => Schema {
-                // TODO: this is just a place holder now.
-                // The real type should be the column type.
-                fields: vec![Field::placeholder()],
-            },
-            _ => Schema { fields: vec![] },
+            DfNodeType::EmptyRelation => decode_empty_relation_schema(&predicates[1]),
+            x => unimplemented!("cannot derive schema property for {}", x),
         }
     }
 

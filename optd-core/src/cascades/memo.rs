@@ -260,9 +260,9 @@ pub struct NaiveMemo<T: NodeType> {
     groups: HashMap<GroupId, Group>,
     expr_id_to_expr_node: HashMap<ExprId, ArcMemoPlanNode<T>>,
 
-    // Predicate stuff. We don't find logically equivalent predicates. Duplicate predicates
-    // will have different IDs.
+    // Predicate stuff.
     pred_id_to_pred_node: HashMap<PredId, ArcPredNode<T>>,
+    pred_node_to_pred_id: HashMap<ArcPredNode<T>, PredId>,
 
     // Internal states.
     group_expr_counter: usize,
@@ -314,6 +314,10 @@ impl<T: NodeType> Memo<T> for NaiveMemo<T> {
 
     fn add_new_pred(&mut self, pred_node: ArcPredNode<T>) -> PredId {
         let pred_id = self.next_pred_id();
+        if let Some(id) = self.pred_node_to_pred_id.get(&pred_node) {
+            return *id;
+        }
+        self.pred_node_to_pred_id.insert(pred_node.clone(), pred_id);
         self.pred_id_to_pred_node.insert(pred_id, pred_node);
         pred_id
     }
@@ -382,6 +386,7 @@ impl<T: NodeType> NaiveMemo<T> {
             expr_id_to_expr_node: HashMap::new(),
             expr_node_to_expr_id: HashMap::new(),
             pred_id_to_pred_node: HashMap::new(),
+            pred_node_to_pred_id: HashMap::new(),
             groups: HashMap::new(),
             group_expr_counter: 0,
             merged_group_mapping: HashMap::new(),
@@ -593,7 +598,11 @@ impl<T: NodeType> NaiveMemo<T> {
         let memo_node = MemoPlanNode {
             typ: rel_node.typ.clone(),
             children: children_group_ids,
-            predicates: Vec::new(), /* TODO: refactor */
+            predicates: rel_node
+                .predicates
+                .iter()
+                .map(|x| self.pred_node_to_pred_id[x])
+                .collect(),
         };
         let Some(&expr_id) = self.expr_node_to_expr_id.get(&memo_node) else {
             unreachable!("not found {}", memo_node)
@@ -673,17 +682,16 @@ mod tests {
 
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     enum MemoTestRelTyp {
-        List,
         Join,
         Project,
         Scan,
-        Expr,
     }
 
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     enum MemoTestPredTyp {
         List,
         Expr,
+        TableName,
     }
 
     impl std::fmt::Display for MemoTestRelTyp {
@@ -706,8 +714,6 @@ mod tests {
         }
     }
 
-    type MemoTestRelNode = PlanNodeOrGroup<MemoTestRelTyp>;
-
     fn join(
         left: impl Into<PlanNodeOrGroup<MemoTestRelTyp>>,
         right: impl Into<PlanNodeOrGroup<MemoTestRelTyp>>,
@@ -724,7 +730,15 @@ mod tests {
         Arc::new(PlanNode {
             typ: MemoTestRelTyp::Scan,
             children: vec![],
-            predicates: Vec::new(), /* TODO: refactor */
+            predicates: vec![table_name(table)],
+        })
+    }
+
+    fn table_name(table: &str) -> ArcPredNode<MemoTestRelTyp> {
+        Arc::new(PredNode {
+            typ: MemoTestPredTyp::TableName,
+            children: vec![],
+            data: Some(Value::String(table.to_string().into())),
         })
     }
 
@@ -742,7 +756,7 @@ mod tests {
     fn list(items: Vec<ArcPredNode<MemoTestRelTyp>>) -> ArcPredNode<MemoTestRelTyp> {
         Arc::new(PredNode {
             typ: MemoTestPredTyp::List,
-            children: vec![],
+            children: items,
             data: None,
         })
     }
@@ -763,7 +777,9 @@ mod tests {
     fn add_predicate() {
         let mut memo = NaiveMemo::<MemoTestRelTyp>::new(Arc::new([]));
         let pred_node = list(vec![expr(Value::Int32(233))]);
-        memo.add_new_pred(pred_node);
+        let p1 = memo.add_new_pred(pred_node.clone());
+        let p2 = memo.add_new_pred(pred_node.clone());
+        assert_eq!(p1, p2);
     }
 
     #[test]
@@ -837,32 +853,32 @@ mod tests {
         assert_eq!(group_1, group_2);
     }
 
-    // #[test]
-    // fn group_merge_5() {
-    //     let mut memo = NaiveMemo::new(Arc::new([]));
-    //     let expr1 = project(
-    //         project(scan("t1"), list(vec![expr(Value::Int64(1))])),
-    //         list(vec![expr(Value::Int64(2))]),
-    //     );
-    //     let expr2 =project(
-    //         project(scan("t1-alias"), list(vec![expr(Value::Int64(1))])),
-    //         list(vec![expr(Value::Int64(2))]),
-    //     );
-    //     let (_, expr1_id) = memo.add_new_expr(expr1.clone());
-    //     let (_, expr2_id) = memo.add_new_expr(expr2.clone());
+    #[test]
+    fn group_merge_5() {
+        let mut memo = NaiveMemo::new(Arc::new([]));
+        let expr1 = project(
+            project(scan("t1"), list(vec![expr(Value::Int64(1))])),
+            list(vec![expr(Value::Int64(2))]),
+        );
+        let expr2 = project(
+            project(scan("t1-alias"), list(vec![expr(Value::Int64(1))])),
+            list(vec![expr(Value::Int64(2))]),
+        );
+        let (_, expr1_id) = memo.add_new_expr(expr1.clone());
+        let (_, expr2_id) = memo.add_new_expr(expr2.clone());
 
-    //     // experimenting with group id in expr (i.e., when apply rules)
-    //     let (scan_t1, _) = memo.get_expr_info(scan("t1").into());
-    //     let (expr_middle_proj, _) = memo.get_expr_info(list(vec![expr(Value::Int64(1))]));
-    //     let proj_binding = project(group(scan_t1), group(expr_middle_proj));
-    //     let middle_proj_2 = memo.get_expr_memoed(expr2_id).children[0];
+        // experimenting with group id in expr (i.e., when apply rules)
+        let (scan_t1, _) = memo.get_expr_info(scan("t1").into());
+        let pred = list(vec![expr(Value::Int64(1))]);
+        let proj_binding = project(group(scan_t1), pred);
+        let middle_proj_2 = memo.get_expr_memoed(expr2_id).children[0];
 
-    //     memo.add_expr_to_group(proj_binding.into(), middle_proj_2);
+        memo.add_expr_to_group(proj_binding.into(), middle_proj_2);
 
-    //     assert_eq!(
-    //         memo.get_expr_memoed(expr1_id),
-    //         memo.get_expr_memoed(expr2_id)
-    //     ); // these two expressions are merged
-    //     assert_eq!(memo.get_expr_info(expr1), memo.get_expr_info(expr2));
-    // }
+        assert_eq!(
+            memo.get_expr_memoed(expr1_id),
+            memo.get_expr_memoed(expr2_id)
+        ); // these two expressions are merged
+        assert_eq!(memo.get_expr_info(expr1), memo.get_expr_info(expr2));
+    }
 }

@@ -1,30 +1,30 @@
-use super::expr::ExprList;
 use super::macros::define_plan_node;
+use super::predicates::ListPred;
 
-use super::{OptRelNode, OptRelNodeRef, OptRelNodeTyp, PlanNode};
+use super::{ArcDfPlanNode, DfNodeType, DfPlanNode, DfReprPlanNode, DfReprPredNode};
 
 #[derive(Clone, Debug)]
-pub struct LogicalAgg(pub PlanNode);
+pub struct LogicalAgg(pub ArcDfPlanNode);
 
 define_plan_node!(
-    LogicalAgg : PlanNode,
+    LogicalAgg : DfPlanNode,
     Agg, [
-        { 0, child: PlanNode }
+        { 0, child: ArcDfPlanNode }
     ], [
-        { 1, exprs: ExprList },
-        { 2, groups: ExprList }
+        { 0, exprs: ListPred },
+        { 1, groups: ListPred }
     ]
 );
 
 #[derive(Clone, Debug)]
-pub struct PhysicalAgg(pub PlanNode);
+pub struct PhysicalAgg(pub ArcDfPlanNode);
 
 define_plan_node!(
-    PhysicalAgg : PlanNode,
+    PhysicalAgg : DfPlanNode,
     PhysicalAgg, [
-        { 0, child: PlanNode }
+        { 0, child: ArcDfPlanNode }
     ], [
-        { 1, aggrs: ExprList },
-        { 2, groups: ExprList }
+        { 0, aggrs: ListPred },
+        { 1, groups: ListPred }
     ]
 );

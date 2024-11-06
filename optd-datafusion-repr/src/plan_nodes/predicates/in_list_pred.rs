@@ -2,7 +2,8 @@ use optd_core::nodes::{PlanNode, PlanNodeMetaMap, Value};
 use pretty_xmlish::Pretty;
 
 use crate::plan_nodes::{
-    ArcDfPlanNode, ArcDfPredNode, DfNodeType, DfPredNode, DfPredType, DfReprPlanNode, DfReprPredNode
+    ArcDfPlanNode, ArcDfPredNode, DfNodeType, DfPredNode, DfPredType, DfReprPlanNode,
+    DfReprPredNode,
 };
 
 use super::ListPred;
@@ -32,7 +33,7 @@ impl InListPred {
 
     /// `true` for `NOT IN`.
     pub fn negated(&self) -> bool {
-        self.0 .data.as_ref().unwrap().as_bool()
+        self.0.data.as_ref().unwrap().as_bool()
     }
 }
 

@@ -49,8 +49,7 @@ impl LogOpPred {
         for child in expr_list.to_vec() {
             if let DfPredType::LogOp(child_op) = child.typ {
                 if child_op == op {
-                    let child_log_op_expr =
-                        LogOpPred::from_pred_node(child).unwrap();
+                    let child_log_op_expr = LogOpPred::from_pred_node(child).unwrap();
                     new_expr_list.extend(child_log_op_expr.children().to_vec());
                     continue;
                 }
@@ -61,7 +60,7 @@ impl LogOpPred {
     }
 
     pub fn children(&self) -> Vec<ArcDfPredNode> {
-        self.0.children
+        self.0.children.clone()
     }
 
     pub fn child(&self, idx: usize) -> ArcDfPredNode {

@@ -22,7 +22,7 @@ impl ExternColumnRefPred {
     }
 
     fn get_data_usize(&self) -> usize {
-        self.0 .data.as_ref().unwrap().as_u64() as usize
+        self.0.data.as_ref().unwrap().as_u64() as usize
     }
 
     /// Gets the column index.

@@ -1,32 +1,35 @@
 use pretty_xmlish::Pretty;
 
 use bincode;
-use optd_core::rel_node::{RelNode, RelNodeMetaMap, Value};
+use optd_core::nodes::{PlanNode, PlanNodeMetaMap, Value};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::explain::Insertable;
 
-use super::{replace_typ, OptRelNode, OptRelNodeRef, OptRelNodeTyp, PlanNode};
+use super::{
+    ArcDfPlanNode, ArcDfPredNode, ConstantPred, DfNodeType, DfPlanNode, DfReprPlanNode,
+    DfReprPredNode,
+};
 
 use crate::properties::schema::Schema;
 
 #[derive(Clone, Debug)]
-pub struct LogicalEmptyRelation(pub PlanNode);
+pub struct LogicalEmptyRelation(pub ArcDfPlanNode);
 
-impl OptRelNode for LogicalEmptyRelation {
-    fn into_rel_node(self) -> OptRelNodeRef {
-        self.0.into_rel_node()
+impl DfReprPlanNode for LogicalEmptyRelation {
+    fn into_plan_node(self) -> ArcDfPlanNode {
+        self.0
     }
 
-    fn from_rel_node(rel_node: OptRelNodeRef) -> Option<Self> {
-        if rel_node.typ != OptRelNodeTyp::EmptyRelation {
+    fn from_plan_node(plan_node: ArcDfPlanNode) -> Option<Self> {
+        if plan_node.typ != DfNodeType::EmptyRelation {
             return None;
         }
-        PlanNode::from_rel_node(rel_node).map(Self)
+        Some(Self(plan_node))
     }
 
-    fn dispatch_explain(&self, _meta_map: Option<&RelNodeMetaMap>) -> Pretty<'static> {
+    fn explain(&self, _meta_map: Option<&PlanNodeMetaMap>) -> Pretty<'static> {
         Pretty::childless_record(
             "LogicalEmptyRelation",
             vec![("produce_one_row", self.produce_one_row().to_string().into())],
@@ -34,69 +37,50 @@ impl OptRelNode for LogicalEmptyRelation {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct EmptyRelationData {
-    pub produce_one_row: bool,
-    pub schema: Schema,
-}
-
 impl LogicalEmptyRelation {
     pub fn new(produce_one_row: bool, schema: Schema) -> LogicalEmptyRelation {
-        let data = EmptyRelationData {
-            produce_one_row,
-            schema,
-        };
-        let serialized_data: Arc<[u8]> = bincode::serialize(&data).unwrap().into_iter().collect();
-        LogicalEmptyRelation(PlanNode(
-            RelNode {
-                typ: OptRelNodeTyp::EmptyRelation,
+        let serialized_data: Arc<[u8]> = bincode::serialize(&schema).unwrap().into_iter().collect();
+        LogicalEmptyRelation(
+            DfPlanNode {
+                typ: DfNodeType::EmptyRelation,
                 children: vec![],
-                data: Some(Value::Serialized(serialized_data)),
-                predicates: Vec::new(), /* TODO: refactor */
+                predicates: vec![
+                    ConstantPred::bool(produce_one_row).into_pred_node(),
+                    ConstantPred::serialized(serialized_data).into_pred_node(),
+                ],
             }
             .into(),
-        ))
-    }
-
-    fn get_data(&self) -> EmptyRelationData {
-        let serialized_data = self
-            .clone()
-            .into_rel_node()
-            .data
-            .as_ref()
-            .unwrap()
-            .as_slice();
-
-        bincode::deserialize(serialized_data.as_ref()).unwrap()
-    }
-
-    pub fn empty_relation_schema(&self) -> Schema {
-        let data = self.get_data();
-        data.schema
+        )
     }
 
     pub fn produce_one_row(&self) -> bool {
-        let data = self.get_data();
-        data.produce_one_row
+        ConstantPred::from_pred_node(self.0.predicates[0].clone())
+            .unwrap()
+            .value()
+            .as_bool()
+    }
+
+    pub fn empty_relation_schema(&self) -> Schema {
+        decode_empty_relation_schema(&self.0.predicates[1])
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct PhysicalEmptyRelation(pub PlanNode);
+pub struct PhysicalEmptyRelation(pub ArcDfPlanNode);
 
-impl OptRelNode for PhysicalEmptyRelation {
-    fn into_rel_node(self) -> OptRelNodeRef {
-        replace_typ(self.0.into_rel_node(), OptRelNodeTyp::PhysicalEmptyRelation)
+impl DfReprPlanNode for PhysicalEmptyRelation {
+    fn into_plan_node(self) -> ArcDfPlanNode {
+        self.0
     }
 
-    fn from_rel_node(rel_node: OptRelNodeRef) -> Option<Self> {
-        if rel_node.typ != OptRelNodeTyp::PhysicalEmptyRelation {
+    fn from_plan_node(plan_node: ArcDfPlanNode) -> Option<Self> {
+        if plan_node.typ != DfNodeType::PhysicalEmptyRelation {
             return None;
         }
-        PlanNode::from_rel_node(rel_node).map(Self)
+        Some(Self(plan_node))
     }
 
-    fn dispatch_explain(&self, meta_map: Option<&RelNodeMetaMap>) -> Pretty<'static> {
+    fn explain(&self, meta_map: Option<&PlanNodeMetaMap>) -> Pretty<'static> {
         let mut fields = vec![("produce_one_row", self.produce_one_row().to_string().into())];
         if let Some(meta_map) = meta_map {
             fields = fields.with_meta(self.0.get_meta(meta_map));
@@ -106,29 +90,22 @@ impl OptRelNode for PhysicalEmptyRelation {
 }
 
 impl PhysicalEmptyRelation {
-    pub fn new(node: PlanNode) -> PhysicalEmptyRelation {
-        Self(node)
-    }
-
-    fn get_data(&self) -> EmptyRelationData {
-        let serialized_data = self
-            .clone()
-            .into_rel_node()
-            .data
-            .as_ref()
-            .unwrap()
-            .as_slice();
-
-        bincode::deserialize(serialized_data.as_ref()).unwrap()
-    }
-
     pub fn produce_one_row(&self) -> bool {
-        let data = self.get_data();
-        data.produce_one_row
+        ConstantPred::from_pred_node(self.0.predicates[0].clone())
+            .unwrap()
+            .value()
+            .as_bool()
     }
 
     pub fn empty_relation_schema(&self) -> Schema {
-        let data = self.get_data();
-        data.schema
+        decode_empty_relation_schema(&self.0.predicates[1])
     }
+}
+
+pub fn decode_empty_relation_schema(pred: &ArcDfPredNode) -> Schema {
+    let serialized_data = ConstantPred::from_pred_node(pred.clone())
+        .unwrap()
+        .value()
+        .as_slice();
+    bincode::deserialize(serialized_data.as_ref()).unwrap()
 }

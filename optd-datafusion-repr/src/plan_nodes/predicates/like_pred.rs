@@ -38,14 +38,14 @@ impl LikePred {
 
     /// `true` for `NOT LIKE`.
     pub fn negated(&self) -> bool {
-        match self.0 .data.as_ref().unwrap() {
+        match self.0.data.as_ref().unwrap() {
             Value::Serialized(data) => data[0] != 0,
             _ => panic!("not a serialized value"),
         }
     }
 
     pub fn case_insensitive(&self) -> bool {
-        match self.0 .data.as_ref().unwrap() {
+        match self.0.data.as_ref().unwrap() {
             Value::Serialized(data) => data[1] != 0,
             _ => panic!("not a serialized value"),
         }

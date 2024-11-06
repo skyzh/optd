@@ -27,7 +27,7 @@ pub struct RelMemoNode<T: NodeType> {
 }
 
 impl<T: NodeType> RelMemoNode<T> {
-    pub fn into_rel_node(self) -> PlanNode<T> {
+    pub fn into_plan_node_no_predicates(self) -> PlanNode<T> {
         PlanNode {
             typ: self.typ,
             children: self
@@ -35,10 +35,7 @@ impl<T: NodeType> RelMemoNode<T> {
                 .into_iter()
                 .map(|x| PlanNodeOrGroup::Group(x))
                 .collect(),
-            predicates: {
-                assert!(self.predicates.is_empty());
-                Vec::new()
-            },
+            predicates: Vec::new(),
         }
     }
 }

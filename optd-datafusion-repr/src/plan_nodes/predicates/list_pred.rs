@@ -12,11 +12,14 @@ pub struct ListPred(pub ArcDfPredNode);
 
 impl ListPred {
     pub fn new(preds: Vec<ArcDfPredNode>) -> Self {
-        ListPred(DfPredNode {
-            typ: DfPredType::List,
-            children: preds,
-            data: None,
-        }.into())
+        ListPred(
+            DfPredNode {
+                typ: DfPredType::List,
+                children: preds,
+                data: None,
+            }
+            .into(),
+        )
     }
 
     /// Gets number of expressions in the list
@@ -33,7 +36,7 @@ impl ListPred {
     }
 
     pub fn to_vec(&self) -> Vec<ArcDfPredNode> {
-        self.0.children
+        self.0.children.clone()
     }
 }
 

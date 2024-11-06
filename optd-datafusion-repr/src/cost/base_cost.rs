@@ -44,7 +44,7 @@ impl DfCostModel {
     }
 
     fn get_row_cnt(&self, predicates: &[ArcDfPredNode]) -> f64 {
-        let table_name = ConstantPred::from_pred_node(predicates[0])
+        let table_name = ConstantPred::from_pred_node(predicates[0].clone())
             .unwrap()
             .value()
             .as_str();

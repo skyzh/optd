@@ -443,7 +443,8 @@ impl PropertyBuilder<DfNodeType> for ColumnRefPropertyBuilder {
                         // Merge the equal columns in the join condition into the those from the children.
                         if let Some(SemanticCorrelation {
                             eq_columns: EqColumns::EqColumnIdxPairs(pairs),
-                        }) = &children[2].output_correlation
+                        }) =
+                            &Self::derive_for_predicate(predicates[0].clone()).output_correlation
                         {
                             for (l_col_idx, r_col_idx) in pairs {
                                 let l_col_ref = &column_refs[*l_col_idx];
@@ -469,19 +470,22 @@ impl PropertyBuilder<DfNodeType> for ColumnRefPropertyBuilder {
             DfNodeType::Agg => {
                 let child = children[0];
                 // Group by columns first.
-                let mut group_by_col_refs: Vec<_> = children[2]
-                    .column_refs
-                    .iter()
-                    .map(|p| {
-                        let col_idx = match p {
-                            ColumnRef::ChildColumnRef { col_idx } => *col_idx,
-                            _ => panic!("group by expr must be ColumnRef"),
-                        };
-                        child.column_refs[col_idx].clone()
-                    })
-                    .collect();
+                let mut group_by_col_refs: Vec<_> =
+                    Self::derive_for_predicate(predicates[1].clone())
+                        .column_refs
+                        .iter()
+                        .map(|p| {
+                            let col_idx = match p {
+                                ColumnRef::ChildColumnRef { col_idx } => *col_idx,
+                                _ => panic!("group by expr must be ColumnRef"),
+                            };
+                            child.column_refs[col_idx].clone()
+                        })
+                        .collect();
                 // Then the aggregate expressions. These columns, (e.g. SUM, COUNT, etc.) are derived columns.
-                let agg_expr_cnt = children[1].column_refs.len();
+                let agg_expr_cnt = Self::derive_for_predicate(predicates[0].clone())
+                    .column_refs
+                    .len();
                 group_by_col_refs.extend((0..agg_expr_cnt).map(|_| ColumnRef::Derived));
                 // Aggregation clears all semantic correlations.
                 GroupColumnRefs::new(group_by_col_refs, None)

@@ -14,7 +14,7 @@ use optd_core::{
     rules::{Rule, RuleWrapper},
 };
 
-use plan_nodes::{ArcDfPlanNode, DfNodeType, dispatch_plan_explain_to_string};
+use plan_nodes::{dispatch_plan_explain_to_string, ArcDfPlanNode, DfNodeType};
 use properties::{
     column_ref::ColumnRefPropertyBuilder,
     schema::{Catalog, SchemaPropertyBuilder},
@@ -160,7 +160,7 @@ impl DatafusionOptimizer {
         let heuristic_rules = Self::default_heuristic_rules();
         let property_builders: Arc<[Box<dyn PropertyBuilderAny<DfNodeType>>]> = Arc::new([
             Box::new(SchemaPropertyBuilder::new(catalog.clone())),
-            // Box::new(ColumnRefPropertyBuilder::new(catalog.clone())),
+            Box::new(ColumnRefPropertyBuilder::new(catalog.clone())),
         ]);
         Self {
             runtime_statistics: runtime_map,
@@ -169,7 +169,7 @@ impl DatafusionOptimizer {
                 Box::new(cost_model),
                 vec![
                     Box::new(SchemaPropertyBuilder::new(catalog.clone())),
-                    // Box::new(ColumnRefPropertyBuilder::new(catalog.clone())),
+                    Box::new(ColumnRefPropertyBuilder::new(catalog.clone())),
                 ],
                 OptimizerProperties {
                     panic_on_budget: false,

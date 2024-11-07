@@ -6,7 +6,7 @@ mod joins;
 mod macros;
 mod physical;
 mod project_transpose;
-// mod subquery;
+mod subquery;
 
 pub use eliminate_duplicated_expr::*;
 pub use eliminate_limit::*;
@@ -15,6 +15,6 @@ pub use filter_pushdown::*;
 pub use joins::*;
 pub use physical::PhysicalConversionRule;
 pub use project_transpose::*;
-// pub use subquery::{
-//     DepInitialDistinct, DepJoinEliminate, DepJoinPastAgg, DepJoinPastFilter, DepJoinPastProj,
-// };
+pub use subquery::{
+    DepInitialDistinct, DepJoinEliminate, DepJoinPastAgg, DepJoinPastFilter, DepJoinPastProj,
+};

@@ -783,20 +783,14 @@ mod tests {
     #[test]
     fn group_merge_2() {
         let mut memo = NaiveMemo::new(Arc::new([]));
-        let (group_id_1, _) = memo.add_new_expr(
-            project(
-                join(scan("t1"), scan("t2"), expr(Value::Bool(true))),
-                list(vec![expr(Value::Int64(1))]),
-            )
-            .into(),
-        );
-        let (group_id_2, _) = memo.add_new_expr(
-            project(
-                join(scan("t1"), scan("t2"), expr(Value::Bool(true))),
-                list(vec![expr(Value::Int64(1))]),
-            )
-            .into(),
-        );
+        let (group_id_1, _) = memo.add_new_expr(project(
+            join(scan("t1"), scan("t2"), expr(Value::Bool(true))),
+            list(vec![expr(Value::Int64(1))]),
+        ));
+        let (group_id_2, _) = memo.add_new_expr(project(
+            join(scan("t1"), scan("t2"), expr(Value::Bool(true))),
+            list(vec![expr(Value::Int64(1))]),
+        ));
         assert_eq!(group_id_1, group_id_2);
     }
 
@@ -808,7 +802,7 @@ mod tests {
         memo.add_new_expr(expr1.clone());
         memo.add_new_expr(expr2.clone());
         // merging two child groups causes parent to merge
-        let (group_id_expr, _) = memo.get_expr_info(scan("t1").into());
+        let (group_id_expr, _) = memo.get_expr_info(scan("t1"));
         memo.add_expr_to_group(scan("t1-alias").into(), group_id_expr);
         let (group_1, _) = memo.get_expr_info(expr1);
         let (group_2, _) = memo.get_expr_info(expr2);
@@ -829,7 +823,7 @@ mod tests {
         memo.add_new_expr(expr1.clone());
         memo.add_new_expr(expr2.clone());
         // merge two child groups, cascading merge
-        let (group_id_expr, _) = memo.get_expr_info(scan("t1").into());
+        let (group_id_expr, _) = memo.get_expr_info(scan("t1"));
         memo.add_expr_to_group(scan("t1-alias").into(), group_id_expr);
         let (group_1, _) = memo.get_expr_info(expr1.clone());
         let (group_2, _) = memo.get_expr_info(expr2.clone());
@@ -854,7 +848,7 @@ mod tests {
         let (_, expr2_id) = memo.add_new_expr(expr2.clone());
 
         // experimenting with group id in expr (i.e., when apply rules)
-        let (scan_t1, _) = memo.get_expr_info(scan("t1").into());
+        let (scan_t1, _) = memo.get_expr_info(scan("t1"));
         let pred = list(vec![expr(Value::Int64(1))]);
         let proj_binding = project(group(scan_t1), pred);
         let middle_proj_2 = memo.get_expr_memoed(expr2_id).children[0];

@@ -125,13 +125,13 @@ LogicalSort
     └── LogicalJoin
         ├── join_type: Inner
         ├── cond:Gt
-        │   ├── Cast { cast_to: Decimal128(38, 15), expr: #1 }
+        │   ├── Cast { cast_to: Decimal128(38, 15), child: #1 }
         │   └── #2
         ├── LogicalAgg
         │   ├── exprs:Agg(Sum)
         │   │   └── Mul
         │   │       ├── #2
-        │   │       └── Cast { cast_to: Decimal128(10, 0), expr: #1 }
+        │   │       └── Cast { cast_to: Decimal128(10, 0), child: #1 }
         │   ├── groups: [ #0 ]
         │   └── LogicalProjection { exprs: [ #0, #1, #2 ] }
         │       └── LogicalJoin
@@ -159,15 +159,15 @@ LogicalSort
         └── LogicalProjection
             ├── exprs:Cast
             │   ├── cast_to: Decimal128(38, 15)
-            │   ├── expr:Mul
-            │   │   ├── Cast { cast_to: Float64, expr: #0 }
+            │   ├── child:Mul
+            │   │   ├── Cast { cast_to: Float64, child: #0 }
             │   │   └── 0.0001(float)
 
             └── LogicalAgg
                 ├── exprs:Agg(Sum)
                 │   └── Mul
                 │       ├── #1
-                │       └── Cast { cast_to: Decimal128(10, 0), expr: #0 }
+                │       └── Cast { cast_to: Decimal128(10, 0), child: #0 }
                 ├── groups: []
                 └── LogicalProjection { exprs: [ #0, #1 ] }
                     └── LogicalJoin
@@ -198,36 +198,36 @@ PhysicalSort
 └── PhysicalNestedLoopJoin
     ├── join_type: Inner
     ├── cond:Gt
-    │   ├── Cast { cast_to: Decimal128(38, 15), expr: #1 }
+    │   ├── Cast { cast_to: Decimal128(38, 15), child: #1 }
     │   └── #0
     ├── PhysicalAgg
     │   ├── aggrs:Agg(Sum)
     │   │   └── Mul
     │   │       ├── #2
-    │   │       └── Cast { cast_to: Decimal128(10, 0), expr: #1 }
+    │   │       └── Cast { cast_to: Decimal128(10, 0), child: #1 }
     │   ├── groups: [ #0 ]
     │   └── PhysicalProjection { exprs: [ #11, #13, #14 ] }
-    │       └── PhysicalHashJoin { join_type: Inner, left_keys: [ #4 ], right_keys: [ #1 ] }
-    │           ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #3 ] }
-    │           │   ├── PhysicalFilter
-    │           │   │   ├── cond:Eq
-    │           │   │   │   ├── #1
-    │           │   │   │   └── "CHINA"
-    │           │   │   └── PhysicalScan { table: nation }
-    │           │   └── PhysicalScan { table: supplier }
-    │           └── PhysicalScan { table: partsupp }
+    │       └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #3 ] }
+    │           ├── PhysicalFilter
+    │           │   ├── cond:Eq
+    │           │   │   ├── #1
+    │           │   │   └── "CHINA"
+    │           │   └── PhysicalScan { table: nation }
+    │           └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #1 ] }
+    │               ├── PhysicalScan { table: supplier }
+    │               └── PhysicalScan { table: partsupp }
     └── PhysicalProjection
         ├── exprs:Cast
         │   ├── cast_to: Decimal128(38, 15)
-        │   ├── expr:Mul
-        │   │   ├── Cast { cast_to: Float64, expr: #0 }
+        │   ├── child:Mul
+        │   │   ├── Cast { cast_to: Float64, child: #0 }
         │   │   └── 0.0001(float)
 
         └── PhysicalAgg
             ├── aggrs:Agg(Sum)
             │   └── Mul
             │       ├── #1
-            │       └── Cast { cast_to: Decimal128(10, 0), expr: #0 }
+            │       └── Cast { cast_to: Decimal128(10, 0), child: #0 }
             ├── groups: []
             └── PhysicalProjection { exprs: [ #0, #1 ] }
                 └── PhysicalHashJoin { join_type: Inner, left_keys: [ #2 ], right_keys: [ #0 ] }
@@ -315,10 +315,10 @@ LogicalSort
             │   │   └── #20
             │   ├── Geq
             │   │   ├── #21
-            │   │   └── Cast { cast_to: Date32, expr: "1994-01-01" }
+            │   │   └── Cast { cast_to: Date32, child: "1994-01-01" }
             │   └── Lt
             │       ├── #21
-            │       └── Cast { cast_to: Date32, expr: "1995-01-01" }
+            │       └── Cast { cast_to: Date32, child: "1995-01-01" }
             └── LogicalJoin { join_type: Cross, cond: true }
                 ├── LogicalScan { table: orders }
                 └── LogicalScan { table: lineitem }
@@ -365,10 +365,10 @@ PhysicalSort
             │   │   │   └── #11
             │   │   ├── Geq
             │   │   │   ├── #12
-            │   │   │   └── Cast { cast_to: Date32, expr: "1994-01-01" }
+            │   │   │   └── Cast { cast_to: Date32, child: "1994-01-01" }
             │   │   └── Lt
             │   │       ├── #12
-            │   │       └── Cast { cast_to: Date32, expr: "1995-01-01" }
+            │   │       └── Cast { cast_to: Date32, child: "1995-01-01" }
             │   └── PhysicalScan { table: lineitem }
             └── PhysicalScan { table: orders }
 */
@@ -391,25 +391,25 @@ LogicalProjection
 ├── exprs:Div
 │   ├── Mul
 │   │   ├── 100(float)
-│   │   └── Cast { cast_to: Float64, expr: #0 }
-│   └── Cast { cast_to: Float64, expr: #1 }
+│   │   └── Cast { cast_to: Float64, child: #0 }
+│   └── Cast { cast_to: Float64, child: #1 }
 └── LogicalAgg
     ├── exprs:
     │   ┌── Agg(Sum)
     │   │   └── Case
     │   │       └── 
-    │   │           ┌── Like { expr: #20, pattern: "PROMO%", negated: false, case_insensitive: false }
+    │   │           ┌── Like { expr: #20, pattern: #20, negated: false, case_insensitive: false }
     │   │           ├── Mul
     │   │           │   ├── #5
     │   │           │   └── Sub
-    │   │           │       ├── Cast { cast_to: Decimal128(20, 0), expr: 1(i64) }
+    │   │           │       ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
     │   │           │       └── #6
-    │   │           └── Cast { cast_to: Decimal128(38, 4), expr: 0(i64) }
+    │   │           └── Cast { cast_to: Decimal128(38, 4), child: 0(i64) }
     │   └── Agg(Sum)
     │       └── Mul
     │           ├── #5
     │           └── Sub
-    │               ├── Cast { cast_to: Decimal128(20, 0), expr: 1(i64) }
+    │               ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
     │               └── #6
     ├── groups: []
     └── LogicalFilter
@@ -419,11 +419,11 @@ LogicalProjection
         │   │   └── #16
         │   ├── Geq
         │   │   ├── #10
-        │   │   └── Cast { cast_to: Date32, expr: "1995-09-01" }
+        │   │   └── Cast { cast_to: Date32, child: "1995-09-01" }
         │   └── Lt
         │       ├── #10
         │       └── Add
-        │           ├── Cast { cast_to: Date32, expr: "1995-09-01" }
+        │           ├── Cast { cast_to: Date32, child: "1995-09-01" }
         │           └── INTERVAL_MONTH_DAY_NANO (1, 0, 0)
         └── LogicalJoin { join_type: Cross, cond: true }
             ├── LogicalScan { table: lineitem }
@@ -432,25 +432,25 @@ PhysicalProjection
 ├── exprs:Div
 │   ├── Mul
 │   │   ├── 100(float)
-│   │   └── Cast { cast_to: Float64, expr: #0 }
-│   └── Cast { cast_to: Float64, expr: #1 }
+│   │   └── Cast { cast_to: Float64, child: #0 }
+│   └── Cast { cast_to: Float64, child: #1 }
 └── PhysicalAgg
     ├── aggrs:
     │   ┌── Agg(Sum)
     │   │   └── Case
     │   │       └── 
-    │   │           ┌── Like { expr: #20, pattern: "PROMO%", negated: false, case_insensitive: false }
+    │   │           ┌── Like { expr: #20, pattern: #20, negated: false, case_insensitive: false }
     │   │           ├── Mul
     │   │           │   ├── #5
     │   │           │   └── Sub
-    │   │           │       ├── Cast { cast_to: Decimal128(20, 0), expr: 1(i64) }
+    │   │           │       ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
     │   │           │       └── #6
-    │   │           └── Cast { cast_to: Decimal128(38, 4), expr: 0(i64) }
+    │   │           └── Cast { cast_to: Decimal128(38, 4), child: 0(i64) }
     │   └── Agg(Sum)
     │       └── Mul
     │           ├── #5
     │           └── Sub
-    │               ├── Cast { cast_to: Decimal128(20, 0), expr: 1(i64) }
+    │               ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
     │               └── #6
     ├── groups: []
     └── PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ] }
@@ -458,11 +458,11 @@ PhysicalProjection
         │   ├── cond:And
         │   │   ├── Geq
         │   │   │   ├── #10
-        │   │   │   └── Cast { cast_to: Date32, expr: "1995-09-01" }
+        │   │   │   └── Cast { cast_to: Date32, child: "1995-09-01" }
         │   │   └── Lt
         │   │       ├── #10
         │   │       └── Add
-        │   │           ├── Cast { cast_to: Date32, expr: "1995-09-01" }
+        │   │           ├── Cast { cast_to: Date32, child: "1995-09-01" }
         │   │           └── INTERVAL_MONTH_DAY_NANO (1, 0, 0)
         │   └── PhysicalScan { table: lineitem }
         └── PhysicalScan { table: part }

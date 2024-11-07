@@ -97,7 +97,7 @@ PhysicalFilter
 │   └── Eq
 │       ├── #0
 │       └── #3
-└── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
+└── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
     ├── PhysicalScan { table: t1 }
     └── PhysicalScan { table: t2 }
 0 0 0 200
@@ -122,7 +122,7 @@ LogicalProjection { exprs: [ #0, #1, #2, #3 ] }
     └── LogicalJoin { join_type: Cross, cond: true }
         ├── LogicalScan { table: t1 }
         └── LogicalScan { table: t2 }
-PhysicalNestedLoopJoin { join_type: Cross, cond: true }
+PhysicalNestedLoopJoin { join_type: Inner, cond: true }
 ├── PhysicalScan { table: t1 }
 └── PhysicalScan { table: t2 }
 0 0 0 200
@@ -254,7 +254,7 @@ LogicalProjection { exprs: [ #0, #1, #2, #3 ] }
     │   └── true
     ├── LogicalScan { table: t1 }
     └── LogicalScan { table: t2 }
-PhysicalNestedLoopJoin { join_type: Cross, cond: true }
+PhysicalNestedLoopJoin { join_type: Inner, cond: true }
 ├── PhysicalScan { table: t1 }
 └── PhysicalScan { table: t2 }
 0 0 0 200

@@ -24,6 +24,7 @@ pub use data_type_pred::DataTypePred;
 pub use extern_column_ref_pred::ExternColumnRefPred;
 pub use func_pred::{FuncPred, FuncType};
 pub use in_list_pred::InListPred;
+use itertools::Itertools;
 pub use like_pred::LikePred;
 pub use list_pred::ListPred;
 pub use log_op_pred::{LogOpPred, LogOpType};
@@ -44,6 +45,8 @@ pub trait PredExt {
     fn rewrite_column_refs(&self, rewrite_fn: impl FnMut(usize) -> Option<usize>) -> Option<Self>
     where
         Self: Sized;
+
+    fn get_column_refs(&self) -> Vec<ColumnRefPred>;
 }
 
 impl<P: DfReprPredNode> PredExt for P {
@@ -52,6 +55,15 @@ impl<P: DfReprPredNode> PredExt for P {
         mut rewrite_fn: impl FnMut(usize) -> Option<usize>,
     ) -> Option<Self> {
         rewrite_column_refs_inner(self, &mut rewrite_fn)
+    }
+
+    fn get_column_refs(&self) -> Vec<ColumnRefPred> {
+        if let Some(col_ref) = ColumnRefPred::from_pred_node(self.clone().into_pred_node()) {
+            return vec![col_ref];
+        }
+        let node = self.clone().into_pred_node();
+        let children = node.children.iter().map(|child| child.get_column_refs());
+        children.collect_vec().concat()
     }
 }
 

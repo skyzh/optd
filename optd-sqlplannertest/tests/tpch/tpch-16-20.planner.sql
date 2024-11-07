@@ -112,7 +112,7 @@ LogicalProjection
 ├── exprs:Scalar(Round)
 │   └── 
 │       ┌── Div
-│       │   ├── Cast { cast_to: Float64, expr: #0 }
+│       │   ├── Cast { cast_to: Float64, child: #0 }
 │       │   └── 7(float)
 │       └── 16(i64)
 └── LogicalAgg
@@ -127,7 +127,7 @@ LogicalProjection
             │   │   ├── #2
             │   │   └── #4
             │   └── Lt
-            │       ├── Cast { cast_to: Decimal128(30, 15), expr: #0 }
+            │       ├── Cast { cast_to: Decimal128(30, 15), child: #0 }
             │       └── #3
             ├── LogicalProjection { exprs: [ #1, #2, #3 ] }
             │   └── LogicalJoin
@@ -152,9 +152,9 @@ LogicalProjection
                 ├── exprs:
                 │   ┌── Cast
                 │   │   ├── cast_to: Decimal128(30, 15)
-                │   │   ├── expr:Mul
+                │   │   ├── child:Mul
                 │   │   │   ├── 0.2(float)
-                │   │   │   └── Cast { cast_to: Float64, expr: #1 }
+                │   │   │   └── Cast { cast_to: Float64, child: #1 }
 
                 │   └── #0
                 └── LogicalAgg
@@ -167,7 +167,7 @@ PhysicalProjection
 ├── exprs:Scalar(Round)
 │   └── 
 │       ┌── Div
-│       │   ├── Cast { cast_to: Float64, expr: #0 }
+│       │   ├── Cast { cast_to: Float64, child: #0 }
 │       │   └── 7(float)
 │       └── 16(i64)
 └── PhysicalAgg
@@ -180,9 +180,9 @@ PhysicalProjection
             ├── cond:And
             │   ├── Eq
             │   │   ├── #0
-            │   │   └── #10
+            │   │   └── #13
             │   └── Lt
-            │       ├── Cast { cast_to: Decimal128(30, 15), expr: #13 }
+            │       ├── Cast { cast_to: Decimal128(30, 15), child: #13 }
             │       └── #25
             ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #1 ] }
             │   ├── PhysicalFilter
@@ -199,9 +199,9 @@ PhysicalProjection
                 ├── exprs:
                 │   ┌── Cast
                 │   │   ├── cast_to: Decimal128(30, 15)
-                │   │   ├── expr:Mul
+                │   │   ├── child:Mul
                 │   │   │   ├── 0.2(float)
-                │   │   │   └── Cast { cast_to: Float64, expr: #1 }
+                │   │   │   └── Cast { cast_to: Float64, child: #1 }
 
                 │   └── #0
                 └── PhysicalAgg
@@ -252,7 +252,7 @@ LogicalProjection { exprs: [ #0 ] }
     │   └── Mul
     │       ├── #5
     │       └── Sub
-    │           ├── Cast { cast_to: Decimal128(20, 0), expr: 1(i64) }
+    │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
     │           └── #6
     ├── groups: []
     └── LogicalFilter
@@ -266,12 +266,12 @@ LogicalProjection { exprs: [ #0 ] }
         │   │   │   └── "Brand#12"
         │   │   ├── InList { expr: #22, list: [ "SM CASE", "SM BOX", "SM PACK", "SM PKG" ], negated: false }
         │   │   ├── Geq
-        │   │   │   ├── Cast { cast_to: Decimal128(22, 2), expr: #4 }
-        │   │   │   └── Cast { cast_to: Decimal128(22, 2), expr: 1(i64) }
+        │   │   │   ├── Cast { cast_to: Decimal128(22, 2), child: #4 }
+        │   │   │   └── Cast { cast_to: Decimal128(22, 2), child: 1(i64) }
         │   │   ├── Leq
-        │   │   │   ├── Cast { cast_to: Decimal128(22, 2), expr: #4 }
-        │   │   │   └── Cast { cast_to: Decimal128(22, 2), expr: 11(i64) }
-        │   │   ├── Between { expr: Cast { cast_to: Int64, expr: #21 }, lower: 1(i64), upper: 5(i64) }
+        │   │   │   ├── Cast { cast_to: Decimal128(22, 2), child: #4 }
+        │   │   │   └── Cast { cast_to: Decimal128(22, 2), child: 11(i64) }
+        │   │   ├── Between { child: Cast { cast_to: Int64, child: #21 }, lower: 1(i64), upper: 5(i64) }
         │   │   ├── InList { expr: #14, list: [ "AIR", "AIR REG" ], negated: false }
         │   │   └── Eq
         │   │       ├── #13
@@ -285,12 +285,12 @@ LogicalProjection { exprs: [ #0 ] }
         │   │   │   └── "Brand#23"
         │   │   ├── InList { expr: #22, list: [ "MED BAG", "MED BOX", "MED PKG", "MED PACK" ], negated: false }
         │   │   ├── Geq
-        │   │   │   ├── Cast { cast_to: Decimal128(22, 2), expr: #4 }
-        │   │   │   └── Cast { cast_to: Decimal128(22, 2), expr: 10(i64) }
+        │   │   │   ├── Cast { cast_to: Decimal128(22, 2), child: #4 }
+        │   │   │   └── Cast { cast_to: Decimal128(22, 2), child: 10(i64) }
         │   │   ├── Leq
-        │   │   │   ├── Cast { cast_to: Decimal128(22, 2), expr: #4 }
-        │   │   │   └── Cast { cast_to: Decimal128(22, 2), expr: 20(i64) }
-        │   │   ├── Between { expr: Cast { cast_to: Int64, expr: #21 }, lower: 1(i64), upper: 10(i64) }
+        │   │   │   ├── Cast { cast_to: Decimal128(22, 2), child: #4 }
+        │   │   │   └── Cast { cast_to: Decimal128(22, 2), child: 20(i64) }
+        │   │   ├── Between { child: Cast { cast_to: Int64, child: #21 }, lower: 1(i64), upper: 10(i64) }
         │   │   ├── InList { expr: #14, list: [ "AIR", "AIR REG" ], negated: false }
         │   │   └── Eq
         │   │       ├── #13
@@ -304,12 +304,12 @@ LogicalProjection { exprs: [ #0 ] }
         │       │   └── "Brand#34"
         │       ├── InList { expr: #22, list: [ "LG CASE", "LG BOX", "LG PACK", "LG PKG" ], negated: false }
         │       ├── Geq
-        │       │   ├── Cast { cast_to: Decimal128(22, 2), expr: #4 }
-        │       │   └── Cast { cast_to: Decimal128(22, 2), expr: 20(i64) }
+        │       │   ├── Cast { cast_to: Decimal128(22, 2), child: #4 }
+        │       │   └── Cast { cast_to: Decimal128(22, 2), child: 20(i64) }
         │       ├── Leq
-        │       │   ├── Cast { cast_to: Decimal128(22, 2), expr: #4 }
-        │       │   └── Cast { cast_to: Decimal128(22, 2), expr: 30(i64) }
-        │       ├── Between { expr: Cast { cast_to: Int64, expr: #21 }, lower: 1(i64), upper: 15(i64) }
+        │       │   ├── Cast { cast_to: Decimal128(22, 2), child: #4 }
+        │       │   └── Cast { cast_to: Decimal128(22, 2), child: 30(i64) }
+        │       ├── Between { child: Cast { cast_to: Int64, child: #21 }, lower: 1(i64), upper: 15(i64) }
         │       ├── InList { expr: #14, list: [ "AIR", "AIR REG" ], negated: false }
         │       └── Eq
         │           ├── #13
@@ -322,7 +322,7 @@ PhysicalAgg
 │   └── Mul
 │       ├── #5
 │       └── Sub
-│           ├── Cast { cast_to: Decimal128(20, 0), expr: 1(i64) }
+│           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
 │           └── #6
 ├── groups: []
 └── PhysicalFilter
@@ -336,12 +336,12 @@ PhysicalAgg
     │   │   │   └── "Brand#12"
     │   │   ├── InList { expr: #22, list: [ "SM CASE", "SM BOX", "SM PACK", "SM PKG" ], negated: false }
     │   │   ├── Geq
-    │   │   │   ├── Cast { cast_to: Decimal128(22, 2), expr: #4 }
-    │   │   │   └── Cast { cast_to: Decimal128(22, 2), expr: 1(i64) }
+    │   │   │   ├── Cast { cast_to: Decimal128(22, 2), child: #4 }
+    │   │   │   └── Cast { cast_to: Decimal128(22, 2), child: 1(i64) }
     │   │   ├── Leq
-    │   │   │   ├── Cast { cast_to: Decimal128(22, 2), expr: #4 }
-    │   │   │   └── Cast { cast_to: Decimal128(22, 2), expr: 11(i64) }
-    │   │   ├── Between { expr: Cast { cast_to: Int64, expr: #21 }, lower: 1(i64), upper: 5(i64) }
+    │   │   │   ├── Cast { cast_to: Decimal128(22, 2), child: #4 }
+    │   │   │   └── Cast { cast_to: Decimal128(22, 2), child: 11(i64) }
+    │   │   ├── Between { child: Cast { cast_to: Int64, child: #21 }, lower: 1(i64), upper: 5(i64) }
     │   │   ├── InList { expr: #14, list: [ "AIR", "AIR REG" ], negated: false }
     │   │   └── Eq
     │   │       ├── #13
@@ -355,12 +355,12 @@ PhysicalAgg
     │   │   │   └── "Brand#23"
     │   │   ├── InList { expr: #22, list: [ "MED BAG", "MED BOX", "MED PKG", "MED PACK" ], negated: false }
     │   │   ├── Geq
-    │   │   │   ├── Cast { cast_to: Decimal128(22, 2), expr: #4 }
-    │   │   │   └── Cast { cast_to: Decimal128(22, 2), expr: 10(i64) }
+    │   │   │   ├── Cast { cast_to: Decimal128(22, 2), child: #4 }
+    │   │   │   └── Cast { cast_to: Decimal128(22, 2), child: 10(i64) }
     │   │   ├── Leq
-    │   │   │   ├── Cast { cast_to: Decimal128(22, 2), expr: #4 }
-    │   │   │   └── Cast { cast_to: Decimal128(22, 2), expr: 20(i64) }
-    │   │   ├── Between { expr: Cast { cast_to: Int64, expr: #21 }, lower: 1(i64), upper: 10(i64) }
+    │   │   │   ├── Cast { cast_to: Decimal128(22, 2), child: #4 }
+    │   │   │   └── Cast { cast_to: Decimal128(22, 2), child: 20(i64) }
+    │   │   ├── Between { child: Cast { cast_to: Int64, child: #21 }, lower: 1(i64), upper: 10(i64) }
     │   │   ├── InList { expr: #14, list: [ "AIR", "AIR REG" ], negated: false }
     │   │   └── Eq
     │   │       ├── #13
@@ -374,17 +374,17 @@ PhysicalAgg
     │       │   └── "Brand#34"
     │       ├── InList { expr: #22, list: [ "LG CASE", "LG BOX", "LG PACK", "LG PKG" ], negated: false }
     │       ├── Geq
-    │       │   ├── Cast { cast_to: Decimal128(22, 2), expr: #4 }
-    │       │   └── Cast { cast_to: Decimal128(22, 2), expr: 20(i64) }
+    │       │   ├── Cast { cast_to: Decimal128(22, 2), child: #4 }
+    │       │   └── Cast { cast_to: Decimal128(22, 2), child: 20(i64) }
     │       ├── Leq
-    │       │   ├── Cast { cast_to: Decimal128(22, 2), expr: #4 }
-    │       │   └── Cast { cast_to: Decimal128(22, 2), expr: 30(i64) }
-    │       ├── Between { expr: Cast { cast_to: Int64, expr: #21 }, lower: 1(i64), upper: 15(i64) }
+    │       │   ├── Cast { cast_to: Decimal128(22, 2), child: #4 }
+    │       │   └── Cast { cast_to: Decimal128(22, 2), child: 30(i64) }
+    │       ├── Between { child: Cast { cast_to: Int64, child: #21 }, lower: 1(i64), upper: 15(i64) }
     │       ├── InList { expr: #14, list: [ "AIR", "AIR REG" ], negated: false }
     │       └── Eq
     │           ├── #13
     │           └── "DELIVER IN PERSON"
-    └── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
+    └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
         ├── PhysicalScan { table: lineitem }
         └── PhysicalScan { table: part }
 */

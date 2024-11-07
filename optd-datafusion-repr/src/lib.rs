@@ -122,13 +122,7 @@ impl DatafusionOptimizer {
             rules::JoinCommuteRule::new(),
         )));
         rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-            rules::InnerCrossJoinRule::new(),
-        )));
-        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
             rules::JoinAssocRule::new(),
-        )));
-        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-            rules::JoinAbsorbFilterRule::new(),
         )));
         rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
             rules::ProjectionPullUpJoin::new(),
@@ -186,6 +180,7 @@ impl DatafusionOptimizer {
                     panic_on_budget: false,
                     partial_explore_iter: Some(1 << 20),
                     partial_explore_space: Some(1 << 10),
+                    disable_pruning: false,
                 },
             ),
             heuristic_optimizer: HeuristicsOptimizer::new_with_rules(

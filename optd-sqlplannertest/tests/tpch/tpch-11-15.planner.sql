@@ -207,15 +207,15 @@ PhysicalSort
     │   │       └── Cast { cast_to: Decimal128(10, 0), child: #1 }
     │   ├── groups: [ #0 ]
     │   └── PhysicalProjection { exprs: [ #11, #13, #14 ] }
-    │       └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #3 ] }
-    │           ├── PhysicalFilter
-    │           │   ├── cond:Eq
-    │           │   │   ├── #1
-    │           │   │   └── "CHINA"
-    │           │   └── PhysicalScan { table: nation }
-    │           └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #1 ] }
-    │               ├── PhysicalScan { table: supplier }
-    │               └── PhysicalScan { table: partsupp }
+    │       └── PhysicalHashJoin { join_type: Inner, left_keys: [ #4 ], right_keys: [ #1 ] }
+    │           ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #3 ] }
+    │           │   ├── PhysicalFilter
+    │           │   │   ├── cond:Eq
+    │           │   │   │   ├── #1
+    │           │   │   │   └── "CHINA"
+    │           │   │   └── PhysicalScan { table: nation }
+    │           │   └── PhysicalScan { table: supplier }
+    │           └── PhysicalScan { table: partsupp }
     └── PhysicalProjection
         ├── exprs:Cast
         │   ├── cast_to: Decimal128(38, 15)

@@ -8,51 +8,10 @@ use super::macros::{define_impl_rule, define_rule};
 use crate::plan_nodes::{
     ArcDfPlanNode, BinOpPred, BinOpType, ColumnRefPred, ConstantPred, ConstantType, DfNodeType,
     DfPredType, DfReprPlanNode, DfReprPredNode, JoinType, ListPred, LogOpType,
-    LogicalEmptyRelation, LogicalFilter, LogicalJoin, LogicalProjection, PhysicalHashJoin, PredExt,
+    LogicalEmptyRelation, LogicalJoin, LogicalProjection, PhysicalHashJoin, PredExt,
 };
 use crate::properties::schema::Schema;
 use crate::OptimizerExt;
-
-// A cross join B -> A inner join B
-define_rule!(
-    InnerCrossJoinRule,
-    apply_inner_cross_join,
-    (Join(JoinType::Cross), left, right)
-);
-
-fn apply_inner_cross_join(
-    _: &impl Optimizer<DfNodeType>,
-    binding: ArcDfPlanNode,
-) -> Vec<PlanNodeOrGroup<DfNodeType>> {
-    let join = LogicalJoin::from_plan_node(binding).unwrap();
-    let node = LogicalJoin::new_unchecked(join.left(), join.right(), join.cond(), JoinType::Inner);
-    vec![node.into_plan_node().into()]
-}
-
-// Filter (A inner join B on true) cond -> A inner join B on cond
-define_rule!(
-    JoinAbsorbFilterRule,
-    apply_join_absorb_filter,
-    (Filter, (Join(JoinType::Inner), left, right))
-);
-
-fn apply_join_absorb_filter(
-    _: &impl Optimizer<DfNodeType>,
-    binding: ArcDfPlanNode,
-) -> Vec<PlanNodeOrGroup<DfNodeType>> {
-    let filter = LogicalFilter::from_plan_node(binding).unwrap();
-    let join = LogicalJoin::from_plan_node(filter.child().unwrap_plan_node()).unwrap();
-    let join_cond = join.cond();
-    let filter_cond = filter.cond();
-    if let Some(constant) = ConstantPred::from_pred_node(join_cond) {
-        if constant.value().as_bool() {
-            let node =
-                LogicalJoin::new_unchecked(join.left(), join.right(), filter_cond, JoinType::Inner);
-            return vec![node.into_plan_node().into()];
-        }
-    }
-    vec![]
-}
 
 // A join B -> B join A
 define_rule!(
@@ -112,7 +71,15 @@ fn apply_eliminate_join(
     if let DfPredType::Constant(const_type) = cond.typ {
         if const_type == ConstantType::Bool {
             if let Some(ref data) = cond.data {
-                if !data.as_bool() {
+                if data.as_bool() {
+                    let node = LogicalJoin::new_unchecked(
+                        left,
+                        right,
+                        ConstantPred::bool(true).into_pred_node(),
+                        JoinType::Cross,
+                    );
+                    return vec![node.into_plan_node().into()];
+                } else {
                     // No need to handle schema here, as all exprs in the same group
                     // will have same logical properties
                     let mut left_fields = optimizer.get_schema_of(left.clone()).fields;
@@ -146,9 +113,9 @@ fn apply_join_assoc(
     let join2 = LogicalJoin::from_plan_node(join1.left().unwrap_plan_node()).unwrap();
     let a = join2.left();
     let b = join2.right();
-    let cond2 = join2.cond();
+    let cond1 = join2.cond();
     let a_schema = optimizer.get_schema_of(a.clone());
-    let cond1 = join1.cond();
+    let cond2 = join1.cond();
 
     let Some(cond2) = cond2.rewrite_column_refs(&mut |idx| {
         if idx < a_schema.len() {

@@ -6,10 +6,11 @@ use optd_core::rules::{Rule, RuleMatcher};
 
 use super::macros::{define_impl_rule, define_rule};
 use crate::plan_nodes::{
-    ArcDfPlanNode, BinOpPred, BinOpType, ColumnRefPred, ConstantPred, DfNodeType, DfPredType,
-    DfReprPlanNode, DfReprPredNode, JoinType, ListPred, LogOpType, LogicalFilter, LogicalJoin,
-    LogicalProjection, PhysicalHashJoin, PredExt,
+    ArcDfPlanNode, BinOpPred, BinOpType, ColumnRefPred, ConstantPred, ConstantType, DfNodeType,
+    DfPredType, DfReprPlanNode, DfReprPredNode, JoinType, ListPred, LogOpType,
+    LogicalEmptyRelation, LogicalFilter, LogicalJoin, LogicalProjection, PhysicalHashJoin, PredExt,
 };
+use crate::properties::schema::Schema;
 use crate::OptimizerExt;
 
 // A cross join B -> A inner join B
@@ -91,52 +92,43 @@ fn apply_join_commute(
     vec![node.into_plan_node().into()]
 }
 
-// define_rule!(
-//     EliminateJoinRule,
-//     apply_eliminate_join,
-//     (Join(JoinType::Inner), left, right)
-// );
+define_rule!(
+    EliminateJoinRule,
+    apply_eliminate_join,
+    (Join(JoinType::Inner), left, right)
+);
 
-// /// Eliminate logical join with constant predicates
-// /// True predicates becomes CrossJoin (not yet implemented)
-// #[allow(unused_variables)]
-// fn apply_eliminate_join(
-//     optimizer: &impl Optimizer<DfNodeType>,
-//     binding: ArcDfPlanNode,
-// ) -> Vec<PlanNodeOrGroup<DfNodeType>> {
-//     if let DfNodeType::Constant(const_type) = cond.typ {
-//         if const_type == ConstantType::Bool {
-//             if let Some(data) = cond.data {
-//                 if data.as_bool() {
-//                     // change it to cross join if filter is always true
-//                     let node = LogicalJoin::new(
-//                         DfReprPlanNode::from_group(left.into()),
-//                         DfReprPlanNode::from_group(right.into()),
-//                         ConstantPred::bool(true).into_expr(),
-//                         JoinType::Cross,
-//                     );
-//                     return vec![node.into_rel_node().as_ref().clone()];
-//                 } else {
-//                     // No need to handle schema here, as all exprs in the same group
-//                     // will have same logical properties
-//                     let mut left_fields = optimizer
-//                         .get_property::<SchemaPropertyBuilder>(Arc::new(left.clone()), 0)
-//                         .fields;
-//                     let right_fields = optimizer
-//                         .get_property::<SchemaPropertyBuilder>(Arc::new(right.clone()), 0)
-//                         .fields;
-//                     left_fields.extend(right_fields);
-//                     let new_schema = Schema {
-//                         fields: left_fields,
-//                     };
-//                     let node = LogicalEmptyRelation::new(false, new_schema);
-//                     return vec![node.into_rel_node().as_ref().clone()];
-//                 }
-//             }
-//         }
-//     }
-//     vec![]
-// }
+/// Eliminate logical join with constant predicates
+/// True predicates becomes CrossJoin (not yet implemented)
+fn apply_eliminate_join(
+    optimizer: &impl Optimizer<DfNodeType>,
+    binding: ArcDfPlanNode,
+) -> Vec<PlanNodeOrGroup<DfNodeType>> {
+    let join = LogicalJoin::from_plan_node(binding).unwrap();
+    let left = join.left();
+    let right = join.right();
+    let cond = join.cond();
+
+    if let DfPredType::Constant(const_type) = cond.typ {
+        if const_type == ConstantType::Bool {
+            if let Some(ref data) = cond.data {
+                if !data.as_bool() {
+                    // No need to handle schema here, as all exprs in the same group
+                    // will have same logical properties
+                    let mut left_fields = optimizer.get_schema_of(left.clone()).fields;
+                    let right_fields = optimizer.get_schema_of(right.clone()).fields;
+                    left_fields.extend(right_fields);
+                    let new_schema = Schema {
+                        fields: left_fields,
+                    };
+                    let node = LogicalEmptyRelation::new(false, new_schema);
+                    return vec![node.into_plan_node().into()];
+                }
+            }
+        }
+    }
+    vec![]
+}
 
 // // (A join B) join C -> A join (B join C)
 define_rule!(

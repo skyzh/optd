@@ -75,21 +75,21 @@ impl DatafusionOptimizer {
     pub fn default_heuristic_rules(
     ) -> Vec<Arc<dyn Rule<DfNodeType, HeuristicsOptimizer<DfNodeType>>>> {
         vec![
-            // Arc::new(EliminateProjectRule::new()),
-            // Arc::new(SimplifyFilterRule::new()),
-            // Arc::new(SimplifyJoinCondRule::new()),
-            // Arc::new(EliminateFilterRule::new()),
-            // Arc::new(EliminateJoinRule::new()),
-            // Arc::new(EliminateLimitRule::new()),
-            // Arc::new(EliminateDuplicatedSortExprRule::new()),
-            // Arc::new(EliminateDuplicatedAggExprRule::new()),
-            // Arc::new(DepJoinEliminate::new()),
-            // Arc::new(DepInitialDistinct::new()),
-            // Arc::new(DepJoinPastProj::new()),
-            // Arc::new(DepJoinPastFilter::new()),
-            // Arc::new(DepJoinPastAgg::new()),
-            // Arc::new(ProjectMergeRule::new()),
-            // Arc::new(FilterMergeRule::new()),
+            Arc::new(rules::EliminateProjectRule::new()),
+            Arc::new(rules::SimplifyFilterRule::new()),
+            Arc::new(rules::SimplifyJoinCondRule::new()),
+            Arc::new(rules::EliminateFilterRule::new()),
+            Arc::new(rules::EliminateJoinRule::new()),
+            Arc::new(rules::EliminateLimitRule::new()),
+            Arc::new(rules::EliminateDuplicatedSortExprRule::new()),
+            Arc::new(rules::EliminateDuplicatedAggExprRule::new()),
+            // Arc::new(rules::DepJoinEliminate::new()),
+            // Arc::new(rules::DepInitialDistinct::new()),
+            // Arc::new(rules::DepJoinPastProj::new()),
+            // Arc::new(rules::DepJoinPastFilter::new()),
+            // Arc::new(rules::DepJoinPastAgg::new()),
+            Arc::new(rules::ProjectMergeRule::new()),
+            Arc::new(rules::FilterMergeRule::new()),
         ]
     }
 
@@ -100,22 +100,21 @@ impl DatafusionOptimizer {
         for rule in rules {
             rule_wrappers.push(RuleWrapper::new_cascades(rule));
         }
-        // add all filter pushdown rules as heuristic rules
         // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-        //     FilterProjectTransposeRule::new(),
+        //     rules::FilterProjectTransposeRule::new(),
         // )));
-        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-        //     FilterCrossJoinTransposeRule::new(),
-        // )));
-        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-        //     FilterInnerJoinTransposeRule::new(),
-        // )));
-        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-        //     FilterSortTransposeRule::new(),
-        // )));
-        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-        //     FilterAggTransposeRule::new(),
-        // )));
+        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+            rules::FilterCrossJoinTransposeRule::new(),
+        )));
+        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+            rules::FilterInnerJoinTransposeRule::new(),
+        )));
+        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+            rules::FilterSortTransposeRule::new(),
+        )));
+        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+            rules::FilterAggTransposeRule::new(),
+        )));
         rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
             rules::HashJoinRule::new(),
         )));
@@ -143,11 +142,14 @@ impl DatafusionOptimizer {
         rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
             rules::EliminateLimitRule::new(),
         )));
+        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+            rules::EliminateJoinRule::new(),
+        )));
+        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+            rules::EliminateFilterRule::new(),
+        )));
         // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-        //     EliminateFilterRule::new(),
-        // )));
-        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-        //     ProjectFilterTransposeRule::new(),
+        //     rules::ProjectFilterTransposeRule::new(),
         // )));
         rule_wrappers
     }

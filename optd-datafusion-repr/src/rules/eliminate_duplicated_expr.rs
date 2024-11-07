@@ -1,13 +1,12 @@
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::collections::HashSet;
 
-use itertools::Itertools;
+use optd_core::nodes::PlanNodeOrGroup;
+use optd_core::optimizer::Optimizer;
 use optd_core::rules::{Rule, RuleMatcher};
-use optd_core::{nodes::PlanNode, optimizer::Optimizer};
 
 use crate::plan_nodes::{
-    DfNodeType, DfReprPlanNode, DfReprPlanNode, Expr, ListPred, LogicalAgg, LogicalSort,
-    SortOrderPred, SortOrderType,
+    ArcDfPlanNode, DfNodeType, DfReprPlanNode, DfReprPredNode, ListPred, LogicalAgg, LogicalSort,
+    SortOrderPred,
 };
 
 use super::macros::define_rule;
@@ -15,7 +14,7 @@ use super::macros::define_rule;
 define_rule!(
     EliminateDuplicatedSortExprRule,
     apply_eliminate_duplicated_sort_expr,
-    (Sort, child, [exprs])
+    (Sort, child)
 );
 
 /// Removes duplicate sort expressions
@@ -29,46 +28,29 @@ define_rule!(
 ///     order by id desc, name
 fn apply_eliminate_duplicated_sort_expr(
     _optimizer: &impl Optimizer<DfNodeType>,
-    EliminateDuplicatedSortExprRulePicks { child, exprs }: EliminateDuplicatedSortExprRulePicks,
+    binding: ArcDfPlanNode,
 ) -> Vec<PlanNodeOrGroup<DfNodeType>> {
-    let sort_keys: Vec<Expr> = exprs
-        .children
-        .iter()
-        .map(|x| Expr::from_rel_node(x.clone()).unwrap())
-        .collect_vec();
+    let sort = LogicalSort::from_plan_node(binding).unwrap();
+    let exprs = sort.exprs();
+    let sort_keys = exprs.to_vec().into_iter();
 
-    let normalized_sort_keys: Vec<Arc<PlanNode<DfNodeType>>> = exprs
-        .children
-        .iter()
-        .map(|x| match x.typ {
-            DfNodeType::SortOrder(_) => SortOrderPred::new(
-                SortOrderType::Asc,
-                SortOrderPred::from_rel_node(x.clone()).unwrap().child(),
-            )
-            .into_rel_node(),
-            _ => x.clone(),
-        })
-        .collect_vec();
+    let mut dedup_expr = Vec::new();
+    let mut dedup_set = HashSet::new();
+    let mut deduped = false;
 
-    let mut dedup_expr: Vec<Expr> = Vec::new();
-    let mut dedup_set: HashSet<Arc<PlanNode<DfNodeType>>> = HashSet::new();
+    for sort_key in sort_keys {
+        let sort_expr = SortOrderPred::from_pred_node(sort_key.clone()).unwrap();
+        if !dedup_set.contains(&sort_expr.child()) {
+            dedup_expr.push(sort_key.clone());
+            dedup_set.insert(sort_expr.child().clone());
+        } else {
+            deduped = true;
+        }
+    }
 
-    sort_keys
-        .iter()
-        .zip(normalized_sort_keys.iter())
-        .for_each(|(expr, normalized_expr)| {
-            if !dedup_set.contains(normalized_expr) {
-                dedup_expr.push(expr.clone());
-                dedup_set.insert(normalized_expr.to_owned());
-            }
-        });
-
-    if dedup_expr.len() != sort_keys.len() {
-        let node = LogicalSort::new(
-            DfReprPlanNode::from_group(child.into()),
-            ListPred::new(dedup_expr),
-        );
-        return vec![node.into_rel_node().as_ref().clone()];
+    if deduped {
+        let node = LogicalSort::new_unchecked(sort.child(), ListPred::new(dedup_expr));
+        return vec![node.into_plan_node().into()];
     }
     vec![]
 }
@@ -76,7 +58,7 @@ fn apply_eliminate_duplicated_sort_expr(
 define_rule!(
     EliminateDuplicatedAggExprRule,
     apply_eliminate_duplicated_agg_expr,
-    (Agg, child, exprs, [groups])
+    (Agg, child)
 );
 
 /// Removes duplicate group by expressions
@@ -88,30 +70,31 @@ define_rule!(
 ///     select *
 ///     from t1
 ///     group by id, name
+///
+/// TODO: if projection refers to the column, we need to update the projection
 fn apply_eliminate_duplicated_agg_expr(
     _optimizer: &impl Optimizer<DfNodeType>,
-    EliminateDuplicatedAggExprRulePicks {
-        child,
-        exprs,
-        groups,
-    }: EliminateDuplicatedAggExprRulePicks,
+    binding: ArcDfPlanNode,
 ) -> Vec<PlanNodeOrGroup<DfNodeType>> {
-    let mut dedup_expr: Vec<Expr> = Vec::new();
-    let mut dedup_set: HashSet<Arc<PlanNode<DfNodeType>>> = HashSet::new();
-    groups.children.iter().for_each(|expr| {
-        if !dedup_set.contains(expr) {
-            dedup_expr.push(Expr::from_rel_node(expr.clone()).unwrap());
-            dedup_set.insert(expr.clone());
-        }
-    });
+    let agg = LogicalAgg::from_plan_node(binding).unwrap();
+    let groups = agg.groups().to_vec();
 
-    if dedup_expr.len() != groups.children.len() {
-        let node = LogicalAgg::new(
-            DfReprPlanNode::from_group(child.into()),
-            ListPred::from_group(exprs.into()),
-            ListPred::new(dedup_expr),
-        );
-        return vec![node.into_rel_node().as_ref().clone()];
+    let mut dedup_expr = Vec::new();
+    let mut dedup_set = HashSet::new();
+    let mut deduped = false;
+
+    for group in groups {
+        if !dedup_set.contains(&group) {
+            dedup_expr.push(group.clone());
+            dedup_set.insert(group.clone());
+        } else {
+            deduped = true;
+        }
+    }
+
+    if deduped {
+        let node = LogicalAgg::new_unchecked(agg.child(), agg.exprs(), ListPred::new(dedup_expr));
+        return vec![node.into_plan_node().into()];
     }
     vec![]
 }

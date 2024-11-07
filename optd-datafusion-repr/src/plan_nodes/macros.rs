@@ -125,6 +125,7 @@ pub(crate) use define_plan_node;
 mod test {
     use crate::plan_nodes::*;
 
+    #[allow(dead_code)]
     fn get_explain_str(pretty: &Pretty) -> String {
         let mut config = PrettyConfig {
             need_boundaries: false,

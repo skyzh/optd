@@ -23,13 +23,16 @@ use properties::{
 use rules::*;
 
 pub use memo_ext::{LogicalJoinOrder, MemoExt};
+pub use optimizer_ext::OptimizerExt;
 
 pub mod cost;
 mod explain;
 mod memo_ext;
+mod optimizer_ext;
 pub mod plan_nodes;
 pub mod properties;
 pub mod rules;
+
 #[cfg(test)]
 mod testing;
 

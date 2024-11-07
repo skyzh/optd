@@ -13,6 +13,7 @@ use crate::plan_nodes::{
     LogicalEmptyRelation, LogicalJoin, LogicalProjection, PhysicalHashJoin,
 };
 use crate::properties::schema::{Schema, SchemaPropertyBuilder};
+use crate::OptimizerExt;
 
 define_rule!(
     InnerCrossJoinRule,
@@ -43,8 +44,8 @@ fn apply_join_commute(
     let join = LogicalJoin::from_plan_node(binding).unwrap();
     let left = join.left();
     let right = join.right();
-    let left_schema = optimizer.get_property::<SchemaPropertyBuilder>(left.clone(), 0);
-    let right_schema = optimizer.get_property::<SchemaPropertyBuilder>(right.clone(), 0);
+    let left_schema = optimizer.get_schema_of(left.clone());
+    let right_schema = optimizer.get_schema_of(right.clone());
     let cond = rewrite_column_refs(join.cond(), &mut |idx| {
         Some(if idx < left_schema.len() {
             idx + right_schema.len()

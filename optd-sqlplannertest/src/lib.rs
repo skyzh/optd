@@ -121,6 +121,11 @@ impl DatafusionDBMS {
             } else {
                 optimizer.panic_on_explore_limit(false);
             }
+            if flags.disable_pruning {
+                optimizer.disable_pruning(true);
+            } else {
+                optimizer.disable_pruning(false);
+            }
             let rules = optimizer.rules();
             if flags.enable_logical_rules.is_empty() {
                 for r in 0..rules.len() {
@@ -189,6 +194,17 @@ impl DatafusionDBMS {
                     result.push(row);
                 }
             }
+        }
+        if flags.dump_memo_table {
+            let mut guard = self
+                .optd_optimizer
+                .as_ref()
+                .unwrap()
+                .optimizer
+                .lock()
+                .unwrap();
+            let optimizer = guard.as_mut().unwrap().optd_optimizer_mut();
+            optimizer.dump();
         }
         Ok(result)
     }
@@ -326,6 +342,8 @@ struct TestFlags {
     enable_df_logical: bool,
     enable_logical_rules: Vec<String>,
     panic_on_budget: bool,
+    dump_memo_table: bool,
+    disable_pruning: bool,
 }
 
 /// Extract the flags from a task. The flags are specified in square brackets.
@@ -353,6 +371,10 @@ fn extract_flags(task: &str) -> Result<TestFlags> {
                 }
             } else if flag == "panic_on_budget" {
                 options.panic_on_budget = true;
+            } else if flag == "dump_memo_table" {
+                options.dump_memo_table = true;
+            } else if flag == "disable_pruning" {
+                options.disable_pruning = true;
             } else {
                 bail!("Unknown flag: {}", flag);
             }

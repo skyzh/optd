@@ -42,7 +42,10 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeGroupTask {
         for &expr in &exprs {
             let typ = optimizer.get_expr_memoed(expr).typ.clone();
             if !typ.is_logical() {
-                tasks.push(Box::new(OptimizeInputsTask::new(expr, true)) as Box<dyn Task<T, M>>);
+                tasks.push(Box::new(OptimizeInputsTask::new(
+                    expr,
+                    !optimizer.prop.disable_pruning,
+                )) as Box<dyn Task<T, M>>);
             }
         }
         trace!(event = "task_finish", task = "optimize_group", group_id = %self.group_id, exprs_cnt = exprs_cnt);

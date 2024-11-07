@@ -1,4 +1,3 @@
-use optd_core::cascades::{CascadesOptimizer, RelNodeContext};
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::adv_stats::{
@@ -7,12 +6,10 @@ use crate::adv_stats::{
 };
 use optd_datafusion_repr::{
     plan_nodes::{ArcDfPredNode, DfReprPredNode, ListPred},
-    properties::column_ref::{
-        BaseTableColumnRef, ColumnRef, ColumnRefPropertyBuilder, GroupColumnRefs,
-    },
+    properties::column_ref::{BaseTableColumnRef, ColumnRef, GroupColumnRefs},
 };
 
-use super::{AdvStats, DEFAULT_UNK_SEL};
+use super::AdvStats;
 
 impl<
         M: MostCommonValues + Serialize + DeserializeOwned,

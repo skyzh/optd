@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use itertools::Itertools;
-use optd_core::cascades::{CascadesOptimizer, RelNodeContext};
+
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::adv_stats::{
@@ -15,20 +15,21 @@ use optd_datafusion_repr::{
     },
     properties::{
         column_ref::{
-            BaseTableColumnRef, BaseTableColumnRefs, ColumnRef, ColumnRefPropertyBuilder,
-            EqBaseTableColumnSets, EqPredicate, GroupColumnRefs, SemanticCorrelation,
+            BaseTableColumnRef, BaseTableColumnRefs, ColumnRef, EqBaseTableColumnSets, EqPredicate,
+            GroupColumnRefs, SemanticCorrelation,
         },
-        schema::{Schema, SchemaPropertyBuilder},
+        schema::Schema,
     },
 };
 
-use super::{AdvStats, DEFAULT_UNK_SEL};
+use super::AdvStats;
 
 impl<
         M: MostCommonValues + Serialize + DeserializeOwned,
         D: Distribution + Serialize + DeserializeOwned,
     > AdvStats<M, D>
 {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn get_nlj_row_cnt(
         &self,
         join_typ: JoinType,
@@ -55,6 +56,7 @@ impl<
         (left_row_cnt * right_row_cnt * selectivity).max(1.0)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn get_hash_join_row_cnt(
         &self,
         join_typ: JoinType,

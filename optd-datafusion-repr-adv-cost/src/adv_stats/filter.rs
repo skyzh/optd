@@ -1,6 +1,5 @@
 use std::ops::Bound;
 
-use optd_core::cascades::{CascadesOptimizer, RelNodeContext};
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::adv_stats::{
@@ -13,16 +12,13 @@ use optd_datafusion_repr::{
         DfReprPredNode, InListPred, LikePred, LogOpType, UnOpType,
     },
     properties::{
-        column_ref::{
-            BaseTableColumnRef, BaseTableColumnRefs, ColumnRef, ColumnRefPropertyBuilder,
-            GroupColumnRefs,
-        },
-        schema::{Schema, SchemaPropertyBuilder},
+        column_ref::{BaseTableColumnRef, BaseTableColumnRefs, ColumnRef, GroupColumnRefs},
+        schema::Schema,
     },
     Value,
 };
 
-use super::{stats::ColumnCombValue, AdvStats, DEFAULT_EQ_SEL, DEFAULT_INEQ_SEL, DEFAULT_UNK_SEL};
+use super::{stats::ColumnCombValue, AdvStats, DEFAULT_EQ_SEL, DEFAULT_INEQ_SEL};
 
 mod in_list;
 mod like;

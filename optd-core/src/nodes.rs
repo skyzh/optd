@@ -190,13 +190,13 @@ impl Value {
             }),
             DataType::Int64 => Value::Int64(match self {
                 Value::Int64(i64) => *i64,
-                Value::Int32(i32) => (*i32).try_into().unwrap(),
+                Value::Int32(i32) => (*i32).into(),
                 _ => panic!("{self} could not be converted into an Int64"),
             }),
             DataType::UInt64 => Value::UInt64(match self {
                 Value::Int64(i64) => (*i64).try_into().unwrap(),
                 Value::UInt64(i64) => *i64,
-                Value::UInt32(i32) => (*i32).try_into().unwrap(),
+                Value::UInt32(i32) => (*i32).into(),
                 _ => panic!("{self} could not be converted into an UInt64"),
             }),
             DataType::Date32 => Value::Date32(match self {

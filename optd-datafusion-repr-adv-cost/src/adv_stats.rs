@@ -26,6 +26,7 @@ const DEFAULT_INEQ_SEL: f64 = 0.3333333333333333;
 // Default n-distinct estimate for derived columns or columns lacking statistics
 const DEFAULT_NUM_DISTINCT: u64 = 200;
 // Default selectivity if we have no information
+#[allow(dead_code)]
 const DEFAULT_UNK_SEL: f64 = 0.005;
 
 // A placeholder for unimplemented!() for codepaths which are accessed by plannertest
@@ -317,7 +318,7 @@ mod tests {
     pub fn in_list(col_ref_idx: u64, list: Vec<Value>, negated: bool) -> InListPred {
         InListPred::new(
             col_ref(col_ref_idx),
-            ListPred::new(list.into_iter().map(|v| cnst(v)).collect_vec()),
+            ListPred::new(list.into_iter().map(cnst).collect_vec()),
             negated,
         )
     }

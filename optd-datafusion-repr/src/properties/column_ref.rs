@@ -367,6 +367,26 @@ impl ColumnRefPropertyBuilder {
     }
 }
 
+impl std::fmt::Display for ColumnRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ColumnRef::BaseTableColumnRef(col) => write!(f, "{}.{}", col.table, col.col_idx),
+            ColumnRef::ChildColumnRef { col_idx } => write!(f, "#{}", col_idx),
+            ColumnRef::Derived => write!(f, "Derived"),
+        }
+    }
+}
+
+impl std::fmt::Display for GroupColumnRefs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "[{}]",
+            self.column_refs.iter().map(|x| x.to_string()).join(", ")
+        )
+    }
+}
+
 impl PropertyBuilder<DfNodeType> for ColumnRefPropertyBuilder {
     type Prop = GroupColumnRefs;
 

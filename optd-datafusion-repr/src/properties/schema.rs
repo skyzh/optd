@@ -17,6 +17,16 @@ pub struct Field {
     pub nullable: bool,
 }
 
+impl std::fmt::Display for Field {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.nullable {
+            write!(f, "{}:{:?}", self.name, self.typ)
+        } else {
+            write!(f, "{}:{:?}(non-null)", self.name, self.typ)
+        }
+    }
+}
+
 impl Field {
     /// Generate a field that is only a place holder whose members are never used.
     fn placeholder() -> Self {
@@ -31,6 +41,16 @@ impl Field {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Schema {
     pub fields: Vec<Field>,
+}
+
+impl std::fmt::Display for Schema {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "[{}]",
+            self.fields.iter().map(|x| x.to_string()).join(", ")
+        )
+    }
 }
 
 impl Schema {

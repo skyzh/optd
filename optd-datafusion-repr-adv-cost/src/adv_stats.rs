@@ -71,10 +71,13 @@ impl<
 mod tests {
     use arrow_schema::DataType;
     use itertools::Itertools;
-    use optd_core::nodes::Value;
-    use optd_datafusion_repr::plan_nodes::{
-        BinOpExpr, BinOpType, CastExpr, ColumnRefExpr, ConstantExpr, Expr, ExprList, InListExpr,
-        LikeExpr, LogOpExpr, LogOpType, OptRelNode, OptRelNodeRef, UnOpExpr, UnOpType,
+    use optd_datafusion_repr::{
+        plan_nodes::{
+            ArcDfPredNode, BinOpPred, BinOpType, CastPred, ColumnRefPred, ConstantPred,
+            DfReprPredNode, InListPred, LikePred, ListPred, LogOpPred, LogOpType, UnOpPred,
+            UnOpType,
+        },
+        Value,
     };
     use serde::{Deserialize, Serialize};
     use std::collections::HashMap;
@@ -285,74 +288,46 @@ mod tests {
         )
     }
 
-    pub fn col_ref(idx: u64) -> OptRelNodeRef {
+    pub fn col_ref(idx: u64) -> ArcDfPredNode {
         // this conversion is always safe because idx was originally a usize
         let idx_as_usize = idx as usize;
-        ColumnRefExpr::new(idx_as_usize).into_rel_node()
+        ColumnRefPred::new(idx_as_usize).into_pred_node()
     }
 
-    pub fn cnst(value: Value) -> OptRelNodeRef {
-        ConstantExpr::new(value).into_rel_node()
+    pub fn cnst(value: Value) -> ArcDfPredNode {
+        ConstantPred::new(value).into_pred_node()
     }
 
-    pub fn cast(child: OptRelNodeRef, cast_type: DataType) -> OptRelNodeRef {
-        CastExpr::new(
-            Expr::from_rel_node(child).expect("child should be an Expr"),
-            cast_type,
-        )
-        .into_rel_node()
+    pub fn cast(child: ArcDfPredNode, cast_type: DataType) -> ArcDfPredNode {
+        CastPred::new(child, cast_type).into_pred_node()
     }
 
-    pub fn bin_op(op_type: BinOpType, left: OptRelNodeRef, right: OptRelNodeRef) -> OptRelNodeRef {
-        BinOpExpr::new(
-            Expr::from_rel_node(left).expect("left should be an Expr"),
-            Expr::from_rel_node(right).expect("right should be an Expr"),
-            op_type,
-        )
-        .into_rel_node()
+    pub fn bin_op(op_type: BinOpType, left: ArcDfPredNode, right: ArcDfPredNode) -> ArcDfPredNode {
+        BinOpPred::new(left, right, op_type).into_pred_node()
     }
 
-    pub fn log_op(op_type: LogOpType, children: Vec<OptRelNodeRef>) -> OptRelNodeRef {
-        LogOpExpr::new(
-            op_type,
-            ExprList::new(
-                children
-                    .into_iter()
-                    .map(|opt_rel_node_ref| {
-                        Expr::from_rel_node(opt_rel_node_ref).expect("all children should be Expr")
-                    })
-                    .collect(),
-            ),
-        )
-        .into_rel_node()
+    pub fn log_op(op_type: LogOpType, children: Vec<ArcDfPredNode>) -> ArcDfPredNode {
+        LogOpPred::new(op_type, children).into_pred_node()
     }
 
-    pub fn un_op(op_type: UnOpType, child: OptRelNodeRef) -> OptRelNodeRef {
-        UnOpExpr::new(
-            Expr::from_rel_node(child).expect("child should be an Expr"),
-            op_type,
-        )
-        .into_rel_node()
+    pub fn un_op(op_type: UnOpType, child: ArcDfPredNode) -> ArcDfPredNode {
+        UnOpPred::new(child, op_type).into_pred_node()
     }
 
-    pub fn in_list(col_ref_idx: u64, list: Vec<Value>, negated: bool) -> InListExpr {
-        InListExpr::new(
-            Expr::from_rel_node(col_ref(col_ref_idx)).unwrap(),
-            ExprList::new(
-                list.into_iter()
-                    .map(|v| Expr::from_rel_node(cnst(v)).unwrap())
-                    .collect_vec(),
-            ),
+    pub fn in_list(col_ref_idx: u64, list: Vec<Value>, negated: bool) -> InListPred {
+        InListPred::new(
+            col_ref(col_ref_idx),
+            ListPred::new(list.into_iter().map(|v| cnst(v)).collect_vec()),
             negated,
         )
     }
 
-    pub fn like(col_ref_idx: u64, pattern: &str, negated: bool) -> LikeExpr {
-        LikeExpr::new(
+    pub fn like(col_ref_idx: u64, pattern: &str, negated: bool) -> LikePred {
+        LikePred::new(
             negated,
             false,
-            Expr::from_rel_node(col_ref(col_ref_idx)).unwrap(),
-            Expr::from_rel_node(cnst(Value::String(pattern.into()))).unwrap(),
+            col_ref(col_ref_idx),
+            cnst(Value::String(pattern.into())),
         )
     }
 

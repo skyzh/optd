@@ -6,7 +6,7 @@ use crate::adv_stats::{
     AdvStats, UNIMPLEMENTED_SEL,
 };
 use optd_datafusion_repr::{
-    plan_nodes::{ColumnRefExpr, ConstantExpr, LikeExpr, OptRelNode, OptRelNodeTyp},
+    plan_nodes::{ColumnRefPred, ConstantPred, DfPredType, DfReprPredNode, LikePred},
     properties::column_ref::{BaseTableColumnRef, BaseTableColumnRefs, ColumnRef},
 };
 
@@ -42,24 +42,22 @@ impl<
         let child = like_expr.child();
 
         // Check child is a column ref.
-        if !matches!(child.typ(), DfNodeType::ColumnRef) {
+        if !matches!(child.typ, DfPredType::ColumnRef) {
             return UNIMPLEMENTED_SEL;
         }
 
         // Check pattern is a constant.
         let pattern = like_expr.pattern();
-        if !matches!(pattern.typ(), DfNodeType::Constant(_)) {
+        if !matches!(pattern.typ, DfPredType::Constant(_)) {
             return UNIMPLEMENTED_SEL;
         }
 
-        let col_ref_idx = ColumnRefPred::from_rel_node(child.into_rel_node())
-            .unwrap()
-            .index();
+        let col_ref_idx = ColumnRefPred::from_pred_node(child).unwrap().index();
 
         if let ColumnRef::BaseTableColumnRef(BaseTableColumnRef { table, col_idx }) =
             &column_refs[col_ref_idx]
         {
-            let pattern = ConstantPred::from_rel_node(pattern.into_rel_node())
+            let pattern = ConstantPred::from_pred_node(pattern)
                 .expect("we already checked pattern is a constant")
                 .value()
                 .as_str();
@@ -111,8 +109,6 @@ impl<
 
 #[cfg(test)]
 mod tests {
-    use optd_core::nodes::Value;
-
     use crate::adv_stats::{
         filter::like::{FIXED_CHAR_SEL_FACTOR, FULL_WILDCARD_SEL_FACTOR},
         tests::{
@@ -120,7 +116,7 @@ mod tests {
             TestPerColumnStats, TABLE1_NAME,
         },
     };
-    use optd_datafusion_repr::properties::column_ref::ColumnRef;
+    use optd_datafusion_repr::{properties::column_ref::ColumnRef, Value};
 
     #[test]
     fn test_like_no_nulls() {

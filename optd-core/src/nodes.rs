@@ -188,6 +188,17 @@ impl Value {
                 Value::Int64(i64) => (*i64).try_into().unwrap(),
                 _ => panic!("{self} could not be converted into an Int32"),
             }),
+            DataType::Int64 => Value::Int64(match self {
+                Value::Int64(i64) => *i64,
+                Value::Int32(i32) => (*i32).try_into().unwrap(),
+                _ => panic!("{self} could not be converted into an Int64"),
+            }),
+            DataType::UInt64 => Value::UInt64(match self {
+                Value::Int64(i64) => (*i64).try_into().unwrap(),
+                Value::UInt64(i64) => *i64,
+                Value::UInt32(i32) => (*i32).try_into().unwrap(),
+                _ => panic!("{self} could not be converted into an UInt64"),
+            }),
             DataType::Date32 => Value::Date32(match self {
                 Value::Date32(date32) => *date32,
                 Value::String(str) => {
@@ -304,6 +315,12 @@ impl<T: NodeType> From<PlanNode<T>> for PlanNodeOrGroup<T> {
 impl<T: NodeType> From<ArcPlanNode<T>> for PlanNodeOrGroup<T> {
     fn from(value: ArcPlanNode<T>) -> Self {
         Self::PlanNode(value)
+    }
+}
+
+impl<T: NodeType> From<GroupId> for PlanNodeOrGroup<T> {
+    fn from(value: GroupId) -> Self {
+        Self::Group(value)
     }
 }
 

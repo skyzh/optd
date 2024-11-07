@@ -596,7 +596,7 @@ LogicalSort
                 │   ├── Eq
                 │   │   ├── #12
                 │   │   └── #46
-                │   └── Like { expr: #1, pattern: #1, negated: false, case_insensitive: false }
+                │   └── Like { expr: #1, pattern: "%green%", negated: false, case_insensitive: false }
                 └── LogicalJoin { join_type: Cross, cond: true }
                     ├── LogicalJoin { join_type: Cross, cond: true }
                     │   ├── LogicalJoin { join_type: Cross, cond: true }
@@ -650,7 +650,7 @@ PhysicalSort
             │   │   ├── Eq
             │   │   │   ├── #37
             │   │   │   └── #16
-            │   │   └── Like { expr: #1, pattern: #1, negated: false, case_insensitive: false }
+            │   │   └── Like { expr: #1, pattern: "%green%", negated: false, case_insensitive: false }
             │   └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
             │       ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
             │       │   ├── PhysicalScan { table: part }
@@ -743,7 +743,7 @@ LogicalSort
                 │   ├── Eq
                 │   │   ├── #12
                 │   │   └── #46
-                │   └── Like { expr: #1, pattern: #1, negated: false, case_insensitive: false }
+                │   └── Like { expr: #1, pattern: "%green%", negated: false, case_insensitive: false }
                 └── LogicalJoin { join_type: Cross, cond: true }
                     ├── LogicalJoin { join_type: Cross, cond: true }
                     │   ├── LogicalJoin { join_type: Cross, cond: true }
@@ -797,7 +797,7 @@ PhysicalSort
             │   │   ├── Eq
             │   │   │   ├── #37
             │   │   │   └── #16
-            │   │   └── Like { expr: #1, pattern: #1, negated: false, case_insensitive: false }
+            │   │   └── Like { expr: #1, pattern: "%green%", negated: false, case_insensitive: false }
             │   └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
             │       ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
             │       │   ├── PhysicalScan { table: part }

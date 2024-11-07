@@ -11,8 +11,8 @@ use lazy_static::lazy_static;
 use mimalloc::MiMalloc;
 use optd_datafusion_bridge::{DatafusionCatalog, OptdQueryPlanner};
 use optd_datafusion_repr::DatafusionOptimizer;
-// use optd_datafusion_repr_adv_cost::adv_stats::stats::DataFusionBaseTableStats;
-// use optd_datafusion_repr_adv_cost::new_physical_adv_cost;
+use optd_datafusion_repr_adv_cost::adv_stats::stats::DataFusionBaseTableStats;
+use optd_datafusion_repr_adv_cost::new_physical_adv_cost;
 use regex::Regex;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -81,12 +81,11 @@ impl DatafusionDBMS {
                 SessionState::new_with_config_rt(session_config.clone(), Arc::new(runtime_env))
             };
             let optimizer = if with_advanced_cost {
-                // new_physical_adv_cost(
-                //     Arc::new(DatafusionCatalog::new(state.catalog_list())),
-                //     DataFusionBaseTableStats::default(),
-                //     false,
-                // )
-                unimplemented!()
+                new_physical_adv_cost(
+                    Arc::new(DatafusionCatalog::new(state.catalog_list())),
+                    DataFusionBaseTableStats::default(),
+                    false,
+                )
             } else {
                 DatafusionOptimizer::new_physical(
                     Arc::new(DatafusionCatalog::new(state.catalog_list())),

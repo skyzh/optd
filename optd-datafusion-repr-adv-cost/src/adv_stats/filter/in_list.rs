@@ -5,7 +5,7 @@ use crate::adv_stats::{
     AdvStats, UNIMPLEMENTED_SEL,
 };
 use optd_datafusion_repr::{
-    plan_nodes::{ColumnRefExpr, ConstantExpr, InListExpr, OptRelNode, OptRelNodeTyp},
+    plan_nodes::{ColumnRefPred, ConstantPred, DfPredType, DfReprPredNode, InListPred},
     properties::column_ref::{BaseTableColumnRef, BaseTableColumnRefs, ColumnRef},
 };
 
@@ -24,7 +24,7 @@ impl<
         let child = expr.child();
 
         // Check child is a column ref.
-        if !matches!(child.typ(), DfNodeType::ColumnRef) {
+        if !matches!(child.typ, DfPredType::ColumnRef) {
             return UNIMPLEMENTED_SEL;
         }
 
@@ -32,19 +32,17 @@ impl<
         let list_exprs = expr.list().to_vec();
         if list_exprs
             .iter()
-            .any(|expr| !matches!(expr.typ(), DfNodeType::Constant(_)))
+            .any(|expr| !matches!(expr.typ, DfPredType::Constant(_)))
         {
             return UNIMPLEMENTED_SEL;
         }
 
         // Convert child and const expressions to concrete types.
-        let col_ref_idx = ColumnRefPred::from_rel_node(child.into_rel_node())
-            .unwrap()
-            .index();
+        let col_ref_idx = ColumnRefPred::from_pred_node(child).unwrap().index();
         let list_exprs = list_exprs
             .into_iter()
             .map(|expr| {
-                ConstantPred::from_rel_node(expr.into_rel_node())
+                ConstantPred::from_pred_node(expr)
                     .expect("we already checked all list elements are constants")
             })
             .collect::<Vec<_>>();
@@ -74,13 +72,11 @@ impl<
 
 #[cfg(test)]
 mod tests {
-    use optd_core::nodes::Value;
-
     use crate::adv_stats::tests::{
         create_one_column_cost_model, in_list, TestDistribution, TestMostCommonValues,
         TestPerColumnStats, TABLE1_NAME,
     };
-    use optd_datafusion_repr::properties::column_ref::ColumnRef;
+    use optd_datafusion_repr::{properties::column_ref::ColumnRef, Value};
 
     #[test]
     fn test_in_list() {

@@ -33,7 +33,7 @@ impl LikePred {
     }
 
     pub fn pattern(&self) -> ArcDfPredNode {
-        self.0.child(0)
+        self.0.child(1)
     }
 
     /// `true` for `NOT LIKE`.

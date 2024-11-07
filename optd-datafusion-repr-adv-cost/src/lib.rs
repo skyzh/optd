@@ -6,10 +6,10 @@ use adv_stats::{
 };
 
 use optd_datafusion_repr::{
-    cost::{adaptive_cost::RuntimeAdaptionStorageInner, OptCostModel, RuntimeAdaptionStorage},
-    plan_nodes::OptRelNodeTyp,
+    cost::{adaptive_cost::RuntimeAdaptionStorageInner, DfCostModel, RuntimeAdaptionStorage},
+    plan_nodes::{ArcDfPredNode, DfNodeType, DfReprPredNode, ListPred},
     properties::schema::Catalog,
-    DatafusionOptimizer,
+    DatafusionOptimizer, OptimizerExt,
 };
 
 pub mod adv_stats;
@@ -19,23 +19,22 @@ use std::collections::HashMap;
 use optd_core::{
     cascades::{CascadesOptimizer, NaiveMemo, RelNodeContext},
     cost::{Cost, CostModel, Statistics},
-    nodes::Value,
 };
 
 pub struct AdvancedCostModel {
-    base_model: OptCostModel,
+    base_model: DfCostModel,
     stats: AdvStats<DataFusionMostCommonValues, DataFusionDistribution>,
 }
 
 impl AdvancedCostModel {
     pub fn new(stats: DataFusionBaseTableStats) -> Self {
         let stats = AdvStats::new(stats);
-        let base_model = OptCostModel::new(HashMap::new());
+        let base_model = DfCostModel::new(HashMap::new());
         Self { base_model, stats }
     }
 }
 
-impl CostModel<OptRelNodeTyp, NaiveMemo<OptRelNodeTyp>> for AdvancedCostModel {
+impl CostModel<DfNodeType, NaiveMemo<DfNodeType>> for AdvancedCostModel {
     fn explain_cost(&self, cost: &Cost) -> String {
         self.base_model.explain_cost(cost)
     }
@@ -58,18 +57,18 @@ impl CostModel<OptRelNodeTyp, NaiveMemo<OptRelNodeTyp>> for AdvancedCostModel {
 
     fn compute_operation_cost(
         &self,
-        node: &OptRelNodeTyp,
-        data: &Option<Value>,
-        children: &[Option<&Statistics>],
-        children_cost: &[Cost],
+        node: &DfNodeType,
+        predicates: &[ArcDfPredNode],
+        children_stats: &[Option<&Statistics>],
+        children_costs: &[Cost],
         context: Option<RelNodeContext>,
-        optimizer: Option<&CascadesOptimizer<OptRelNodeTyp>>,
+        optimizer: Option<&CascadesOptimizer<DfNodeType>>,
     ) -> Cost {
         self.base_model.compute_operation_cost(
             node,
-            data,
-            children,
-            children_cost,
+            predicates,
+            children_stats,
+            children_costs,
             context,
             optimizer,
         )
@@ -77,66 +76,117 @@ impl CostModel<OptRelNodeTyp, NaiveMemo<OptRelNodeTyp>> for AdvancedCostModel {
 
     fn derive_statistics(
         &self,
-        node: &OptRelNodeTyp,
-        data: &Option<Value>,
-        children: &[&Statistics],
+        node: &DfNodeType,
+        predicates: &[ArcDfPredNode],
+        children_stats: &[&Statistics],
         context: Option<RelNodeContext>,
-        optimizer: Option<&CascadesOptimizer<OptRelNodeTyp>>,
+        optimizer: Option<&CascadesOptimizer<DfNodeType>>,
     ) -> Statistics {
-        let row_cnts = children
+        let context = context.as_ref();
+        let optimizer = optimizer.as_ref();
+        let row_cnts = children_stats
             .iter()
-            .map(|child| OptCostModel::row_cnt(child))
+            .map(|child| DfCostModel::row_cnt(child))
             .collect::<Vec<f64>>();
         match node {
-            OptRelNodeTyp::PhysicalScan => {
-                let table = data.as_ref().unwrap().as_str();
+            DfNodeType::PhysicalScan => {
+                let table = predicates[0].data.as_ref().unwrap().as_str(); // TODO: use df-repr to retrieve it
                 let row_cnt = self
                     .stats
                     .per_table_stats_map
                     .get(table.as_ref())
                     .map(|per_table_stats| per_table_stats.row_cnt)
                     .unwrap_or(1) as f64;
-                OptCostModel::stat(row_cnt)
+                DfCostModel::stat(row_cnt)
             }
-            OptRelNodeTyp::PhysicalLimit => {
+            DfNodeType::PhysicalLimit => {
                 let row_cnt = self
                     .stats
-                    .get_limit_row_cnt(row_cnts[0], context, optimizer);
-                OptCostModel::stat(row_cnt)
+                    .get_limit_row_cnt(row_cnts[0], predicates[1].clone());
+                DfCostModel::stat(row_cnt)
             }
-            OptRelNodeTyp::PhysicalFilter => {
-                let row_cnt = self
-                    .stats
-                    .get_filter_row_cnt(row_cnts[0], context, optimizer);
-                OptCostModel::stat(row_cnt)
+            DfNodeType::PhysicalFilter => {
+                let output_schema = optimizer
+                    .unwrap()
+                    .get_schema_of(context.unwrap().group_id.into());
+                let output_column_ref = optimizer
+                    .unwrap()
+                    .get_column_ref_of(context.unwrap().group_id.into());
+                let row_cnt = self.stats.get_filter_row_cnt(
+                    row_cnts[0],
+                    output_schema,
+                    output_column_ref,
+                    predicates[0].clone(),
+                );
+                DfCostModel::stat(row_cnt)
             }
-            OptRelNodeTyp::PhysicalNestedLoopJoin(join_typ) => {
+            DfNodeType::PhysicalNestedLoopJoin(join_typ) => {
+                let output_schema = optimizer
+                    .unwrap()
+                    .get_schema_of(context.unwrap().group_id.into());
+                let output_column_ref = optimizer
+                    .unwrap()
+                    .get_column_ref_of(context.unwrap().group_id.into());
+                let left_column_ref = optimizer
+                    .unwrap()
+                    .get_column_ref_of(context.unwrap().children_group_ids[0].into());
+                let right_column_ref = optimizer
+                    .unwrap()
+                    .get_column_ref_of(context.unwrap().children_group_ids[1].into());
                 let row_cnt = self.stats.get_nlj_row_cnt(
                     *join_typ,
                     row_cnts[0],
                     row_cnts[1],
-                    context,
-                    optimizer,
+                    output_schema,
+                    output_column_ref,
+                    predicates[0].clone(),
+                    left_column_ref,
+                    right_column_ref,
                 );
-                OptCostModel::stat(row_cnt)
+                DfCostModel::stat(row_cnt)
             }
-            OptRelNodeTyp::PhysicalHashJoin(join_typ) => {
+            DfNodeType::PhysicalHashJoin(join_typ) => {
+                let output_schema = optimizer
+                    .unwrap()
+                    .get_schema_of(context.unwrap().group_id.into());
+                let output_column_ref = optimizer
+                    .unwrap()
+                    .get_column_ref_of(context.unwrap().group_id.into());
+                let left_column_ref = optimizer
+                    .unwrap()
+                    .get_column_ref_of(context.unwrap().children_group_ids[0].into());
+                let right_column_ref = optimizer
+                    .unwrap()
+                    .get_column_ref_of(context.unwrap().children_group_ids[1].into());
                 let row_cnt = self.stats.get_hash_join_row_cnt(
                     *join_typ,
                     row_cnts[0],
                     row_cnts[1],
-                    context,
-                    optimizer,
+                    ListPred::from_pred_node(predicates[0].clone()).unwrap(),
+                    ListPred::from_pred_node(predicates[1].clone()).unwrap(),
+                    output_schema,
+                    output_column_ref,
+                    left_column_ref,
+                    right_column_ref,
                 );
-                OptCostModel::stat(row_cnt)
+                DfCostModel::stat(row_cnt)
             }
-            OptRelNodeTyp::PhysicalAgg => {
-                let row_cnt = self.stats.get_agg_row_cnt(context, optimizer, row_cnts[0]);
-                OptCostModel::stat(row_cnt)
+            DfNodeType::PhysicalAgg => {
+                let output_column_ref = optimizer
+                    .unwrap()
+                    .get_column_ref_of(context.unwrap().group_id.into());
+                let row_cnt = self
+                    .stats
+                    .get_agg_row_cnt(predicates[1].clone(), output_column_ref);
+                DfCostModel::stat(row_cnt)
             }
-            _ => self
-                .base_model
-                .derive_statistics(node, data, children, context, optimizer),
+            _ => self.base_model.derive_statistics(
+                node,
+                predicates,
+                children_stats,
+                context.cloned(),
+                optimizer.copied(),
+            ),
         }
     }
 }

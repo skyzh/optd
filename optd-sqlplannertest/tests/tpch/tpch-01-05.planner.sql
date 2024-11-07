@@ -271,7 +271,7 @@ LogicalLimit { skip: 0(u64), fetch: 100(u64) }
             │   ├── Eq
             │   │   ├── Cast { cast_to: Int64, child: #5 }
             │   │   └── 4(i64)
-            │   ├── Like { expr: #4, pattern: #4, negated: false, case_insensitive: false }
+            │   ├── Like { expr: #4, pattern: "%TIN", negated: false, case_insensitive: false }
             │   ├── Eq
             │   │   ├── #12
             │   │   └── #21
@@ -346,7 +346,7 @@ PhysicalLimit { skip: 0(u64), fetch: 100(u64) }
             │   ├── Eq
             │   │   ├── Cast { cast_to: Int64, child: #14 }
             │   │   └── 4(i64)
-            │   ├── Like { expr: #13, pattern: #13, negated: false, case_insensitive: false }
+            │   ├── Like { expr: #13, pattern: "%TIN", negated: false, case_insensitive: false }
             │   ├── Eq
             │   │   ├── #21
             │   │   └── #0

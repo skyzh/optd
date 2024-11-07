@@ -1,4 +1,4 @@
-use crate::plan_nodes::{ColumnRefPred, DfReprPlanNode, ListPred};
+use crate::plan_nodes::{ArcDfPredNode, ColumnRefPred, DfReprPredNode, ListPred, PredExt};
 
 /// This struct holds the mapping from original columns to projected columns.
 ///
@@ -25,7 +25,7 @@ impl ProjectionMapping {
         let mut forward = vec![];
         let mut backward = vec![];
         for (i, expr) in exprs.to_vec().iter().enumerate() {
-            let col_expr = ColumnRefPred::from_rel_node(expr.clone().into_rel_node())?;
+            let col_expr = ColumnRefPred::from_pred_node(expr.clone())?;
             let col_idx = col_expr.index();
             forward.push(col_idx);
             if col_idx >= backward.len() {
@@ -52,9 +52,9 @@ impl ProjectionMapping {
     ///      Projection { exprs: [#1, #0, #3, #5, #4] } --> has mapping
     /// ---->
     /// Join { cond: #1=#4 }
-    pub fn rewrite_join_cond(&self, cond: Expr, child_schema_len: usize) -> Expr {
+    pub fn rewrite_join_cond(&self, cond: ArcDfPredNode, child_schema_len: usize) -> ArcDfPredNode {
         let schema_size = self.forward.len();
-        cond.rewrite_column_refs(&mut |col_idx| {
+        cond.rewrite_column_refs(|col_idx| {
             if col_idx < schema_size {
                 self.projection_col_maps_to(col_idx)
             } else {
@@ -78,7 +78,7 @@ impl ProjectionMapping {
     ///      Projection { exprs: [#1, #0, #3, #5, #4] } --> has mapping
     /// ---->
     /// Filter { cond: #1=0 and #4=1 }
-    pub fn rewrite_filter_cond(&self, cond: Expr, is_added: bool) -> Expr {
+    pub fn rewrite_filter_cond(&self, cond: ArcDfPredNode, is_added: bool) -> ArcDfPredNode {
         cond.rewrite_column_refs(&mut |col_idx| {
             if is_added {
                 self.original_col_maps_to(col_idx)
@@ -112,10 +112,10 @@ impl ProjectionMapping {
             }
         } else {
             for i in exprs.to_vec() {
-                let col_ref = ColumnRefPred::from_rel_node(i.into_rel_node()).unwrap();
+                let col_ref = ColumnRefPred::from_pred_node(i).unwrap();
                 let col_idx = self.original_col_maps_to(col_ref.index()).unwrap();
-                let col: Expr = ColumnRefPred::new(col_idx).into_expr();
-                new_projection_exprs.push(col);
+                let col = ColumnRefPred::new(col_idx);
+                new_projection_exprs.push(col.into_pred_node());
             }
         }
         Some(ListPred::new(new_projection_exprs))

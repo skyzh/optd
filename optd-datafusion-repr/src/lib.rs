@@ -129,10 +129,10 @@ impl DatafusionOptimizer {
         // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
         //     ProjectionPullUpJoin::new(),
         // )));
-        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-        //     EliminateProjectRule::new(),
-        // )));
-        // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(ProjectMergeRule::new())));
+        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+            EliminateProjectRule::new(),
+        )));
+        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(ProjectMergeRule::new())));
         // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
         //     EliminateFilterRule::new(),
         // )));

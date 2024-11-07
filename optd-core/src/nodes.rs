@@ -334,6 +334,18 @@ pub struct PredNode<T: NodeType> {
     pub data: Option<Value>,
 }
 
+impl<T: NodeType> std::fmt::Display for PredNode<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "({}", self.typ)?;
+        for child in &self.children {
+            write!(f, " {}", child)?;
+        }
+        if let Some(data) = &self.data {
+            write!(f, " {}", data)?;
+        }
+        write!(f, ")")
+    }
+}
 impl<T: NodeType> PredNode<T> {
     pub fn child(&self, idx: usize) -> ArcPredNode<T> {
         self.children[idx].clone()

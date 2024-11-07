@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{BTreeSet, HashMap, HashSet, VecDeque},
     fmt::Display,
     sync::Arc,
 };
@@ -37,6 +37,8 @@ pub struct OptimizerProperties {
     pub partial_explore_iter: Option<usize>,
     /// Plan space can be expanded by this number of times before we stop applying logical rules.
     pub partial_explore_space: Option<usize>,
+    /// Disable pruning during optimization.
+    pub disable_pruning: bool,
 }
 
 pub struct CascadesOptimizer<T: NodeType, M: Memo<T> = NaiveMemo<T>> {
@@ -142,6 +144,10 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
         self.prop.panic_on_budget = enabled;
     }
 
+    pub fn disable_pruning(&mut self, enabled: bool) {
+        self.prop.disable_pruning = enabled;
+    }
+
     pub fn cost(&self) -> Arc<dyn CostModel<T, M>> {
         self.cost.clone()
     }
@@ -191,9 +197,16 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
             if let Some(predicate_binding) = self.memo.try_get_predicate_binding(group_id) {
                 println!("  predicate={}", predicate_binding);
             }
+            let mut all_predicates = BTreeSet::new();
             for expr_id in self.memo.get_all_exprs_in_group(group_id) {
                 let memo_node = self.memo.get_expr_memoed(expr_id);
+                for pred in &memo_node.predicates {
+                    all_predicates.insert(*pred);
+                }
                 println!("  expr_id={} | {}", expr_id, memo_node);
+            }
+            for pred in all_predicates {
+                println!("  {}={}", pred, self.memo.get_pred(pred));
             }
         }
     }

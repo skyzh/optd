@@ -1,24 +1,22 @@
-use std::collections::HashMap;
-use std::sync::Arc;
 use std::vec;
 
-use optd_core::nodes::{PlanNode, PlanNodeOrGroup};
+use optd_core::nodes::PlanNodeOrGroup;
 use optd_core::optimizer::Optimizer;
 use optd_core::rules::{Rule, RuleMatcher};
 
 use super::macros::{define_impl_rule, define_rule};
 use crate::plan_nodes::{
-    rewrite_column_refs, ArcDfPlanNode, BinOpPred, BinOpType, ColumnRefPred, ConstantPred,
-    ConstantType, DfNodeType, DfReprPlanNode, DfReprPredNode, JoinType, ListPred, LogOpType,
-    LogicalEmptyRelation, LogicalJoin, LogicalProjection, PhysicalHashJoin,
+    ArcDfPlanNode, BinOpPred, BinOpType, ColumnRefPred, ConstantPred, DfNodeType, DfPredType,
+    DfReprPlanNode, DfReprPredNode, JoinType, ListPred, LogOpType, LogicalFilter, LogicalJoin,
+    LogicalProjection, PhysicalHashJoin, PredExt,
 };
-use crate::properties::schema::{Schema, SchemaPropertyBuilder};
 use crate::OptimizerExt;
 
+// A cross join B -> A inner join B
 define_rule!(
     InnerCrossJoinRule,
     apply_inner_cross_join,
-    (DfNodeType::Join(JoinType::Cross), left, right)
+    (Join(JoinType::Cross), left, right)
 );
 
 fn apply_inner_cross_join(
@@ -28,6 +26,31 @@ fn apply_inner_cross_join(
     let join = LogicalJoin::from_plan_node(binding).unwrap();
     let node = LogicalJoin::new_unchecked(join.left(), join.right(), join.cond(), JoinType::Inner);
     vec![node.into_plan_node().into()]
+}
+
+// Filter (A inner join B on true) cond -> A inner join B on cond
+define_rule!(
+    JoinAbsorbFilterRule,
+    apply_join_absorb_filter,
+    (Filter, (Join(JoinType::Inner), left, right))
+);
+
+fn apply_join_absorb_filter(
+    _: &impl Optimizer<DfNodeType>,
+    binding: ArcDfPlanNode,
+) -> Vec<PlanNodeOrGroup<DfNodeType>> {
+    let filter = LogicalFilter::from_plan_node(binding).unwrap();
+    let join = LogicalJoin::from_plan_node(filter.child().unwrap_plan_node()).unwrap();
+    let join_cond = join.cond();
+    let filter_cond = filter.cond();
+    if let Some(constant) = ConstantPred::from_pred_node(join_cond) {
+        if constant.value().as_bool() {
+            let node =
+                LogicalJoin::new_unchecked(join.left(), join.right(), filter_cond, JoinType::Inner);
+            return vec![node.into_plan_node().into()];
+        }
+    }
+    vec![]
 }
 
 // A join B -> B join A
@@ -46,14 +69,16 @@ fn apply_join_commute(
     let right = join.right();
     let left_schema = optimizer.get_schema_of(left.clone());
     let right_schema = optimizer.get_schema_of(right.clone());
-    let cond = rewrite_column_refs(join.cond(), &mut |idx| {
-        Some(if idx < left_schema.len() {
-            idx + right_schema.len()
-        } else {
-            idx - left_schema.len()
+    let cond = join
+        .cond()
+        .rewrite_column_refs(|idx| {
+            Some(if idx < left_schema.len() {
+                idx + right_schema.len()
+            } else {
+                idx - left_schema.len()
+            })
         })
-    })
-    .unwrap();
+        .unwrap();
     let node = LogicalJoin::new_unchecked(right, left, cond, JoinType::Inner);
     let mut proj_expr = Vec::with_capacity(left_schema.len() + right_schema.len());
     for i in 0..left_schema.len() {
@@ -114,208 +139,152 @@ fn apply_join_commute(
 // }
 
 // // (A join B) join C -> A join (B join C)
-// define_rule!(
-//     JoinAssocRule,
-//     apply_join_assoc,
-//     (
-//         Join(JoinType::Inner),
-//         (Join(JoinType::Inner), a, b, [cond1]),
-//         c,
-//         [cond2]
-//     )
-// );
+define_rule!(
+    JoinAssocRule,
+    apply_join_assoc,
+    (Join(JoinType::Inner), (Join(JoinType::Inner), a, b), c)
+);
 
-// fn apply_join_assoc(
-//     optimizer: &impl Optimizer<DfNodeType>,
-//     JoinAssocRulePicks {
-//         a,
-//         b,
-//         c,
-//         cond1,
-//         cond2,
-//     }: JoinAssocRulePicks,
-// ) -> Vec<PlanNodeOrGroup<DfNodeType>> {
-//     let a_schema = optimizer.get_property::<SchemaPropertyBuilder>(Arc::new(a.clone()), 0);
-//     let _b_schema = optimizer.get_property::<SchemaPropertyBuilder>(Arc::new(b.clone()), 0);
-//     let _c_schema = optimizer.get_property::<SchemaPropertyBuilder>(Arc::new(c.clone()), 0);
+fn apply_join_assoc(
+    optimizer: &impl Optimizer<DfNodeType>,
+    binding: ArcDfPlanNode,
+) -> Vec<PlanNodeOrGroup<DfNodeType>> {
+    let join1: LogicalJoin = LogicalJoin::from_plan_node(binding).unwrap();
+    let c = join1.right();
+    let join2 = LogicalJoin::from_plan_node(join1.left().unwrap_plan_node()).unwrap();
+    let a = join2.left();
+    let b = join2.right();
+    let cond2 = join2.cond();
+    let a_schema = optimizer.get_schema_of(a.clone());
+    let cond1 = join1.cond();
 
-//     let cond2 = Expr::from_rel_node(cond2.into()).unwrap();
+    let Some(cond2) = cond2.rewrite_column_refs(&mut |idx| {
+        if idx < a_schema.len() {
+            None
+        } else {
+            Some(idx - a_schema.len())
+        }
+    }) else {
+        return vec![];
+    };
+    let node = LogicalJoin::new_unchecked(
+        a,
+        LogicalJoin::new_unchecked(b, c, cond2, JoinType::Inner).into_plan_node(),
+        cond1,
+        JoinType::Inner,
+    );
+    vec![node.into_plan_node().into()]
+}
 
-//     let Some(cond2) = cond2.rewrite_column_refs(&mut |idx| {
-//         if idx < a_schema.len() {
-//             None
-//         } else {
-//             Some(idx - a_schema.len())
-//         }
-//     }) else {
-//         return vec![];
-//     };
+define_impl_rule!(
+    HashJoinRule,
+    apply_hash_join,
+    (Join(JoinType::Inner), left, right)
+);
 
-//     let node = PlanNode {
-//         typ: DfNodeType::Join(JoinType::Inner),
-//         children: vec![
-//             a.into(),
-//             PlanNode {
-//                 typ: DfNodeType::Join(JoinType::Inner),
-//                 children: vec![b.into(), c.into(), cond2.into_rel_node()],
-//             }
-//             .into(),
-//             cond1.into(),
-//         ],
-//     };
-//     vec![node]
-// }
+fn apply_hash_join(
+    optimizer: &impl Optimizer<DfNodeType>,
+    binding: ArcDfPlanNode,
+) -> Vec<PlanNodeOrGroup<DfNodeType>> {
+    let join = LogicalJoin::from_plan_node(binding).unwrap();
+    let cond = join.cond();
+    let left = join.left();
+    let right = join.right();
+    match cond.typ {
+        DfPredType::BinOp(BinOpType::Eq) => {
+            let left_schema = optimizer.get_schema_of(left.clone());
+            let op = BinOpPred::from_pred_node(cond.clone()).unwrap();
+            let left_expr = op.left_child();
+            let right_expr = op.right_child();
+            let Some(mut left_expr) = ColumnRefPred::from_pred_node(left_expr) else {
+                return vec![];
+            };
+            let Some(mut right_expr) = ColumnRefPred::from_pred_node(right_expr) else {
+                return vec![];
+            };
+            let can_convert = if left_expr.index() < left_schema.len()
+                && right_expr.index() >= left_schema.len()
+            {
+                true
+            } else if right_expr.index() < left_schema.len()
+                && left_expr.index() >= left_schema.len()
+            {
+                (left_expr, right_expr) = (right_expr, left_expr);
+                true
+            } else {
+                false
+            };
 
-// define_impl_rule!(
-//     HashJoinRule,
-//     apply_hash_join,
-//     (Join(JoinType::Inner), left, right, [cond])
-// );
+            if can_convert {
+                let right_expr = ColumnRefPred::new(right_expr.index() - left_schema.len());
+                let node = PhysicalHashJoin::new_unchecked(
+                    left,
+                    right,
+                    ListPred::new(vec![left_expr.into_pred_node()]),
+                    ListPred::new(vec![right_expr.into_pred_node()]),
+                    JoinType::Inner,
+                );
+                return vec![node.into_plan_node().into()];
+            }
+        }
+        DfPredType::LogOp(LogOpType::And) => {
+            // currently only support consecutive equal queries
+            let mut is_consecutive_eq = true;
+            for child in cond.children.clone() {
+                if let DfPredType::BinOp(BinOpType::Eq) = child.typ {
+                    continue;
+                } else {
+                    is_consecutive_eq = false;
+                    break;
+                }
+            }
+            if !is_consecutive_eq {
+                return vec![];
+            }
 
-// fn apply_hash_join(
-//     optimizer: &impl Optimizer<DfNodeType>,
-//     HashJoinRulePicks { left, right, cond }: HashJoinRulePicks,
-// ) -> Vec<PlanNodeOrGroup<DfNodeType>> {
-//     match cond.typ {
-//         DfNodeType::BinOp(BinOpType::Eq) => {
-//             let left_schema =
-//                 optimizer.get_property::<SchemaPropertyBuilder>(Arc::new(left.clone()), 0);
-//             // let right_schema =
-//             //     optimizer.get_property::<SchemaPropertyBuilder>(Arc::new(right.clone()), 0);
-//             let op = BinOpPred::from_rel_node(Arc::new(cond.clone())).unwrap();
-//             let left_expr = op.left_child();
-//             let right_expr = op.right_child();
-//             let Some(mut left_expr) = ColumnRefPred::from_rel_node(left_expr.into_rel_node())
-//             else {
-//                 return vec![];
-//             };
-//             let Some(mut right_expr) = ColumnRefPred::from_rel_node(right_expr.into_rel_node())
-//             else {
-//                 return vec![];
-//             };
-//             let can_convert = if left_expr.index() < left_schema.len()
-//                 && right_expr.index() >= left_schema.len()
-//             {
-//                 true
-//             } else if right_expr.index() < left_schema.len()
-//                 && left_expr.index() >= left_schema.len()
-//             {
-//                 (left_expr, right_expr) = (right_expr, left_expr);
-//                 true
-//             } else {
-//                 false
-//             };
+            let left_schema = optimizer.get_schema_of(left.clone());
+            let mut left_exprs = vec![];
+            let mut right_exprs = vec![];
+            for child in &cond.children {
+                let bin_op = BinOpPred::from_pred_node(child.clone()).unwrap();
+                let left_expr = bin_op.left_child();
+                let right_expr = bin_op.right_child();
+                let Some(mut left_expr) = ColumnRefPred::from_pred_node(left_expr) else {
+                    return vec![];
+                };
+                let Some(mut right_expr) = ColumnRefPred::from_pred_node(right_expr) else {
+                    return vec![];
+                };
+                let can_convert = if left_expr.index() < left_schema.len()
+                    && right_expr.index() >= left_schema.len()
+                {
+                    true
+                } else if right_expr.index() < left_schema.len()
+                    && left_expr.index() >= left_schema.len()
+                {
+                    (left_expr, right_expr) = (right_expr, left_expr);
+                    true
+                } else {
+                    false
+                };
+                if !can_convert {
+                    return vec![];
+                }
+                let right_expr = ColumnRefPred::new(right_expr.index() - left_schema.len());
+                right_exprs.push(right_expr.into_pred_node());
+                left_exprs.push(left_expr.into_pred_node());
+            }
 
-//             if can_convert {
-//                 let right_expr = ColumnRefPred::new(right_expr.index() - left_schema.len());
-//                 let node = PhysicalHashJoin::new(
-//                     DfReprPlanNode::from_group(left.into()),
-//                     DfReprPlanNode::from_group(right.into()),
-//                     ListPred::new(vec![left_expr.into_expr()]),
-//                     ListPred::new(vec![right_expr.into_expr()]),
-//                     JoinType::Inner,
-//                 );
-//                 return vec![node.into_rel_node().as_ref().clone()];
-//             }
-//         }
-//         DfNodeType::LogOp(LogOpType::And) => {
-//             // currently only support consecutive equal queries
-//             let mut is_consecutive_eq = true;
-//             for child in cond.children.clone() {
-//                 if let DfNodeType::BinOp(BinOpType::Eq) = child.typ {
-//                     continue;
-//                 } else {
-//                     is_consecutive_eq = false;
-//                     break;
-//                 }
-//             }
-//             if !is_consecutive_eq {
-//                 return vec![];
-//             }
-
-//             let left_schema =
-//                 optimizer.get_property::<SchemaPropertyBuilder>(Arc::new(left.clone()), 0);
-//             let mut left_exprs = vec![];
-//             let mut right_exprs = vec![];
-//             for child in cond.children {
-//                 let bin_op = BinOpPred::from_rel_node(child.clone()).unwrap();
-//                 let left_expr: Expr = bin_op.left_child();
-//                 let right_expr = bin_op.right_child();
-//                 let Some(mut left_expr) = ColumnRefPred::from_rel_node(left_expr.into_rel_node())
-//                 else {
-//                     return vec![];
-//                 };
-//                 let Some(mut right_expr) = ColumnRefPred::from_rel_node(right_expr.into_rel_node())
-//                 else {
-//                     return vec![];
-//                 };
-//                 let can_convert = if left_expr.index() < left_schema.len()
-//                     && right_expr.index() >= left_schema.len()
-//                 {
-//                     true
-//                 } else if right_expr.index() < left_schema.len()
-//                     && left_expr.index() >= left_schema.len()
-//                 {
-//                     (left_expr, right_expr) = (right_expr, left_expr);
-//                     true
-//                 } else {
-//                     false
-//                 };
-//                 if !can_convert {
-//                     return vec![];
-//                 }
-//                 let right_expr = ColumnRefPred::new(right_expr.index() - left_schema.len());
-//                 right_exprs.push(right_expr.into_expr());
-//                 left_exprs.push(left_expr.into_expr());
-//             }
-
-//             let node = PhysicalHashJoin::new(
-//                 DfReprPlanNode::from_group(left.into()),
-//                 DfReprPlanNode::from_group(right.into()),
-//                 ListPred::new(left_exprs),
-//                 ListPred::new(right_exprs),
-//                 JoinType::Inner,
-//             );
-//             return vec![node.into_rel_node().as_ref().clone()];
-//         }
-//         _ => {}
-//     }
-//     if let DfNodeType::BinOp(BinOpType::Eq) = cond.typ {
-//         let left_schema =
-//             optimizer.get_property::<SchemaPropertyBuilder>(Arc::new(left.clone()), 0);
-//         // let right_schema =
-//         //     optimizer.get_property::<SchemaPropertyBuilder>(Arc::new(right.clone()), 0);
-//         let op = BinOpPred::from_rel_node(Arc::new(cond.clone())).unwrap();
-//         let left_expr = op.left_child();
-//         let right_expr = op.right_child();
-//         let Some(mut left_expr) = ColumnRefPred::from_rel_node(left_expr.into_rel_node()) else {
-//             return vec![];
-//         };
-//         let Some(mut right_expr) = ColumnRefPred::from_rel_node(right_expr.into_rel_node()) else {
-//             return vec![];
-//         };
-//         let can_convert = if left_expr.index() < left_schema.len()
-//             && right_expr.index() >= left_schema.len()
-//         {
-//             true
-//         } else if right_expr.index() < left_schema.len() && left_expr.index() >= left_schema.len() {
-//             (left_expr, right_expr) = (right_expr, left_expr);
-//             true
-//         } else {
-//             false
-//         };
-
-//         if can_convert {
-//             let right_expr = ColumnRefPred::new(right_expr.index() - left_schema.len());
-//             let node = PhysicalHashJoin::new(
-//                 DfReprPlanNode::from_group(left.into()),
-//                 DfReprPlanNode::from_group(right.into()),
-//                 ListPred::new(vec![left_expr.into_expr()]),
-//                 ListPred::new(vec![right_expr.into_expr()]),
-//                 JoinType::Inner,
-//             );
-//             return vec![node.into_rel_node().as_ref().clone()];
-//         }
-//     }
-//     vec![]
-// }
+            let node = PhysicalHashJoin::new_unchecked(
+                left,
+                right,
+                ListPred::new(left_exprs),
+                ListPred::new(right_exprs),
+                JoinType::Inner,
+            );
+            return vec![node.into_plan_node().into()];
+        }
+        _ => {}
+    }
+    vec![]
+}

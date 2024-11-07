@@ -5,11 +5,11 @@ use datafusion::{
     scalar::ScalarValue,
 };
 use datafusion_expr::Subquery;
-use optd_core::nodes::{PlanNode, PredNode};
+use optd_core::nodes::PredNode;
 use optd_datafusion_repr::plan_nodes::{
     ArcDfPlanNode, ArcDfPredNode, BetweenPred, BinOpPred, BinOpType, CastPred, ColumnRefPred,
-    ConstantPred, DfNodeType, DfPredType, DfReprPlanNode, DfReprPredNode, ExternColumnRefPred,
-    FuncPred, FuncType, InListPred, JoinType, LikePred, ListPred, LogOpPred, LogOpType, LogicalAgg,
+    ConstantPred, DfReprPlanNode, DfReprPredNode, ExternColumnRefPred, FuncPred, FuncType,
+    InListPred, JoinType, LikePred, ListPred, LogOpPred, LogOpType, LogicalAgg,
     LogicalEmptyRelation, LogicalFilter, LogicalJoin, LogicalLimit, LogicalProjection, LogicalScan,
     LogicalSort, RawDependentJoin, SortOrderPred, SortOrderType,
 };

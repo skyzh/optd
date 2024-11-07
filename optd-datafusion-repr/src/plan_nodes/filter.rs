@@ -1,6 +1,6 @@
 use super::macros::define_plan_node;
 
-use super::{ArcDfPlanNode, ArcDfPredNode, DfNodeType, DfPlanNode, DfReprPlanNode, ListPred};
+use super::{ArcDfPlanNode, ArcDfPredNode, DfNodeType, DfPlanNode, DfReprPlanNode};
 
 #[derive(Clone, Debug)]
 pub struct LogicalFilter(pub ArcDfPlanNode);

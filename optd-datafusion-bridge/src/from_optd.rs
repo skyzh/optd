@@ -24,11 +24,11 @@ use optd_core::nodes::{PlanNodeMetaMap, PlanNodeOrGroup};
 use optd_datafusion_repr::{
     plan_nodes::{
         ArcDfPlanNode, ArcDfPredNode, BetweenPred, BinOpPred, BinOpType, CastPred, ColumnRefPred,
-        ConstantPred, ConstantType, DfNodeType, DfPlanNode, DfPredType, DfReprPlanNode,
-        DfReprPredNode, FuncPred, FuncType, InListPred, JoinType, LikePred, ListPred, LogOpPred,
-        LogOpType, PhysicalAgg, PhysicalEmptyRelation, PhysicalFilter, PhysicalHashJoin,
-        PhysicalLimit, PhysicalNestedLoopJoin, PhysicalProjection, PhysicalScan, PhysicalSort,
-        SortOrderPred, SortOrderType,
+        ConstantPred, ConstantType, DfNodeType, DfPredType, DfReprPlanNode, DfReprPredNode,
+        FuncPred, FuncType, InListPred, JoinType, LikePred, LogOpPred, LogOpType, PhysicalAgg,
+        PhysicalEmptyRelation, PhysicalFilter, PhysicalHashJoin, PhysicalLimit,
+        PhysicalNestedLoopJoin, PhysicalProjection, PhysicalScan, PhysicalSort, SortOrderPred,
+        SortOrderType,
     },
     properties::schema::Schema as OptdSchema,
 };

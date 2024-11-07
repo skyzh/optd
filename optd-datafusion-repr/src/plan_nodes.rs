@@ -32,9 +32,9 @@ pub use sort::{LogicalSort, PhysicalSort};
 pub use subquery::{DependentJoin, RawDependentJoin}; // Add missing import
 
 pub use predicates::{
-    rewrite_column_refs, BetweenPred, BinOpPred, BinOpType, CastPred, ColumnRefPred, ConstantPred,
-    ConstantType, DataTypePred, ExternColumnRefPred, FuncPred, FuncType, InListPred, LikePred,
-    ListPred, LogOpPred, LogOpType, SortOrderPred, SortOrderType, UnOpPred, UnOpType,
+    BetweenPred, BinOpPred, BinOpType, CastPred, ColumnRefPred, ConstantPred, ConstantType,
+    DataTypePred, ExternColumnRefPred, FuncPred, FuncType, InListPred, LikePred, ListPred,
+    LogOpPred, LogOpType, PredExt, SortOrderPred, SortOrderType, UnOpPred, UnOpType,
 };
 use pretty_xmlish::{Pretty, PrettyConfig};
 

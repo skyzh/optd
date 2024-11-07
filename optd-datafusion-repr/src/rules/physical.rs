@@ -1,7 +1,5 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
-use arrow_schema::DataType;
 use optd_core::nodes::{PlanNode, PlanNodeOrGroup};
 use optd_core::optimizer::Optimizer;
 use optd_core::rules::{Rule, RuleMatcher};
@@ -28,7 +26,7 @@ impl PhysicalConversionRule {
         // Define conversions below, and add them to this list!
         // Note that we're using discriminant matching, so only one value of each variant
         // is sufficient to match all values of a variant.
-        let mut rules: Vec<Arc<dyn Rule<DfNodeType, O>>> = vec![
+        let rules: Vec<Arc<dyn Rule<DfNodeType, O>>> = vec![
             Arc::new(PhysicalConversionRule::new(DfNodeType::Scan)),
             Arc::new(PhysicalConversionRule::new(DfNodeType::Projection)),
             Arc::new(PhysicalConversionRule::new(DfNodeType::Join(

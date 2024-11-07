@@ -1,10 +1,9 @@
 mod ir;
 
-use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
-use crate::nodes::{ArcPlanNode, ArcPredNode, PlanNodeOrGroup};
+use crate::nodes::{ArcPlanNode, PlanNodeOrGroup};
 use crate::{nodes::NodeType, optimizer::Optimizer};
 
 pub use ir::RuleMatcher;

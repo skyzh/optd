@@ -41,10 +41,7 @@ pub trait PredExt {
     /// - If it is Some, the column index can be rewritten with the value.
     /// - If any of the columns is None, we will return None all the way up
     /// the call stack, and no expression will be returned.
-    fn rewrite_column_refs(
-        &self,
-        rewrite_fn: &mut impl FnMut(usize) -> Option<usize>,
-    ) -> Option<Self>
+    fn rewrite_column_refs(&self, rewrite_fn: impl FnMut(usize) -> Option<usize>) -> Option<Self>
     where
         Self: Sized;
 }
@@ -52,28 +49,33 @@ pub trait PredExt {
 impl<P: DfReprPredNode> PredExt for P {
     fn rewrite_column_refs(
         &self,
-        rewrite_fn: &mut impl FnMut(usize) -> Option<usize>,
+        mut rewrite_fn: impl FnMut(usize) -> Option<usize>,
     ) -> Option<Self> {
-        let expr = self.into_pred_node();
-        if let Some(col_ref) = ColumnRefPred::from_pred_node(expr.clone()) {
-            let rewritten = rewrite_fn(col_ref.index())?;
-            let new_col_ref = ColumnRefPred::new(rewritten);
-            return Some(
-                Self::from_pred_node(new_col_ref.into_pred_node()).expect("unmatched type"),
-            );
-        }
-        let children = expr
-            .children
-            .iter()
-            .map(|child| child.rewrite_column_refs(rewrite_fn))
-            .collect::<Option<Vec<_>>>()?;
-        Some(
-            Self::from_pred_node(Arc::new(PredNode {
-                typ: expr.typ.clone(),
-                children,
-                data: expr.data.clone(),
-            }))
-            .expect("unmatched type"),
-        )
+        rewrite_column_refs_inner(self, &mut rewrite_fn)
     }
+}
+
+fn rewrite_column_refs_inner<P: DfReprPredNode>(
+    expr: &P,
+    rewrite_fn: &mut impl FnMut(usize) -> Option<usize>,
+) -> Option<P> {
+    let expr = expr.clone().into_pred_node();
+    if let Some(col_ref) = ColumnRefPred::from_pred_node(expr.clone()) {
+        let rewritten = rewrite_fn(col_ref.index())?;
+        let new_col_ref = ColumnRefPred::new(rewritten);
+        return Some(P::from_pred_node(new_col_ref.into_pred_node()).expect("unmatched type"));
+    }
+    let children = expr
+        .children
+        .iter()
+        .map(|child| rewrite_column_refs_inner(child, rewrite_fn))
+        .collect::<Option<Vec<_>>>()?;
+    Some(
+        P::from_pred_node(Arc::new(PredNode {
+            typ: expr.typ.clone(),
+            children,
+            data: expr.data.clone(),
+        }))
+        .expect("unmatched type"),
+    )
 }

@@ -1,6 +1,6 @@
 use super::macros::define_plan_node;
 
-use super::{ArcDfPlanNode, ArcDfPredNode, DfNodeType, DfPlanNode, DfReprPlanNode, ListPred};
+use super::{ArcDfPlanNode, DfNodeType, DfPlanNode, DfReprPlanNode, ListPred};
 
 #[derive(Clone, Debug)]
 pub struct LogicalSort(pub ArcDfPlanNode);

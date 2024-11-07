@@ -5,7 +5,7 @@ use itertools::Itertools;
 use std::any::Any;
 
 use crate::{
-    nodes::{ArcPlanNode, ArcPredNode, NodeType, PlanNode, PlanNodeOrGroup},
+    nodes::{ArcPlanNode, NodeType, PlanNode, PlanNodeOrGroup},
     optimizer::Optimizer,
     property::PropertyBuilderAny,
     rules::{Rule, RuleMatcher},

@@ -19,8 +19,8 @@ use datafusion::{
 use itertools::Itertools;
 use optd_datafusion_repr::{
     plan_nodes::{
-        dispatch_plan_explain_to_string, ArcDfPlanNode, ConstantType, DfNodeType, DfPlanNode,
-        DfReprPlanNode, PhysicalHashJoin, PhysicalNestedLoopJoin,
+        dispatch_plan_explain_to_string, ArcDfPlanNode, ConstantType, DfNodeType, DfReprPlanNode,
+        PhysicalHashJoin, PhysicalNestedLoopJoin,
     },
     properties::schema::Catalog,
     DatafusionOptimizer, MemoExt,

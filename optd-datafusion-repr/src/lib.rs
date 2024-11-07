@@ -20,7 +20,6 @@ use properties::{
     column_ref::ColumnRefPropertyBuilder,
     schema::{Catalog, SchemaPropertyBuilder},
 };
-use rules::*;
 
 pub use memo_ext::{LogicalJoinOrder, MemoExt};
 pub use optimizer_ext::OptimizerExt;
@@ -96,7 +95,7 @@ impl DatafusionOptimizer {
 
     pub fn default_cascades_rules(
     ) -> Vec<Arc<RuleWrapper<DfNodeType, CascadesOptimizer<DfNodeType>>>> {
-        let rules = PhysicalConversionRule::all_conversions();
+        let rules = rules::PhysicalConversionRule::all_conversions();
         let mut rule_wrappers = vec![];
         for rule in rules {
             rule_wrappers.push(RuleWrapper::new_cascades(rule));
@@ -117,22 +116,33 @@ impl DatafusionOptimizer {
         // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
         //     FilterAggTransposeRule::new(),
         // )));
-        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(HashJoinRule::new())));
-        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(JoinCommuteRule::new())));
         rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-            InnerCrossJoinRule::new(),
+            rules::HashJoinRule::new(),
         )));
-        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(JoinAssocRule::new())));
         rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-            JoinAbsorbFilterRule::new(),
+            rules::JoinCommuteRule::new(),
+        )));
+        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+            rules::InnerCrossJoinRule::new(),
+        )));
+        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+            rules::JoinAssocRule::new(),
+        )));
+        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+            rules::JoinAbsorbFilterRule::new(),
         )));
         // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
         //     ProjectionPullUpJoin::new(),
         // )));
         rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
-            EliminateProjectRule::new(),
+            rules::EliminateProjectRule::new(),
         )));
-        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(ProjectMergeRule::new())));
+        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+            rules::ProjectMergeRule::new(),
+        )));
+        rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
+            rules::EliminateLimitRule::new(),
+        )));
         // rule_wrappers.push(RuleWrapper::new_cascades(Arc::new(
         //     EliminateFilterRule::new(),
         // )));
@@ -188,7 +198,7 @@ impl DatafusionOptimizer {
 
     /// The optimizer settings for three-join demo as a perfect optimizer.
     pub fn new_alternative_physical_for_demo(catalog: Arc<dyn Catalog>) -> Self {
-        let rules = PhysicalConversionRule::all_conversions();
+        let rules = rules::PhysicalConversionRule::all_conversions();
         let mut rule_wrappers = Vec::new();
         for rule in rules {
             rule_wrappers.push(RuleWrapper::new_cascades(rule));

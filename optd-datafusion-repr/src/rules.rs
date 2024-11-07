@@ -1,5 +1,5 @@
 // mod eliminate_duplicated_expr;
-// mod eliminate_limit;
+mod eliminate_limit;
 // mod filter;
 // mod filter_pushdown;
 mod joins;
@@ -11,7 +11,7 @@ mod project_transpose;
 // pub use eliminate_duplicated_expr::{
 //     EliminateDuplicatedAggExprRule, EliminateDuplicatedSortExprRule,
 // };
-// pub use eliminate_limit::EliminateLimitRule;
+pub use eliminate_limit::*;
 // pub use filter::{EliminateFilterRule, SimplifyFilterRule, SimplifyJoinCondRule};
 // pub use filter_pushdown::{
 //     FilterAggTransposeRule, FilterCrossJoinTransposeRule, FilterInnerJoinTransposeRule,

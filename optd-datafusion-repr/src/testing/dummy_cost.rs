@@ -5,7 +5,6 @@
 
 use optd_core::cascades::{CascadesOptimizer, NaiveMemo, RelNodeContext};
 use optd_core::cost::{Cost, CostModel, Statistics};
-use value_bag::ValueBag;
 
 use crate::plan_nodes::{ArcDfPredNode, DfNodeType};
 
@@ -36,7 +35,7 @@ impl CostModel<DfNodeType, NaiveMemo<DfNodeType>> for DummyCostModel {
         _: Option<RelNodeContext>,
         _: Option<&CascadesOptimizer<DfNodeType>>,
     ) -> Statistics {
-        Statistics(ValueBag::empty().to_owned())
+        Statistics(Box::new(()))
     }
 
     fn explain_cost(&self, _: &Cost) -> String {

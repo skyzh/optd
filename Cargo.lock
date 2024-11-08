@@ -2924,7 +2924,7 @@ dependencies = [
 
 [[package]]
 name = "optd-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "arrow-schema",
@@ -2938,7 +2938,7 @@ dependencies = [
 
 [[package]]
 name = "optd-datafusion-bridge"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-recursion",
@@ -2955,7 +2955,7 @@ dependencies = [
 
 [[package]]
 name = "optd-datafusion-repr"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "arrow-schema",
@@ -2972,7 +2972,7 @@ dependencies = [
 
 [[package]]
 name = "optd-datafusion-repr-adv-cost"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "arrow-schema",
@@ -2993,7 +2993,7 @@ dependencies = [
 
 [[package]]
 name = "optd-gungnir"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "crossbeam",
  "hashbrown 0.14.5",
@@ -3039,7 +3039,7 @@ dependencies = [
 
 [[package]]
 name = "optd-sqlplannertest"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4042,8 +4042,9 @@ dependencies = [
 
 [[package]]
 name = "sqlplannertest"
-version = "0.1.0"
-source = "git+https://github.com/risinglightdb/sqlplannertest-rs?branch=main#6122d5be20383c0a6a50327258ea9da8e2d72df5"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "40df613c24d7066362c37ef5047373532700efb87856088212a47f7b273c7424"
 dependencies = [
  "anyhow",
  "async-trait",

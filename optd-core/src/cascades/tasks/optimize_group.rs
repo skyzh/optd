@@ -26,8 +26,8 @@ impl OptimizeGroupTask {
 impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeGroupTask {
     fn execute(&self, optimizer: &mut CascadesOptimizer<T, M>) -> Result<Vec<Box<dyn Task<T, M>>>> {
         trace!(event = "task_begin", task = "optimize_group", group_id = %self.group_id);
-        let group_info = optimizer.get_group_info(self.group_id);
-        if group_info.winner.has_decided() {
+        let winner = optimizer.get_group_winner(self.group_id);
+        if winner.has_decided() {
             trace!(event = "task_finish", task = "optimize_group");
             return Ok(vec![]);
         }

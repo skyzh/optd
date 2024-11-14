@@ -139,14 +139,17 @@ impl<T: NodeType, P: PhysicalPropertyBuilder<T>> PhysicalPropertyBuilderAny<T> f
     }
 }
 
-pub(crate) struct PhysicalPropertyBuilders<T: NodeType>(
-    pub Arc<[Box<dyn PhysicalPropertyBuilderAny<T>>]>,
-);
+#[derive(Clone)]
+pub struct PhysicalPropertyBuilders<T: NodeType>(pub Arc<[Box<dyn PhysicalPropertyBuilderAny<T>>]>);
 
 /// Represents a set of physical properties for a specific plan node
-pub(crate) type PhysicalPropertySet = Vec<Box<dyn PhysicalProperty>>;
+pub type PhysicalPropertySet = Vec<Box<dyn PhysicalProperty>>;
 
 impl<T: NodeType> PhysicalPropertyBuilders<T> {
+    pub fn new_empty_for_test() -> Self {
+        PhysicalPropertyBuilders(Arc::new([]))
+    }
+
     pub fn len(&self) -> usize {
         self.0.len()
     }

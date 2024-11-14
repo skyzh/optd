@@ -10,17 +10,19 @@ use std::sync::Arc;
 use anyhow::Result;
 use tracing::trace;
 
-use super::memo::{ArcMemoPlanNode, GroupInfo, Memo};
+use super::memo::{ArcMemoPlanNode, Memo};
 use super::tasks::OptimizeGroupTask;
 use super::{NaiveMemo, Task};
-use crate::cascades::memo::Winner;
+use crate::cascades::memo::{Winner, WinnerExpr};
 use crate::cost::CostModel;
 use crate::logical_property::{LogicalPropertyBuilder, LogicalPropertyBuilderAny};
 use crate::nodes::{
     ArcPlanNode, ArcPredNode, NodeType, PlanNodeMeta, PlanNodeMetaMap, PlanNodeOrGroup,
 };
 use crate::optimizer::Optimizer;
-use crate::physical_property::PhysicalProperty;
+use crate::physical_property::{
+    PhysicalProperty, PhysicalPropertyBuilderAny, PhysicalPropertyBuilders,
+};
 use crate::rules::Rule;
 
 pub type RuleId = usize;
@@ -51,7 +53,8 @@ pub struct CascadesOptimizer<T: NodeType, M: Memo<T> = NaiveMemo<T>> {
     rules: Arc<[Arc<dyn Rule<T, Self>>]>,
     disabled_rules: HashSet<usize>,
     cost: Arc<dyn CostModel<T, M>>,
-    property_builders: Arc<[Box<dyn LogicalPropertyBuilderAny<T>>]>,
+    logical_property_builders: Arc<[Box<dyn LogicalPropertyBuilderAny<T>>]>,
+    physical_property_builders: PhysicalPropertyBuilders<T>,
     pub ctx: OptimizerContext,
     pub prop: OptimizerProperties,
 }
@@ -97,20 +100,33 @@ impl<T: NodeType> CascadesOptimizer<T, NaiveMemo<T>> {
     pub fn new(
         rules: Vec<Arc<dyn Rule<T, Self>>>,
         cost: Box<dyn CostModel<T, NaiveMemo<T>>>,
-        property_builders: Vec<Box<dyn LogicalPropertyBuilderAny<T>>>,
+        logical_property_builders: Vec<Box<dyn LogicalPropertyBuilderAny<T>>>,
+        physical_property_builders: Vec<Box<dyn PhysicalPropertyBuilderAny<T>>>,
     ) -> Self {
-        Self::new_with_prop(rules, cost, property_builders, Default::default())
+        Self::new_with_options(
+            rules,
+            cost,
+            logical_property_builders,
+            physical_property_builders,
+            Default::default(),
+        )
     }
 
-    pub fn new_with_prop(
+    pub fn new_with_options(
         rules: Vec<Arc<dyn Rule<T, Self>>>,
         cost: Box<dyn CostModel<T, NaiveMemo<T>>>,
-        property_builders: Vec<Box<dyn LogicalPropertyBuilderAny<T>>>,
+        logical_property_builders: Vec<Box<dyn LogicalPropertyBuilderAny<T>>>,
+        physical_property_builders: Vec<Box<dyn PhysicalPropertyBuilderAny<T>>>,
         prop: OptimizerProperties,
     ) -> Self {
         let tasks = VecDeque::new();
-        let property_builders: Arc<[_]> = property_builders.into();
-        let memo = NaiveMemo::new(property_builders.clone());
+        let logical_property_builders: Arc<[_]> = logical_property_builders.into();
+        let physical_property_builders =
+            PhysicalPropertyBuilders(physical_property_builders.into());
+        let memo = NaiveMemo::new(
+            logical_property_builders.clone(),
+            physical_property_builders.clone(),
+        );
         Self {
             memo,
             tasks,
@@ -120,7 +136,8 @@ impl<T: NodeType> CascadesOptimizer<T, NaiveMemo<T>> {
             rules: rules.into(),
             cost: cost.into(),
             ctx: OptimizerContext::default(),
-            property_builders,
+            logical_property_builders,
+            physical_property_builders,
             prop,
             disabled_rules: HashSet::new(),
         }
@@ -128,7 +145,10 @@ impl<T: NodeType> CascadesOptimizer<T, NaiveMemo<T>> {
 
     /// Clear the memo table and all optimizer states.
     pub fn step_clear(&mut self) {
-        self.memo = NaiveMemo::new(self.property_builders.clone());
+        self.memo = NaiveMemo::new(
+            self.logical_property_builders.clone(),
+            self.physical_property_builders.clone(),
+        );
         self.fired_rules.clear();
         self.explored_group.clear();
         self.explored_expr.clear();
@@ -172,14 +192,17 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
 
     pub fn dump(&self) {
         for group_id in self.memo.get_all_group_ids() {
-            let winner_str = match &self.memo.get_group_info(group_id).winner {
+            let winner_str = match &self.memo.get_group_winner(group_id) {
                 Winner::Impossible => "winner=<impossible>".to_string(),
                 Winner::Unknown => "winner=<unknown>".to_string(),
                 Winner::Full(winner) => {
-                    let expr = self.memo.get_expr_memoed(winner.expr_id);
+                    let WinnerExpr::Expr { ref expr_id } = winner.expr_id else {
+                        unimplemented!()
+                    };
+                    let expr = self.memo.get_expr_memoed(*expr_id);
                     format!(
                         "winner={} weighted_cost={} cost={} stat={} | {}",
-                        winner.expr_id,
+                        expr_id,
                         winner.total_weighted_cost,
                         self.cost.explain_cost(&winner.total_cost),
                         self.cost.explain_statistics(&winner.statistics),
@@ -189,11 +212,11 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
             };
             println!("group_id={} {}", group_id, winner_str);
             let group = self.memo.get_group(group_id);
-            for (id, property) in self.property_builders.iter().enumerate() {
+            for (id, property) in self.logical_property_builders.iter().enumerate() {
                 println!(
                     "  {}={}",
                     property.property_name(),
-                    group.properties[id].as_ref()
+                    group.logical_properties[id].as_ref()
                 )
             }
             let mut all_predicates = BTreeSet::new();
@@ -313,12 +336,12 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
         self.memo.add_expr_to_group(rel_node, group_id)
     }
 
-    pub(super) fn get_group_info(&self, group_id: GroupId) -> &GroupInfo {
-        self.memo.get_group_info(group_id)
+    pub(super) fn get_group_winner(&self, group_id: GroupId) -> &Winner {
+        self.memo.get_group_winner(group_id)
     }
 
-    pub(super) fn update_group_info(&mut self, group_id: GroupId, group_info: GroupInfo) {
-        self.memo.update_group_info(group_id, group_info)
+    pub(super) fn update_group_winner(&mut self, group_id: GroupId, winner: Winner) {
+        self.memo.update_winner(group_id, winner)
     }
 
     /// Get the properties of a Cascades group
@@ -330,7 +353,7 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
         group_id: GroupId,
         idx: usize,
     ) -> P::Prop {
-        self.memo.get_group(group_id).properties[idx]
+        self.memo.get_group(group_id).logical_properties[idx]
             .as_any()
             .downcast_ref::<P::Prop>()
             .unwrap()

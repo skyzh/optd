@@ -15,6 +15,7 @@ use super::optimizer::{ExprId, GroupId, PredId};
 use crate::cost::{Cost, Statistics};
 use crate::logical_property::{LogicalProperty, LogicalPropertyBuilderAny};
 use crate::nodes::{ArcPlanNode, ArcPredNode, NodeType, PlanNode, PlanNodeOrGroup};
+use crate::physical_property::{PhysicalProperty, PhysicalPropertyBuilders};
 
 pub type ArcMemoPlanNode<T> = Arc<MemoPlanNode<T>>;
 
@@ -41,12 +42,48 @@ impl<T: NodeType> std::fmt::Display for MemoPlanNode<T> {
 }
 
 #[derive(Clone)]
+pub enum WinnerExpr {
+    /// The winner is a physical expression
+    Expr {
+        /// The expression ID of the winner.
+        expr_id: ExprId,
+        // We don't need to store the passthrough-ed children properties because we can deterministically obtain it by
+        // providing required output properties and the plan node type to the physical property builder. Of course,
+        // we can cache it throughout the computation process, so that we don't need to compute it multiple times.
+    },
+    /// The winner is an enforcer of the current group.
+    /// Maybe not a single enforcer -- if there are multiple physical properties to enforce.
+    Enforcer {
+        /// The expression ID of the winner, but the winner cannot pass through some of the properties required,
+        /// so we need to enforce properties on it and consider the enforcer cost.
+        expr_id: ExprId,
+    },
+    /// The winner is another group with a required set of physical properties.
+    /// For example, if a group X contains a logical sort on group Y, it will trigger a cascades search
+    /// on group Y with a required sort property corresponding to the logical sort node. If any of the
+    /// expression in group Y satisfies the required sort property, the "group Y with required property"
+    /// will be the winner of group X.
+    Propagate {
+        /// The group ID of the enforcer.
+        group_id: GroupId,
+        /// The required properties of the child. Only a single child.
+        required_child_physical_properties: Arc<RequiredPhysicalProperties>,
+    },
+}
+
+#[derive(Clone)]
 pub struct WinnerInfo {
-    pub expr_id: ExprId,
+    /// The winner of the group, it could be either an expression, or an enforcer.
+    pub expr_id: WinnerExpr,
+    /// The total weighted cost of the group.
     pub total_weighted_cost: f64,
+    /// The weighted cost of the operation.
     pub operation_weighted_cost: f64,
+    /// The cost of the group.
     pub total_cost: Cost,
+    /// The cost of the operation.
     pub operation_cost: Cost,
+    /// The statistics of the group.
     pub statistics: Arc<Statistics>,
 }
 
@@ -80,15 +117,20 @@ impl Default for Winner {
     }
 }
 
-#[derive(Default, Clone)]
-pub struct GroupInfo {
-    pub winner: Winner,
-}
+#[derive(Default)]
+pub struct RequiredPhysicalProperties(pub Vec<Box<dyn PhysicalProperty>>);
 
 pub struct Group {
+    /// Logical and physical expressions of the group.
     pub(crate) group_exprs: HashSet<ExprId>,
-    pub(crate) info: GroupInfo,
-    pub(crate) properties: Arc<[Box<dyn LogicalProperty>]>,
+    /// Winners of each of the required set of physical properties within the group.
+    /// Note that the winner does not necessarily have a physical property exactly equal
+    /// to the required property. It could be a stronger property that satisfies the
+    /// required property.
+    pub(crate) winners: Vec<(Arc<RequiredPhysicalProperties>, Winner)>,
+    /// Logical properties of the group. This is inferred from the first expression added to the
+    /// group.
+    pub(crate) logical_properties: Arc<[Box<dyn LogicalProperty>]>,
 }
 
 /// Trait for memo table implementations.
@@ -125,8 +167,8 @@ pub trait Memo<T: NodeType>: 'static + Send + Sync {
     /// Get a predicate by ID
     fn get_pred(&self, pred_id: PredId) -> ArcPredNode<T>;
 
-    /// Update the group info.
-    fn update_group_info(&mut self, group_id: GroupId, group_info: GroupInfo);
+    /// Update the winner.
+    fn update_winner(&mut self, group_id: GroupId, winner: Winner);
 
     /// Estimated plan space for the memo table, only useful when plan exploration budget is
     /// enabled. Returns number of expressions in the memo table.
@@ -145,9 +187,9 @@ pub trait Memo<T: NodeType>: 'static + Send + Sync {
         exprs
     }
 
-    /// Get group info of a group.
-    fn get_group_info(&self, group_id: GroupId) -> &GroupInfo {
-        &self.get_group(group_id).info
+    /// Get winner of a group.
+    fn get_group_winner(&self, group_id: GroupId) -> &Winner {
+        &self.get_group(group_id).winners[0].1 // TODO: handle multiple winners
     }
 
     /// Get the best group binding based on the cost
@@ -165,23 +207,29 @@ fn get_best_group_binding_inner<M: Memo<T> + ?Sized, T: NodeType>(
     group_id: GroupId,
     post_process: &mut impl FnMut(ArcPlanNode<T>, GroupId, &WinnerInfo),
 ) -> Result<ArcPlanNode<T>> {
-    let info: &GroupInfo = this.get_group_info(group_id);
-    if let Winner::Full(info @ WinnerInfo { expr_id, .. }) = &info.winner {
-        let expr = this.get_expr_memoed(*expr_id);
-        let mut children = Vec::with_capacity(expr.children.len());
-        for child in &expr.children {
-            children.push(PlanNodeOrGroup::PlanNode(
-                get_best_group_binding_inner(this, *child, post_process)
-                    .with_context(|| format!("when processing expr {}", expr_id))?,
-            ));
+    let winner = this.get_group_winner(group_id);
+    if let Winner::Full(info @ WinnerInfo { expr_id, .. }) = winner {
+        // if expr_id is enforcer, return the enforcer
+        // otherwise, return the best group binding based on the required properties
+        if let WinnerExpr::Expr { expr_id } = expr_id {
+            let expr = this.get_expr_memoed(*expr_id);
+            let mut children = Vec::with_capacity(expr.children.len());
+            for child in &expr.children {
+                children.push(PlanNodeOrGroup::PlanNode(
+                    get_best_group_binding_inner(this, *child, post_process)
+                        .with_context(|| format!("when processing expr {}", expr_id))?,
+                ));
+            }
+            let node = Arc::new(PlanNode {
+                typ: expr.typ.clone(),
+                children,
+                predicates: expr.predicates.iter().map(|x| this.get_pred(*x)).collect(),
+            });
+            post_process(node.clone(), group_id, info);
+            return Ok(node);
+        } else {
+            unimplemented!()
         }
-        let node = Arc::new(PlanNode {
-            typ: expr.typ.clone(),
-            children,
-            predicates: expr.predicates.iter().map(|x| this.get_pred(*x)).collect(),
-        });
-        post_process(node.clone(), group_id, info);
-        return Ok(node);
     }
     bail!("no best group binding for group {}", group_id)
 }
@@ -198,7 +246,9 @@ pub struct NaiveMemo<T: NodeType> {
 
     // Internal states.
     group_expr_counter: usize,
-    property_builders: Arc<[Box<dyn LogicalPropertyBuilderAny<T>>]>,
+    logical_property_builders: Arc<[Box<dyn LogicalPropertyBuilderAny<T>>]>,
+    #[allow(dead_code)]
+    physical_property_builders: PhysicalPropertyBuilders<T>,
 
     // Indexes.
     expr_node_to_expr_id: HashMap<MemoPlanNode<T>, ExprId>,
@@ -289,21 +339,25 @@ impl<T: NodeType> Memo<T> for NaiveMemo<T> {
         self.groups.get(&group_id).as_ref().unwrap()
     }
 
-    fn update_group_info(&mut self, group_id: GroupId, group_info: GroupInfo) {
+    fn update_winner(&mut self, group_id: GroupId, winner: Winner) {
+        let group_id = self.reduce_group(group_id);
+        let group = self.groups.get_mut(&group_id).unwrap();
         if let Winner::Full(WinnerInfo {
             total_weighted_cost,
             expr_id,
             ..
-        }) = &group_info.winner
+        }) = &winner
         {
+            let WinnerExpr::Expr { expr_id } = expr_id else {
+                unimplemented!()
+            };
             assert!(
                 *total_weighted_cost != 0.0,
                 "{}",
                 self.expr_id_to_expr_node[expr_id]
             );
         }
-        let grp = self.groups.get_mut(&group_id);
-        grp.unwrap().info = group_info;
+        group.winners[0].1 = winner;
     }
 
     fn estimated_plan_space(&self) -> usize {
@@ -312,7 +366,10 @@ impl<T: NodeType> Memo<T> for NaiveMemo<T> {
 }
 
 impl<T: NodeType> NaiveMemo<T> {
-    pub fn new(property_builders: Arc<[Box<dyn LogicalPropertyBuilderAny<T>>]>) -> Self {
+    pub fn new(
+        logical_property_builders: Arc<[Box<dyn LogicalPropertyBuilderAny<T>>]>,
+        physical_property_builders: PhysicalPropertyBuilders<T>,
+    ) -> Self {
         Self {
             expr_id_to_group_id: HashMap::new(),
             expr_id_to_expr_node: HashMap::new(),
@@ -322,7 +379,8 @@ impl<T: NodeType> NaiveMemo<T> {
             groups: HashMap::new(),
             group_expr_counter: 0,
             merged_group_mapping: HashMap::new(),
-            property_builders,
+            logical_property_builders,
+            physical_property_builders,
             dup_expr_mapping: HashMap::new(),
         }
     }
@@ -555,10 +613,10 @@ impl<T: NodeType> NaiveMemo<T> {
         let child_properties = memo_node
             .children
             .iter()
-            .map(|child| self.groups[child].properties.clone())
+            .map(|child| self.groups[child].logical_properties.clone())
             .collect_vec();
-        let mut props = Vec::with_capacity(self.property_builders.len());
-        for (id, builder) in self.property_builders.iter().enumerate() {
+        let mut props = Vec::with_capacity(self.logical_property_builders.len());
+        for (id, builder) in self.logical_property_builders.iter().enumerate() {
             let child_properties = child_properties
                 .iter()
                 .map(|x| x[id].as_ref())
@@ -595,8 +653,11 @@ impl<T: NodeType> NaiveMemo<T> {
         // Create group and infer properties (only upon initializing a group).
         let mut group = Group {
             group_exprs: HashSet::new(),
-            info: GroupInfo::default(),
-            properties: self.infer_properties(memo_node).into(),
+            winners: vec![(
+                Arc::new(RequiredPhysicalProperties::default()),
+                Winner::Unknown,
+            )],
+            logical_properties: self.infer_properties(memo_node).into(),
         };
         group.group_exprs.insert(expr_id);
         self.groups.insert(group_id, group);
@@ -605,7 +666,7 @@ impl<T: NodeType> NaiveMemo<T> {
 
     pub fn clear_winner(&mut self) {
         for group in self.groups.values_mut() {
-            group.info.winner = Winner::Unknown;
+            group.winners[0].1 = Winner::Unknown; // TODO: fix this for multiple winners
         }
     }
 }
@@ -622,7 +683,10 @@ pub(crate) mod tests {
 
     #[test]
     fn add_predicate() {
-        let mut memo = NaiveMemo::<MemoTestRelTyp>::new(Arc::new([]));
+        let mut memo = NaiveMemo::<MemoTestRelTyp>::new(
+            Arc::new([]),
+            PhysicalPropertyBuilders::new_empty_for_test(),
+        );
         let pred_node = list(vec![expr(Value::Int32(233))]);
         let p1 = memo.add_new_pred(pred_node.clone());
         let p2 = memo.add_new_pred(pred_node.clone());
@@ -631,7 +695,7 @@ pub(crate) mod tests {
 
     #[test]
     fn group_merge_1() {
-        let mut memo = NaiveMemo::new(Arc::new([]));
+        let mut memo = NaiveMemo::new(Arc::new([]), PhysicalPropertyBuilders::new_empty_for_test());
         let (group_id, _) =
             memo.add_new_expr(join(scan("t1"), scan("t2"), expr(Value::Bool(true))));
         memo.add_expr_to_group(
@@ -643,7 +707,7 @@ pub(crate) mod tests {
 
     #[test]
     fn group_merge_2() {
-        let mut memo = NaiveMemo::new(Arc::new([]));
+        let mut memo = NaiveMemo::new(Arc::new([]), PhysicalPropertyBuilders::new_empty_for_test());
         let (group_id_1, _) = memo.add_new_expr(project(
             join(scan("t1"), scan("t2"), expr(Value::Bool(true))),
             list(vec![expr(Value::Int64(1))]),
@@ -657,7 +721,7 @@ pub(crate) mod tests {
 
     #[test]
     fn group_merge_3() {
-        let mut memo = NaiveMemo::new(Arc::new([]));
+        let mut memo = NaiveMemo::new(Arc::new([]), PhysicalPropertyBuilders::new_empty_for_test());
         let expr1 = project(scan("t1"), list(vec![expr(Value::Int64(1))]));
         let expr2 = project(scan("t1-alias"), list(vec![expr(Value::Int64(1))]));
         memo.add_new_expr(expr1.clone());
@@ -672,7 +736,7 @@ pub(crate) mod tests {
 
     #[test]
     fn group_merge_4() {
-        let mut memo = NaiveMemo::new(Arc::new([]));
+        let mut memo = NaiveMemo::new(Arc::new([]), PhysicalPropertyBuilders::new_empty_for_test());
         let expr1 = project(
             project(scan("t1"), list(vec![expr(Value::Int64(1))])),
             list(vec![expr(Value::Int64(2))]),
@@ -696,7 +760,7 @@ pub(crate) mod tests {
 
     #[test]
     fn group_merge_5() {
-        let mut memo = NaiveMemo::new(Arc::new([]));
+        let mut memo = NaiveMemo::new(Arc::new([]), PhysicalPropertyBuilders::new_empty_for_test());
         let expr1 = project(
             project(scan("t1"), list(vec![expr(Value::Int64(1))])),
             list(vec![expr(Value::Int64(2))]),
@@ -725,7 +789,10 @@ pub(crate) mod tests {
 
     #[test]
     fn derive_logical_property() {
-        let mut memo = NaiveMemo::new(Arc::new([Box::new(TestPropertyBuilder)]));
+        let mut memo = NaiveMemo::new(
+            Arc::new([Box::new(TestPropertyBuilder)]),
+            PhysicalPropertyBuilders::new_empty_for_test(),
+        );
         let (group_id, _) = memo.add_new_expr(join(
             scan("t1"),
             project(
@@ -735,9 +802,9 @@ pub(crate) mod tests {
             expr(Value::Bool(true)),
         ));
         let group = memo.get_group(group_id);
-        assert_eq!(group.properties.len(), 1);
+        assert_eq!(group.logical_properties.len(), 1);
         assert_eq!(
-            group.properties[0]
+            group.logical_properties[0]
                 .as_any()
                 .downcast_ref::<TestProp>()
                 .unwrap()

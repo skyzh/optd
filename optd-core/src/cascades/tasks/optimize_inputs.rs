@@ -8,7 +8,7 @@ use itertools::Itertools;
 use tracing::trace;
 
 use super::Task;
-use crate::cascades::memo::{GroupInfo, Winner, WinnerInfo};
+use crate::cascades::memo::{Winner, WinnerExpr, WinnerInfo};
 use crate::cascades::optimizer::ExprId;
 use crate::cascades::tasks::OptimizeGroupTask;
 use crate::cascades::{CascadesOptimizer, Memo, RelNodeContext};
@@ -66,13 +66,8 @@ impl OptimizeInputsTask {
         optimizer: &mut CascadesOptimizer<T, M>,
     ) {
         let group_id = optimizer.get_group_id(self.expr_id);
-        if let Winner::Unknown = optimizer.get_group_info(group_id).winner {
-            optimizer.update_group_info(
-                group_id,
-                GroupInfo {
-                    winner: Winner::Impossible,
-                },
-            );
+        if let Winner::Unknown = optimizer.get_group_winner(group_id) {
+            optimizer.update_group_winner(group_id, Winner::Impossible);
         }
     }
 
@@ -84,12 +79,12 @@ impl OptimizeInputsTask {
         optimizer: &mut CascadesOptimizer<T, M>,
     ) {
         let group_id = optimizer.get_group_id(self.expr_id);
-        let group_info = optimizer.get_group_info(group_id);
+        let winner = optimizer.get_group_winner(group_id);
         let cost = optimizer.cost();
         let operation_weighted_cost = cost.weighted_cost(&operation_cost);
         let total_weighted_cost = cost.weighted_cost(&total_cost);
         let mut update_cost = false;
-        if let Some(winner) = group_info.winner.as_full_winner() {
+        if let Some(winner) = winner.as_full_winner() {
             if winner.total_weighted_cost > total_weighted_cost {
                 update_cost = true;
             }
@@ -117,18 +112,18 @@ impl OptimizeInputsTask {
                 }),
                 Some(optimizer),
             );
-            optimizer.update_group_info(
+            optimizer.update_group_winner(
                 group_id,
-                GroupInfo {
-                    winner: Winner::Full(WinnerInfo {
+                Winner::Full(WinnerInfo {
+                    expr_id: WinnerExpr::Expr {
                         expr_id: self.expr_id,
-                        total_weighted_cost,
-                        operation_weighted_cost,
-                        total_cost,
-                        operation_cost,
-                        statistics: statistics.into(),
-                    }),
-                },
+                    },
+                    total_weighted_cost,
+                    operation_weighted_cost,
+                    total_cost,
+                    operation_cost,
+                    statistics: statistics.into(),
+                }),
             );
         }
     }
@@ -167,8 +162,7 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
                 .iter()
                 .map(|&group_id| {
                     optimizer
-                        .get_group_info(group_id)
-                        .winner
+                        .get_group_winner(group_id)
                         .as_full_winner()
                         .map(|x| x.statistics.clone())
                 })
@@ -181,8 +175,7 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
                 .iter()
                 .map(|&group_id| {
                     optimizer
-                        .get_group_info(group_id)
-                        .winner
+                        .get_group_winner(group_id)
                         .as_full_winner()
                         .map(|x| x.total_cost.clone())
                         .unwrap_or_else(|| cost.zero())
@@ -203,7 +196,7 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
             let total_cost = cost.sum(&operation_cost, &input_cost);
 
             if self.pruning {
-                let group_info = optimizer.get_group_info(group_id);
+                let winner = optimizer.get_group_winner(group_id);
                 fn trace_fmt(winner: &Winner) -> String {
                     match winner {
                         Winner::Full(winner) => winner.total_weighted_cost.to_string(),
@@ -216,10 +209,10 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
                     task = "optimize_inputs",
                     expr_id = %self.expr_id,
                     weighted_cost_so_far = cost.weighted_cost(&total_cost),
-                    winner_weighted_cost = %trace_fmt(&group_info.winner),
+                    winner_weighted_cost = %trace_fmt(winner),
                     current_processing = %next_group_idx,
                     total_child_groups = %children_group_ids.len());
-                if let Some(winner) = group_info.winner.as_full_winner() {
+                if let Some(winner) = winner.as_full_winner() {
                     let cost_so_far = cost.weighted_cost(&total_cost);
                     if winner.total_weighted_cost <= cost_so_far {
                         trace!(event = "task_finish", task = "optimize_inputs", expr_id = %self.expr_id, result = "pruned");
@@ -231,8 +224,8 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
             if next_group_idx < children_group_ids.len() {
                 let child_group_id = children_group_ids[next_group_idx];
                 let group_idx = next_group_idx;
-                let child_group_info = optimizer.get_group_info(child_group_id);
-                if !child_group_info.winner.has_full_winner() {
+                let child_group_winner = optimizer.get_group_winner(child_group_id);
+                if !child_group_winner.has_full_winner() {
                     if !return_from_optimize_group {
                         trace!(event = "task_yield", task = "optimize_inputs", expr_id = %self.expr_id, group_idx = %group_idx, yield_to = "optimize_group", optimize_group_id = %child_group_id);
                         return Ok(vec![

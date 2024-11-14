@@ -140,13 +140,14 @@ impl DatafusionOptimizer {
         ]);
         Self {
             runtime_statistics: runtime_map,
-            cascades_optimizer: CascadesOptimizer::new_with_prop(
+            cascades_optimizer: CascadesOptimizer::new_with_options(
                 cascades_rules,
                 Box::new(cost_model),
                 vec![
                     Box::new(SchemaPropertyBuilder::new(catalog.clone())),
                     Box::new(ColumnRefPropertyBuilder::new(catalog.clone())),
                 ],
+                vec![],
                 OptimizerProperties {
                     panic_on_budget: false,
                     partial_explore_iter: Some(1 << 20),
@@ -190,6 +191,7 @@ impl DatafusionOptimizer {
                 Box::new(SchemaPropertyBuilder::new(catalog.clone())),
                 Box::new(ColumnRefPropertyBuilder::new(catalog)),
             ],
+            vec![],
         );
         Self {
             runtime_statistics,

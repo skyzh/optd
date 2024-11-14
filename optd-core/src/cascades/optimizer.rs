@@ -13,7 +13,7 @@ use tracing::trace;
 use super::memo::{ArcMemoPlanNode, Memo};
 use super::tasks::OptimizeGroupTask;
 use super::{NaiveMemo, Task};
-use crate::cascades::memo::{Winner, WinnerExpr};
+use crate::cascades::memo::{Winner, WinnerExpr, WinnerInfo};
 use crate::cost::CostModel;
 use crate::logical_property::{LogicalPropertyBuilder, LogicalPropertyBuilderAny};
 use crate::nodes::{
@@ -196,17 +196,27 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
                 Winner::Impossible => "winner=<impossible>".to_string(),
                 Winner::Unknown => "winner=<unknown>".to_string(),
                 Winner::Full(winner) => {
-                    let WinnerExpr::Expr { ref expr_id } = winner.expr_id else {
-                        unimplemented!()
+                    let (winner_expr, winner_str) = match &winner.expr_id {
+                        WinnerExpr::Expr { expr_id } => {
+                            let expr = self.memo.get_expr_memoed(*expr_id);
+                            (format!("{}", expr_id), format!("{}", expr))
+                        }
+                        WinnerExpr::Propagate {
+                            group_id,
+                            required_child_physical_properties: _,
+                        } => (format!("{}", group_id), format!("{}", group_id)),
+                        WinnerExpr::Enforcer { expr_id } => {
+                            let expr = self.memo.get_expr_memoed(*expr_id);
+                            (format!("{} (with enforcer)", expr_id), format!("{}", expr))
+                        }
                     };
-                    let expr = self.memo.get_expr_memoed(*expr_id);
                     format!(
                         "winner={} weighted_cost={} cost={} stat={} | {}",
-                        expr_id,
+                        winner_expr,
                         winner.total_weighted_cost,
                         self.cost.explain_cost(&winner.total_cost),
                         self.cost.explain_statistics(&winner.statistics),
-                        expr
+                        winner_str
                     )
                 }
             };

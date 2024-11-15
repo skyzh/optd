@@ -3,6 +3,8 @@
 // Use of this source code is governed by an MIT-style license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+use std::sync::Arc;
+
 use anyhow::Result;
 use itertools::Itertools;
 use tracing::trace;
@@ -11,7 +13,7 @@ use super::Task;
 use crate::cascades::memo::{Winner, WinnerExpr, WinnerInfo};
 use crate::cascades::optimizer::ExprId;
 use crate::cascades::tasks::OptimizeGroupTask;
-use crate::cascades::{CascadesOptimizer, Memo, RelNodeContext};
+use crate::cascades::{CascadesOptimizer, Memo, RelNodeContext, SubGroupId};
 use crate::cost::{Cost, Statistics};
 use crate::nodes::NodeType;
 
@@ -39,14 +41,16 @@ impl std::fmt::Display for ContinueTaskDisplay<'_> {
 }
 
 pub struct OptimizeInputsTask {
+    subgroup_id: SubGroupId,
     expr_id: ExprId,
     continue_from: Option<ContinueTask>,
     pruning: bool,
 }
 
 impl OptimizeInputsTask {
-    pub fn new(expr_id: ExprId, pruning: bool) -> Self {
+    pub fn new(expr_id: ExprId, pruning: bool, subgroup_id: SubGroupId) -> Self {
         Self {
+            subgroup_id,
             expr_id,
             continue_from: None,
             pruning,
@@ -55,6 +59,7 @@ impl OptimizeInputsTask {
 
     fn continue_from(&self, cont: ContinueTask, pruning: bool) -> Self {
         Self {
+            subgroup_id: self.subgroup_id,
             expr_id: self.expr_id,
             continue_from: Some(cont),
             pruning,
@@ -66,8 +71,8 @@ impl OptimizeInputsTask {
         optimizer: &mut CascadesOptimizer<T, M>,
     ) {
         let group_id = optimizer.get_group_id(self.expr_id);
-        if let Winner::Unknown = optimizer.get_group_winner(group_id) {
-            optimizer.update_group_winner(group_id, Winner::Impossible);
+        if let Winner::Unknown = optimizer.get_group_winner(group_id, self.subgroup_id) {
+            optimizer.update_group_winner(group_id, self.subgroup_id, Winner::Impossible);
         }
     }
 
@@ -79,7 +84,7 @@ impl OptimizeInputsTask {
         optimizer: &mut CascadesOptimizer<T, M>,
     ) {
         let group_id = optimizer.get_group_id(self.expr_id);
-        let winner = optimizer.get_group_winner(group_id);
+        let winner = optimizer.get_group_winner(group_id, self.subgroup_id);
         let cost = optimizer.cost();
         let operation_weighted_cost = cost.weighted_cost(&operation_cost);
         let total_weighted_cost = cost.weighted_cost(&total_cost);
@@ -114,6 +119,7 @@ impl OptimizeInputsTask {
             );
             optimizer.update_group_winner(
                 group_id,
+                self.subgroup_id,
                 Winner::Full(WinnerInfo {
                     expr_id: WinnerExpr::Expr {
                         expr_id: self.expr_id,
@@ -143,10 +149,28 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
         }
         let expr = optimizer.get_expr_memoed(self.expr_id);
         let group_id = optimizer.get_group_id(self.expr_id);
-        let children_group_ids = &expr.children;
+        let child_group_default_property: Arc<[_]> = optimizer
+            .memo()
+            .get_physical_property_builders()
+            .default_many()
+            .into(); // TODO: correctly derive the properties
+
+        let children_subgroup_ids = expr
+            .children
+            .iter()
+            .map(|child_group_id| {
+                let child_subgroup_id = optimizer
+                    .create_or_get_subgroup(*child_group_id, child_group_default_property.clone());
+                (*child_group_id, child_subgroup_id)
+            })
+            .collect_vec();
+        let children_group_ids = children_subgroup_ids
+            .iter()
+            .map(|(group_id, _)| *group_id)
+            .collect_vec();
         let cost = optimizer.cost();
 
-        trace!(event = "task_begin", task = "optimize_inputs", expr_id = %self.expr_id, continue_from = %ContinueTaskDisplay(&self.continue_from), total_children = %children_group_ids.len());
+        trace!(event = "task_begin", task = "optimize_inputs", subgroup_id = %self.subgroup_id, expr_id = %self.expr_id, continue_from = %ContinueTaskDisplay(&self.continue_from), total_children = %children_group_ids.len());
 
         if let Some(ContinueTask {
             next_group_idx,
@@ -158,11 +182,11 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
                 group_id,
                 children_group_ids: children_group_ids.clone(),
             };
-            let input_statistics = children_group_ids
+            let input_statistics = children_subgroup_ids
                 .iter()
-                .map(|&group_id| {
+                .map(|&(group_id, subgroup_id)| {
                     optimizer
-                        .get_group_winner(group_id)
+                        .get_group_winner(group_id, subgroup_id)
                         .as_full_winner()
                         .map(|x| x.statistics.clone())
                 })
@@ -171,11 +195,11 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
                 .iter()
                 .map(|x| x.as_deref())
                 .collect::<Vec<_>>();
-            let input_cost = children_group_ids
+            let input_cost = children_subgroup_ids
                 .iter()
-                .map(|&group_id| {
+                .map(|&(group_id, subgroup_id)| {
                     optimizer
-                        .get_group_winner(group_id)
+                        .get_group_winner(group_id, subgroup_id)
                         .as_full_winner()
                         .map(|x| x.total_cost.clone())
                         .unwrap_or_else(|| cost.zero())
@@ -196,7 +220,7 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
             let total_cost = cost.sum(&operation_cost, &input_cost);
 
             if self.pruning {
-                let winner = optimizer.get_group_winner(group_id);
+                let winner = optimizer.get_group_winner(group_id, self.subgroup_id);
                 fn trace_fmt(winner: &Winner) -> String {
                     match winner {
                         Winner::Full(winner) => winner.total_weighted_cost.to_string(),
@@ -222,9 +246,10 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
             }
 
             if next_group_idx < children_group_ids.len() {
-                let child_group_id = children_group_ids[next_group_idx];
+                let (child_group_id, child_subgroup_id) = children_subgroup_ids[next_group_idx];
                 let group_idx = next_group_idx;
-                let child_group_winner = optimizer.get_group_winner(child_group_id);
+                let child_group_winner =
+                    optimizer.get_group_winner(child_group_id, child_subgroup_id);
                 if !child_group_winner.has_full_winner() {
                     if !return_from_optimize_group {
                         trace!(event = "task_yield", task = "optimize_inputs", expr_id = %self.expr_id, group_idx = %group_idx, yield_to = "optimize_group", optimize_group_id = %child_group_id);
@@ -236,7 +261,8 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
                                 },
                                 self.pruning,
                             )) as Box<dyn Task<T, M>>,
-                            Box::new(OptimizeGroupTask::new(child_group_id)) as Box<dyn Task<T, M>>,
+                            Box::new(OptimizeGroupTask::new(child_group_id, child_subgroup_id))
+                                as Box<dyn Task<T, M>>,
                         ]);
                     } else {
                         self.update_winner_impossible(optimizer);

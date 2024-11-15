@@ -9,18 +9,23 @@ use tracing::trace;
 use super::Task;
 use crate::cascades::optimizer::{CascadesOptimizer, ExprId};
 use crate::cascades::tasks::{ApplyRuleTask, ExploreGroupTask};
-use crate::cascades::Memo;
+use crate::cascades::{Memo, SubGroupId};
 use crate::nodes::NodeType;
 use crate::rules::RuleMatcher;
 
 pub struct OptimizeExpressionTask {
     expr_id: ExprId,
+    subgroup_id: SubGroupId,
     exploring: bool,
 }
 
 impl OptimizeExpressionTask {
-    pub fn new(expr_id: ExprId, exploring: bool) -> Self {
-        Self { expr_id, exploring }
+    pub fn new(expr_id: ExprId, subgroup_id: SubGroupId, exploring: bool) -> Self {
+        Self {
+            expr_id,
+            subgroup_id,
+            exploring,
+        }
     }
 }
 
@@ -52,13 +57,16 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeExpressionTask {
                 continue;
             }
             if top_matches(rule.matcher(), expr.typ.clone()) {
-                tasks.push(
-                    Box::new(ApplyRuleTask::new(rule_id, self.expr_id, self.exploring))
-                        as Box<dyn Task<T, M>>,
-                );
+                tasks.push(Box::new(ApplyRuleTask::new(
+                    rule_id,
+                    self.expr_id,
+                    self.subgroup_id,
+                    self.exploring,
+                )) as Box<dyn Task<T, M>>);
                 for &input_group_id in &expr.children {
                     tasks.push(
-                        Box::new(ExploreGroupTask::new(input_group_id)) as Box<dyn Task<T, M>>
+                        Box::new(ExploreGroupTask::new(input_group_id, self.subgroup_id))
+                            as Box<dyn Task<T, M>>,
                     );
                 }
             }

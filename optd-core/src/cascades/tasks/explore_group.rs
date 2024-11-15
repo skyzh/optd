@@ -9,16 +9,20 @@ use tracing::trace;
 use super::Task;
 use crate::cascades::optimizer::{CascadesOptimizer, GroupId};
 use crate::cascades::tasks::OptimizeExpressionTask;
-use crate::cascades::Memo;
+use crate::cascades::{Memo, SubGroupId};
 use crate::nodes::NodeType;
 
 pub struct ExploreGroupTask {
     group_id: GroupId,
+    subgroup_id: SubGroupId,
 }
 
 impl ExploreGroupTask {
-    pub fn new(group_id: GroupId) -> Self {
-        Self { group_id }
+    pub fn new(group_id: GroupId, subgroup_id: SubGroupId) -> Self {
+        Self {
+            group_id,
+            subgroup_id,
+        }
     }
 }
 
@@ -35,8 +39,10 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for ExploreGroupTask {
         for expr in exprs {
             let typ = optimizer.get_expr_memoed(expr).typ.clone();
             if typ.is_logical() {
-                tasks
-                    .push(Box::new(OptimizeExpressionTask::new(expr, true)) as Box<dyn Task<T, M>>);
+                tasks.push(
+                    Box::new(OptimizeExpressionTask::new(expr, self.subgroup_id, true))
+                        as Box<dyn Task<T, M>>,
+                );
             }
         }
         optimizer.mark_group_explored(self.group_id);

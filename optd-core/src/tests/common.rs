@@ -281,7 +281,7 @@ impl LogicalPropertyBuilder<MemoTestRelTyp> for TestPropertyBuilder {
 
 pub struct SortPropertyBuilder;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SortProp(pub Vec<String>);
 
 impl std::fmt::Display for SortProp {

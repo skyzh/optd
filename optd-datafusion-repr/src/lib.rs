@@ -227,12 +227,12 @@ impl DatafusionOptimizer {
             self.cascades_optimizer.step_clear();
         }
 
-        let group_id = self.cascades_optimizer.step_optimize_rel(root_rel)?;
+        let (group_id, subgroup_id) = self.cascades_optimizer.step_optimize_rel(root_rel, &[])?;
 
         let mut meta = Some(HashMap::new());
-        let optimized_rel = self
-            .cascades_optimizer
-            .step_get_optimize_rel(group_id, &mut meta)?;
+        let optimized_rel =
+            self.cascades_optimizer
+                .step_get_optimize_rel(group_id, subgroup_id, &mut meta)?;
 
         Ok((group_id, optimized_rel, meta.unwrap()))
     }

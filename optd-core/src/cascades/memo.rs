@@ -11,7 +11,7 @@ use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use tracing::trace;
 
-use super::optimizer::{ExprId, GroupId, PredId};
+use super::optimizer::{ExprId, GroupId, PredId, SubGroupId};
 use crate::cost::{Cost, Statistics};
 use crate::logical_property::{LogicalProperty, LogicalPropertyBuilderAny};
 use crate::nodes::{ArcPlanNode, ArcPredNode, NodeType, PlanNode, PlanNodeOrGroup};
@@ -43,7 +43,8 @@ impl<T: NodeType> std::fmt::Display for MemoPlanNode<T> {
 
 #[derive(Clone)]
 pub enum WinnerExpr {
-    /// The winner is a physical expression
+    /// The winner is a physical expression, and the expression can passthrough all the required physical properties,
+    /// or does not require any physical properties.
     Expr {
         /// The expression ID of the winner.
         expr_id: ExprId,
@@ -52,12 +53,10 @@ pub enum WinnerExpr {
         // we can cache it throughout the computation process, so that we don't need to compute it multiple times.
     },
     /// The winner is an enforcer of the current group.
-    /// Maybe not a single enforcer -- if there are multiple physical properties to enforce.
-    Enforcer {
-        /// The expression ID of the winner, but the winner cannot pass through some of the properties required,
-        /// so we need to enforce properties on it and consider the enforcer cost.
-        expr_id: ExprId,
-    },
+    /// Maybe not a single enforcer -- if there are multiple physical properties to enforce. But now, we assume
+    /// the winner is enforcer + the winner of no required physical properties, which isn't necessarily the best
+    /// plan if there are still some properties that can be passed-through?
+    Enforcer {},
     /// The winner is another group with a required set of physical properties.
     /// For example, if a group X contains a logical sort on group Y, it will trigger a cascades search
     /// on group Y with a required sort property corresponding to the logical sort node. If any of the
@@ -67,7 +66,7 @@ pub enum WinnerExpr {
         /// The group ID of the enforcer.
         group_id: GroupId,
         /// The required properties of the child. Only a single child.
-        required_child_physical_properties: Arc<RequiredPhysicalProperties>,
+        required_child_physical_properties: RequiredPhysicalProperties,
     },
 }
 
@@ -117,8 +116,7 @@ impl Default for Winner {
     }
 }
 
-#[derive(Default)]
-pub struct RequiredPhysicalProperties(pub Vec<Box<dyn PhysicalProperty>>);
+pub type RequiredPhysicalProperties = Arc<[Box<dyn PhysicalProperty>]>;
 
 pub struct Group {
     /// Logical and physical expressions of the group.
@@ -127,7 +125,7 @@ pub struct Group {
     /// Note that the winner does not necessarily have a physical property exactly equal
     /// to the required property. It could be a stronger property that satisfies the
     /// required property.
-    pub(crate) winners: Vec<(Arc<RequiredPhysicalProperties>, Winner)>,
+    pub(crate) winners: HashMap<SubGroupId, (RequiredPhysicalProperties, Winner)>,
     /// Logical properties of the group. This is inferred from the first expression added to the
     /// group.
     pub(crate) logical_properties: Arc<[Box<dyn LogicalProperty>]>,
@@ -168,7 +166,32 @@ pub trait Memo<T: NodeType>: 'static + Send + Sync {
     fn get_pred(&self, pred_id: PredId) -> ArcPredNode<T>;
 
     /// Update the winner.
-    fn update_winner(&mut self, group_id: GroupId, winner: Winner);
+    fn update_winner(&mut self, group_id: GroupId, subgroup_id: SubGroupId, winner: Winner);
+
+    /// Add a sub-group to the group, this creates a new search goal for a winner that satisfies
+    /// the required physical properties.
+    fn create_or_get_subgroup(
+        &mut self,
+        group_id: GroupId,
+        required_phys_props: RequiredPhysicalProperties,
+    ) -> SubGroupId;
+
+    /// Get a subgroup based on required properties.
+    fn get_subgroup(
+        &self,
+        group_id: GroupId,
+        required_phys_props: RequiredPhysicalProperties,
+    ) -> SubGroupId;
+
+    /// Get all subgroups of a group.
+    fn get_all_subgroup_ids(&self, group_id: GroupId) -> Vec<SubGroupId>;
+
+    /// Get the goal of a subgroup.
+    fn get_subgroup_goal(
+        &self,
+        group_id: GroupId,
+        subgroup_id: SubGroupId,
+    ) -> RequiredPhysicalProperties;
 
     /// Estimated plan space for the memo table, only useful when plan exploration budget is
     /// enabled. Returns number of expressions in the memo table.
@@ -187,48 +210,117 @@ pub trait Memo<T: NodeType>: 'static + Send + Sync {
         exprs
     }
 
-    /// Get winner of a group.
-    fn get_group_winner(&self, group_id: GroupId) -> &Winner {
-        &self.get_group(group_id).winners[0].1 // TODO: handle multiple winners
+    /// Get winner of a group and a subgroup.
+    fn get_group_winner(&self, group_id: GroupId, subgroup_id: SubGroupId) -> &Winner {
+        &self.get_group(group_id).winners[&subgroup_id].1
     }
 
     /// Get the best group binding based on the cost
     fn get_best_group_binding(
         &self,
         group_id: GroupId,
-        mut post_process: impl FnMut(ArcPlanNode<T>, GroupId, &WinnerInfo),
+        subgroup_id: SubGroupId,
+        mut post_process: impl FnMut(ArcPlanNode<T>, GroupId, SubGroupId, &WinnerInfo),
     ) -> Result<ArcPlanNode<T>> {
-        get_best_group_binding_inner(self, group_id, &mut post_process)
+        get_best_group_binding_inner(self, group_id, subgroup_id, &mut post_process)
     }
+
+    /// Get the physical property builders.
+    fn get_physical_property_builders(&self) -> &PhysicalPropertyBuilders<T>;
 }
 
 fn get_best_group_binding_inner<M: Memo<T> + ?Sized, T: NodeType>(
     this: &M,
     group_id: GroupId,
-    post_process: &mut impl FnMut(ArcPlanNode<T>, GroupId, &WinnerInfo),
+    subgroup_id: SubGroupId,
+    post_process: &mut impl FnMut(ArcPlanNode<T>, GroupId, SubGroupId, &WinnerInfo),
 ) -> Result<ArcPlanNode<T>> {
-    let winner = this.get_group_winner(group_id);
+    let winner = this.get_group_winner(group_id, subgroup_id);
     if let Winner::Full(info @ WinnerInfo { expr_id, .. }) = winner {
-        // if expr_id is enforcer, return the enforcer
-        // otherwise, return the best group binding based on the required properties
-        if let WinnerExpr::Expr { expr_id } = expr_id {
-            let expr = this.get_expr_memoed(*expr_id);
-            let mut children = Vec::with_capacity(expr.children.len());
-            for child in &expr.children {
-                children.push(PlanNodeOrGroup::PlanNode(
-                    get_best_group_binding_inner(this, *child, post_process)
+        let required_phys_prop = this.get_subgroup_goal(group_id, subgroup_id);
+        match expr_id {
+            WinnerExpr::Expr { expr_id } => {
+                let expr = this.get_expr_memoed(*expr_id);
+                let predicates = expr
+                    .predicates
+                    .iter()
+                    .map(|x| this.get_pred(*x))
+                    .collect_vec();
+                let required_child_phys_prop = this
+                    .get_physical_property_builders()
+                    .passthrough_many(
+                        expr.typ.clone(),
+                        &predicates,
+                        &required_phys_prop,
+                        expr.children.len(),
+                    )
+                    .into_iter()
+                    .map(Arc::<[_]>::from)
+                    .collect_vec();
+                let mut children = Vec::with_capacity(expr.children.len());
+                for (child_idx, &child) in expr.children.iter().enumerate() {
+                    let child_required_phys_prop =
+                        this.get_subgroup(child, required_child_phys_prop[child_idx].clone());
+                    children.push(PlanNodeOrGroup::PlanNode(
+                        get_best_group_binding_inner(
+                            this,
+                            child,
+                            child_required_phys_prop,
+                            post_process,
+                        )
                         .with_context(|| format!("when processing expr {}", expr_id))?,
-                ));
+                    ));
+                }
+                let node = Arc::new(PlanNode {
+                    typ: expr.typ.clone(),
+                    children,
+                    predicates,
+                });
+                // TODO: verify the node satisfies all required phys props
+                post_process(node.clone(), group_id, subgroup_id, info);
+                return Ok(node);
             }
-            let node = Arc::new(PlanNode {
-                typ: expr.typ.clone(),
-                children,
-                predicates: expr.predicates.iter().map(|x| this.get_pred(*x)).collect(),
-            });
-            post_process(node.clone(), group_id, info);
-            return Ok(node);
-        } else {
-            unimplemented!()
+            WinnerExpr::Enforcer {} => {
+                let child_default_required_phys_prop: Arc<[_]> =
+                    this.get_physical_property_builders().default_many().into();
+                let child_subgroup_id =
+                    this.get_subgroup(group_id, child_default_required_phys_prop.clone());
+                let child =
+                    get_best_group_binding_inner(this, group_id, child_subgroup_id, post_process)?;
+                let (node, _) = this
+                    .get_physical_property_builders()
+                    .enforce_many_if_not_satisfied(
+                        PlanNodeOrGroup::PlanNode(child),
+                        child_default_required_phys_prop,
+                        required_phys_prop,
+                    );
+                let node = node.unwrap_plan_node();
+                post_process(node.clone(), group_id, subgroup_id, info);
+                return Ok(node);
+            }
+            WinnerExpr::Propagate {
+                group_id: child_group_id,
+                required_child_physical_properties,
+            } => {
+                let child_subgroup_id =
+                    this.get_subgroup(*child_group_id, required_child_physical_properties.clone());
+                let child = get_best_group_binding_inner(
+                    this,
+                    *child_group_id,
+                    child_subgroup_id,
+                    post_process,
+                )?;
+                let (node, _) = this
+                    .get_physical_property_builders()
+                    .enforce_many_if_not_satisfied(
+                        PlanNodeOrGroup::PlanNode(child),
+                        required_child_physical_properties.clone(),
+                        required_phys_prop,
+                    );
+                let node = node.unwrap_plan_node();
+                post_process(node.clone(), group_id, subgroup_id, info);
+                return Ok(node);
+            }
         }
     }
     bail!("no best group binding for group {}", group_id)
@@ -262,6 +354,67 @@ pub struct NaiveMemo<T: NodeType> {
 }
 
 impl<T: NodeType> Memo<T> for NaiveMemo<T> {
+    fn create_or_get_subgroup(
+        &mut self,
+        group_id: GroupId,
+        required_phys_props: RequiredPhysicalProperties,
+    ) -> SubGroupId {
+        let group_id = self.reduce_group(group_id);
+        let group = self.groups.get_mut(&group_id).unwrap();
+        for (subgroup_id, (props, _)) in group.winners.iter() {
+            if self
+                .physical_property_builders
+                .exactly_eq(props, &required_phys_props)
+            {
+                return *subgroup_id;
+            }
+        }
+        let subgroup_id = self.next_subgroup_id();
+        let group = self.groups.get_mut(&group_id).unwrap();
+        group
+            .winners
+            .insert(subgroup_id, (required_phys_props, Winner::Unknown));
+        subgroup_id
+    }
+
+    fn get_subgroup(
+        &self,
+        group_id: GroupId,
+        required_phys_props: RequiredPhysicalProperties,
+    ) -> SubGroupId {
+        let group_id = self.reduce_group(group_id);
+        let group = self.groups.get(&group_id).unwrap();
+        for (subgroup_id, (props, _)) in group.winners.iter() {
+            if self
+                .physical_property_builders
+                .exactly_eq(props, &required_phys_props)
+            {
+                return *subgroup_id;
+            }
+        }
+        unreachable!("subgroup not found")
+    }
+
+    fn get_subgroup_goal(
+        &self,
+        group_id: GroupId,
+        subgroup_id: SubGroupId,
+    ) -> RequiredPhysicalProperties {
+        let group_id = self.reduce_group(group_id);
+        self.groups[&group_id].winners[&subgroup_id].0.clone()
+    }
+
+    fn get_all_subgroup_ids(&self, group_id: GroupId) -> Vec<SubGroupId> {
+        let group_id = self.reduce_group(group_id);
+        let mut subgroups = self.groups[&group_id].winners.keys().copied().collect_vec();
+        subgroups.sort();
+        subgroups
+    }
+
+    fn get_physical_property_builders(&self) -> &PhysicalPropertyBuilders<T> {
+        &self.physical_property_builders
+    }
+
     fn add_new_expr(&mut self, rel_node: ArcPlanNode<T>) -> (GroupId, ExprId) {
         let (group_id, expr_id) = self
             .add_new_group_expr_inner(rel_node, None)
@@ -339,7 +492,7 @@ impl<T: NodeType> Memo<T> for NaiveMemo<T> {
         self.groups.get(&group_id).as_ref().unwrap()
     }
 
-    fn update_winner(&mut self, group_id: GroupId, winner: Winner) {
+    fn update_winner(&mut self, group_id: GroupId, subgroup_id: SubGroupId, winner: Winner) {
         let group_id = self.reduce_group(group_id);
         let group = self.groups.get_mut(&group_id).unwrap();
         if let Winner::Full(WinnerInfo {
@@ -357,7 +510,7 @@ impl<T: NodeType> Memo<T> for NaiveMemo<T> {
                 self.expr_id_to_expr_node[expr_id]
             );
         }
-        group.winners[0].1 = winner;
+        group.winners.get_mut(&subgroup_id).unwrap().1 = winner;
     }
 
     fn estimated_plan_space(&self) -> usize {
@@ -391,6 +544,13 @@ impl<T: NodeType> NaiveMemo<T> {
         let id = self.group_expr_counter;
         self.group_expr_counter += 1;
         GroupId(id)
+    }
+
+    /// Get the next subgroup id. Group id and expr id shares the same counter, so as to make it easier
+    fn next_subgroup_id(&mut self) -> SubGroupId {
+        let id = self.group_expr_counter;
+        self.group_expr_counter += 1;
+        SubGroupId(id)
     }
 
     /// Get the next expr id. Group id and expr id shares the same counter, so as to make it easier
@@ -464,6 +624,8 @@ impl<T: NodeType> NaiveMemo<T> {
             assert!(ret.is_some());
             group_merge_into.group_exprs.insert(from_expr);
         }
+        // TODO: ensure we consolidate the winners with the same property, or it doesn't matter actually?
+        group_merge_into.winners.extend(group_merge_from.winners);
         self.merged_group_mapping.insert(merge_from, merge_into);
 
         // Update all indexes and other data structures
@@ -653,10 +815,7 @@ impl<T: NodeType> NaiveMemo<T> {
         // Create group and infer properties (only upon initializing a group).
         let mut group = Group {
             group_exprs: HashSet::new(),
-            winners: vec![(
-                Arc::new(RequiredPhysicalProperties::default()),
-                Winner::Unknown,
-            )],
+            winners: Default::default(),
             logical_properties: self.infer_properties(memo_node).into(),
         };
         group.group_exprs.insert(expr_id);
@@ -666,7 +825,9 @@ impl<T: NodeType> NaiveMemo<T> {
 
     pub fn clear_winner(&mut self) {
         for group in self.groups.values_mut() {
-            group.winners[0].1 = Winner::Unknown; // TODO: fix this for multiple winners
+            for (_, (_, winner)) in group.winners.iter_mut() {
+                *winner = Winner::Unknown;
+            }
         }
     }
 }

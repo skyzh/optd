@@ -8,12 +8,13 @@ use std::fmt::Display;
 use std::sync::Arc;
 
 use anyhow::Result;
+use itertools::Itertools;
 use tracing::trace;
 
-use super::memo::{ArcMemoPlanNode, Memo};
+use super::memo::{ArcMemoPlanNode, Memo, RequiredPhysicalProperties};
 use super::tasks::OptimizeGroupTask;
 use super::{NaiveMemo, Task};
-use crate::cascades::memo::{Winner, WinnerExpr, WinnerInfo};
+use crate::cascades::memo::{Winner, WinnerExpr};
 use crate::cost::CostModel;
 use crate::logical_property::{LogicalPropertyBuilder, LogicalPropertyBuilderAny};
 use crate::nodes::{
@@ -73,6 +74,9 @@ pub struct RelNodeContext {
 pub struct GroupId(pub(super) usize);
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default, Hash)]
+pub struct SubGroupId(pub(super) usize);
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default, Hash)]
 pub struct ExprId(pub usize);
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default, Hash)]
@@ -81,6 +85,12 @@ pub struct PredId(pub usize);
 impl Display for GroupId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "!{}", self.0)
+    }
+}
+
+impl Display for SubGroupId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, ".{}", self.0)
     }
 }
 
@@ -190,79 +200,105 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
         self.disabled_rules.contains(&rule_id)
     }
 
-    pub fn dump(&self) {
+    pub fn dump(&self, mut buf: impl std::fmt::Write) -> std::fmt::Result {
         for group_id in self.memo.get_all_group_ids() {
-            let winner_str = match &self.memo.get_group_winner(group_id) {
-                Winner::Impossible => "winner=<impossible>".to_string(),
-                Winner::Unknown => "winner=<unknown>".to_string(),
-                Winner::Full(winner) => {
-                    let (winner_expr, winner_str) = match &winner.expr_id {
-                        WinnerExpr::Expr { expr_id } => {
-                            let expr = self.memo.get_expr_memoed(*expr_id);
-                            (format!("{}", expr_id), format!("{}", expr))
-                        }
-                        WinnerExpr::Propagate {
-                            group_id,
-                            required_child_physical_properties: _,
-                        } => (format!("{}", group_id), format!("{}", group_id)),
-                        WinnerExpr::Enforcer { expr_id } => {
-                            let expr = self.memo.get_expr_memoed(*expr_id);
-                            (format!("{} (with enforcer)", expr_id), format!("{}", expr))
-                        }
-                    };
-                    format!(
-                        "winner={} weighted_cost={} cost={} stat={} | {}",
-                        winner_expr,
-                        winner.total_weighted_cost,
-                        self.cost.explain_cost(&winner.total_cost),
-                        self.cost.explain_statistics(&winner.statistics),
-                        winner_str
-                    )
+            for subgroup_id in self.memo.get_all_subgroup_ids(group_id) {
+                let winner_str = match &self.memo.get_group_winner(group_id, subgroup_id) {
+                    Winner::Impossible => "winner=<impossible>".to_string(),
+                    Winner::Unknown => "winner=<unknown>".to_string(),
+                    Winner::Full(winner) => {
+                        let (winner_expr, winner_str) = match &winner.expr_id {
+                            WinnerExpr::Expr { expr_id } => {
+                                let expr = self.memo.get_expr_memoed(*expr_id);
+                                (format!("{}", expr_id), format!("{}", expr))
+                            }
+                            WinnerExpr::Propagate {
+                                group_id,
+                                required_child_physical_properties: _,
+                            } => (format!("{}", group_id), format!("{}", group_id)),
+                            WinnerExpr::Enforcer {} => ("enforcer".to_string(), "".to_string()),
+                        };
+                        format!(
+                            "winner={} weighted_cost={} cost={} stat={} | {}",
+                            winner_expr,
+                            winner.total_weighted_cost,
+                            self.cost.explain_cost(&winner.total_cost),
+                            self.cost.explain_statistics(&winner.statistics),
+                            winner_str
+                        )
+                    }
+                };
+                writeln!(
+                    buf,
+                    "group_id={} subgroup_id={} {}",
+                    group_id, subgroup_id, winner_str
+                )?;
+                let goal = self.memo.get_subgroup_goal(group_id, subgroup_id);
+                for (id, property) in self
+                    .memo
+                    .get_physical_property_builders()
+                    .0
+                    .iter()
+                    .enumerate()
+                {
+                    writeln!(buf, "  {}: {}", property.property_name(), goal[id])?;
                 }
-            };
-            println!("group_id={} {}", group_id, winner_str);
-            let group = self.memo.get_group(group_id);
-            for (id, property) in self.logical_property_builders.iter().enumerate() {
-                println!(
-                    "  {}={}",
-                    property.property_name(),
-                    group.logical_properties[id].as_ref()
-                )
-            }
-            let mut all_predicates = BTreeSet::new();
-            for expr_id in self.memo.get_all_exprs_in_group(group_id) {
-                let memo_node = self.memo.get_expr_memoed(expr_id);
-                for pred in &memo_node.predicates {
-                    all_predicates.insert(*pred);
+                let group = self.memo.get_group(group_id);
+                for (id, property) in self.logical_property_builders.iter().enumerate() {
+                    writeln!(
+                        buf,
+                        "  {}={}",
+                        property.property_name(),
+                        group.logical_properties[id]
+                    )?;
                 }
-                println!("  expr_id={} | {}", expr_id, memo_node);
-            }
-            for pred in all_predicates {
-                println!("  {}={}", pred, self.memo.get_pred(pred));
+                let mut all_predicates = BTreeSet::new();
+                for expr_id in self.memo.get_all_exprs_in_group(group_id) {
+                    let memo_node = self.memo.get_expr_memoed(expr_id);
+                    for pred in &memo_node.predicates {
+                        all_predicates.insert(*pred);
+                    }
+                    writeln!(buf, "  expr_id={} | {}", expr_id, memo_node)?;
+                }
+                for pred in all_predicates {
+                    writeln!(buf, "  {}={}", pred, self.memo.get_pred(pred))?;
+                }
             }
         }
+        Ok(())
     }
 
     /// Optimize a `RelNode`.
-    pub fn step_optimize_rel(&mut self, root_rel: ArcPlanNode<T>) -> Result<GroupId> {
+    pub fn step_optimize_rel(
+        &mut self,
+        root_rel: ArcPlanNode<T>,
+        required_props: &[&dyn PhysicalProperty],
+    ) -> Result<(GroupId, SubGroupId)> {
         let (group_id, _) = self.add_new_expr(root_rel);
-        self.fire_optimize_tasks(group_id)?;
-        Ok(group_id)
+        let required_props = required_props.iter().map(|x| x.to_boxed()).collect_vec();
+        let subgroup_id = self
+            .memo
+            .create_or_get_subgroup(group_id, required_props.into());
+        self.fire_optimize_tasks(group_id, subgroup_id)?;
+        Ok((group_id, subgroup_id))
     }
 
     /// Gets the group binding.
     pub fn step_get_optimize_rel(
         &self,
         group_id: GroupId,
+        subgroup_id: SubGroupId,
         meta: &mut Option<PlanNodeMetaMap>,
     ) -> Result<ArcPlanNode<T>> {
-        let res = self
-            .memo
-            .get_best_group_binding(group_id, |node, group_id, info| {
+        let res = self.memo.get_best_group_binding(
+            group_id,
+            subgroup_id,
+            |node, group_id, subgroup_id, info| {
                 if let Some(meta) = meta {
                     let node = node.as_ref() as *const _ as usize;
                     let node_meta = PlanNodeMeta::new(
                         group_id,
+                        subgroup_id,
                         info.total_weighted_cost,
                         info.total_cost.clone(),
                         info.statistics.clone(),
@@ -271,17 +307,20 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
                     );
                     meta.insert(node, node_meta);
                 }
-            });
+            },
+        );
         if res.is_err() && cfg!(debug_assertions) {
-            self.dump();
+            let mut buf = String::new();
+            self.dump(&mut buf).unwrap();
+            eprintln!("{}", buf);
         }
         res
     }
 
-    fn fire_optimize_tasks(&mut self, group_id: GroupId) -> Result<()> {
-        trace!(event = "fire_optimize_tasks", root_group_id = %group_id);
+    fn fire_optimize_tasks(&mut self, group_id: GroupId, subgroup_id: SubGroupId) -> Result<()> {
+        trace!(event = "fire_optimize_tasks", root_group_id = %group_id, root_subgroup_id = %subgroup_id);
         self.tasks
-            .push_back(Box::new(OptimizeGroupTask::new(group_id)));
+            .push_back(Box::new(OptimizeGroupTask::new(group_id, subgroup_id)));
         // get the task from the stack
         self.ctx.budget_used = false;
         let plan_space_begin = self.memo.estimated_plan_space();
@@ -320,10 +359,19 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
         Ok(())
     }
 
-    fn optimize_inner(&mut self, root_rel: ArcPlanNode<T>) -> Result<ArcPlanNode<T>> {
+    fn optimize_inner(
+        &mut self,
+        root_rel: ArcPlanNode<T>,
+        required_props: &[&dyn PhysicalProperty],
+    ) -> Result<ArcPlanNode<T>> {
         let (group_id, _) = self.add_new_expr(root_rel);
-        self.fire_optimize_tasks(group_id)?;
-        self.memo.get_best_group_binding(group_id, |_, _, _| {})
+        let required_props = required_props.iter().map(|x| x.to_boxed()).collect_vec();
+        let subgroup_id = self
+            .memo
+            .create_or_get_subgroup(group_id, required_props.into());
+        self.fire_optimize_tasks(group_id, subgroup_id)?;
+        self.memo
+            .get_best_group_binding(group_id, subgroup_id, |_, _, _, _| {})
     }
 
     pub fn resolve_group_id(&self, root_rel: PlanNodeOrGroup<T>) -> GroupId {
@@ -346,12 +394,17 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
         self.memo.add_expr_to_group(rel_node, group_id)
     }
 
-    pub(super) fn get_group_winner(&self, group_id: GroupId) -> &Winner {
-        self.memo.get_group_winner(group_id)
+    pub(super) fn get_group_winner(&self, group_id: GroupId, subgroup_id: SubGroupId) -> &Winner {
+        self.memo.get_group_winner(group_id, subgroup_id)
     }
 
-    pub(super) fn update_group_winner(&mut self, group_id: GroupId, winner: Winner) {
-        self.memo.update_winner(group_id, winner)
+    pub(super) fn update_group_winner(
+        &mut self,
+        group_id: GroupId,
+        subgroup_id: SubGroupId,
+        winner: Winner,
+    ) {
+        self.memo.update_winner(group_id, subgroup_id, winner)
     }
 
     /// Get the properties of a Cascades group
@@ -416,6 +469,15 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
             .insert(rule_id);
     }
 
+    pub(crate) fn create_or_get_subgroup(
+        &mut self,
+        group_id: GroupId,
+        required_phys_props: RequiredPhysicalProperties,
+    ) -> SubGroupId {
+        self.memo
+            .create_or_get_subgroup(group_id, required_phys_props)
+    }
+
     pub fn memo(&self) -> &M {
         &self.memo
     }
@@ -423,15 +485,17 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
 
 impl<T: NodeType, M: Memo<T>> Optimizer<T> for CascadesOptimizer<T, M> {
     fn optimize(&mut self, root_rel: ArcPlanNode<T>) -> Result<ArcPlanNode<T>> {
-        self.optimize_inner(root_rel)
+        let phys_props = self.physical_property_builders.default_many();
+        let phys_props_ref = phys_props.iter().map(|x| x.as_ref()).collect_vec();
+        self.optimize_with_required_props(root_rel, &phys_props_ref)
     }
 
     fn optimize_with_required_props(
         &mut self,
-        _: ArcPlanNode<T>,
-        _: &[&dyn PhysicalProperty],
+        root_rel: ArcPlanNode<T>,
+        required_props: &[&dyn PhysicalProperty],
     ) -> Result<ArcPlanNode<T>> {
-        unimplemented!()
+        self.optimize_inner(root_rel, required_props)
     }
 
     fn get_logical_property<P: LogicalPropertyBuilder<T>>(

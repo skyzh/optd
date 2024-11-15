@@ -44,11 +44,13 @@ pub trait PhysicalPropertyBuilderAny<T: NodeType>: 'static + Send + Sync {
     fn default_any(&self) -> Box<dyn PhysicalProperty>;
 
     fn property_name(&self) -> &'static str;
+
+    fn exactly_eq_any(&self, a: &dyn PhysicalProperty, b: &dyn PhysicalProperty) -> bool;
 }
 
 /// The trait for building physical properties for a plan node.
 pub trait PhysicalPropertyBuilder<T: NodeType>: 'static + Send + Sync + Sized {
-    type Prop: PhysicalProperty + Clone + Sized;
+    type Prop: PhysicalProperty + Clone + Sized + PartialEq + Eq;
 
     /// Derive the output physical property based on the input physical properties and the current plan node information.
     fn derive(&self, typ: T, predicates: &[ArcPredNode<T>], children: &[&Self::Prop])
@@ -73,6 +75,10 @@ pub trait PhysicalPropertyBuilder<T: NodeType>: 'static + Send + Sync + Sized {
     fn default(&self) -> Self::Prop;
 
     fn property_name(&self) -> &'static str;
+
+    fn exactly_eq(&self, a: &Self::Prop, b: &Self::Prop) -> bool {
+        a == b
+    }
 }
 
 impl<T: NodeType, P: PhysicalPropertyBuilder<T>> PhysicalPropertyBuilderAny<T> for P {
@@ -132,6 +138,18 @@ impl<T: NodeType, P: PhysicalPropertyBuilder<T>> PhysicalPropertyBuilderAny<T> f
 
     fn default_any(&self) -> Box<dyn PhysicalProperty> {
         Box::new(self.default())
+    }
+
+    fn exactly_eq_any(&self, a: &dyn PhysicalProperty, b: &dyn PhysicalProperty) -> bool {
+        let a = a
+            .as_any()
+            .downcast_ref::<P::Prop>()
+            .expect("Failed to downcast property a");
+        let b = b
+            .as_any()
+            .downcast_ref::<P::Prop>()
+            .expect("Failed to downcast property b");
+        self.exactly_eq(a, b)
     }
 
     fn property_name(&self) -> &'static str {
@@ -285,5 +303,27 @@ impl<T: NodeType> PhysicalPropertyBuilders<T> {
             }
         }
         (child, new_props)
+    }
+
+    pub fn exactly_eq<X1, Y1, X2, Y2>(&self, a: Y1, b: Y2) -> bool
+    where
+        X1: Borrow<dyn PhysicalProperty>,
+        Y1: AsRef<[X1]>,
+        X2: Borrow<dyn PhysicalProperty>,
+        Y2: AsRef<[X2]>,
+    {
+        let a = a.as_ref();
+        let b = b.as_ref();
+        assert_eq!(a.len(), self.0.len());
+        assert_eq!(b.len(), self.0.len());
+        for i in 0..self.0.len() {
+            let builder = &self.0[i];
+            let a = a[i].borrow();
+            let b = b[i].borrow();
+            if !builder.exactly_eq_any(a, b) {
+                return false;
+            }
+        }
+        true
     }
 }

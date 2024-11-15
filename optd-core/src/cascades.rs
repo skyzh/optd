@@ -10,5 +10,7 @@ mod optimizer;
 mod tasks;
 
 pub use memo::{Memo, NaiveMemo};
-pub use optimizer::{CascadesOptimizer, ExprId, GroupId, OptimizerProperties, RelNodeContext};
+pub use optimizer::{
+    CascadesOptimizer, ExprId, GroupId, OptimizerProperties, RelNodeContext, SubGroupId,
+};
 use tasks::Task;

@@ -211,7 +211,9 @@ impl DatafusionDBMS {
                 .lock()
                 .unwrap();
             let optimizer = guard.as_mut().unwrap().optd_optimizer_mut();
-            optimizer.dump();
+            let mut buf = String::new();
+            optimizer.dump(&mut buf).unwrap();
+            result.push(vec![buf]);
         }
         Ok(result)
     }

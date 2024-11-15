@@ -51,7 +51,7 @@ group_id=!5
     cost={compute=6908.754779315221,io=1000}
     stat={row_cnt=1000}
     sort=<any>
-  subgroup_id=.31 winner=26 weighted_cost=7908.754779315221 | (PhysicalSort !2 P3)
+  subgroup_id=.31 winner=!2 weighted_cost=7908.754779315221 | !2
     cost={compute=6908.754779315221,io=1000}
     stat={row_cnt=1000}
     sort=[Asc#0]

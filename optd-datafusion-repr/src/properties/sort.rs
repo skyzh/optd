@@ -75,6 +75,7 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
     ) -> Self::Prop {
         match typ {
             DfNodeType::PhysicalSort => {
+                // TODO: helper function for sort order predicate <-> sort prop
                 let mut columns = Vec::new();
                 let preds = ListPred::from_pred_node(predicates[0].clone()).unwrap();
                 for pred in preds.to_vec() {
@@ -95,7 +96,7 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
     fn passthrough(
         &self,
         typ: DfNodeType,
-        _: &[ArcDfPredNode],
+        predicates: &[ArcDfPredNode],
         required: &Self::Prop,
     ) -> Vec<Self::Prop> {
         match typ {
@@ -104,9 +105,25 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
             DfNodeType::PhysicalHashJoin(_) | DfNodeType::PhysicalNestedLoopJoin(_) => {
                 vec![SortProp::any_order(), SortProp::any_order()]
             }
-            DfNodeType::PhysicalScan => vec![],
+            DfNodeType::PhysicalScan | DfNodeType::PhysicalEmptyRelation => vec![],
             DfNodeType::PhysicalProjection => vec![SortProp::any_order()],
-            DfNodeType::PhysicalSort => vec![SortProp::any_order()],
+            DfNodeType::PhysicalSort => {
+                let mut columns = Vec::new();
+                let preds = ListPred::from_pred_node(predicates[0].clone()).unwrap();
+                for pred in preds.to_vec() {
+                    let order = SortOrderPred::from_pred_node(pred).unwrap();
+                    let col_ref = ColumnRefPred::from_pred_node(order.child()).unwrap();
+                    columns.push((order.order(), col_ref.index()));
+                }
+                let this_prop = SortProp(columns);
+                if self.satisfies(required, &this_prop) {
+                    // If the required property satisfies the current property, we can
+                    // pass it through b/c this node is a no-op (is this correct...?)
+                    vec![this_prop]
+                } else {
+                    vec![]
+                }
+            }
             _ if typ.is_logical() => unreachable!("logical node should not be called"),
             node => unimplemented!("passthrough for {:?}", node),
         }

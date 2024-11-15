@@ -24,7 +24,7 @@ PhysicalScan { table: t1, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
 select count(*) from t1;
 
 /*
-PhysicalAgg
+PhysicalHashAgg
 ├── aggrs:Agg(Count)
 │   └── [ 1(u8) ]
 ├── groups: []

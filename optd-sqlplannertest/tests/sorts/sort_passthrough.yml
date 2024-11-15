@@ -4,11 +4,17 @@
   tasks:
     - execute
 - sql: |
-    select * from (select * from t1 order by t1v1) order by t1v1;
+    select * from (select * from (select * from (select * from t1 order by t1v1) order by t1v1) order by t1v1) order by t1v1;
   desc: test order by passthrough
   tasks:
     - explain:logical_optd,physical_optd
     - execute[dump_memo_table]
+- sql: |
+    select * from (select * from t1 order by t1v1) order by t1v1;
+  desc: test order by passthrough
+  tasks:
+    - explain:logical_optd,physical_optd
+    - execute
 - sql: |
     select * from (select * from t1 order by t1v1, t1v2) order by t1v1;
   desc: test order by passthrough

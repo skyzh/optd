@@ -110,8 +110,8 @@ impl<T: NodeType> CascadesOptimizer<T, NaiveMemo<T>> {
     pub fn new(
         rules: Vec<Arc<dyn Rule<T, Self>>>,
         cost: Box<dyn CostModel<T, NaiveMemo<T>>>,
-        logical_property_builders: Vec<Box<dyn LogicalPropertyBuilderAny<T>>>,
-        physical_property_builders: Vec<Box<dyn PhysicalPropertyBuilderAny<T>>>,
+        logical_property_builders: Arc<[Box<dyn LogicalPropertyBuilderAny<T>>]>,
+        physical_property_builders: Arc<[Box<dyn PhysicalPropertyBuilderAny<T>>]>,
     ) -> Self {
         Self::new_with_options(
             rules,
@@ -125,14 +125,12 @@ impl<T: NodeType> CascadesOptimizer<T, NaiveMemo<T>> {
     pub fn new_with_options(
         rules: Vec<Arc<dyn Rule<T, Self>>>,
         cost: Box<dyn CostModel<T, NaiveMemo<T>>>,
-        logical_property_builders: Vec<Box<dyn LogicalPropertyBuilderAny<T>>>,
-        physical_property_builders: Vec<Box<dyn PhysicalPropertyBuilderAny<T>>>,
+        logical_property_builders: Arc<[Box<dyn LogicalPropertyBuilderAny<T>>]>,
+        physical_property_builders: Arc<[Box<dyn PhysicalPropertyBuilderAny<T>>]>,
         prop: OptimizerProperties,
     ) -> Self {
         let tasks = VecDeque::new();
-        let logical_property_builders: Arc<[_]> = logical_property_builders.into();
-        let physical_property_builders =
-            PhysicalPropertyBuilders(physical_property_builders.into());
+        let physical_property_builders = PhysicalPropertyBuilders(physical_property_builders);
         let memo = NaiveMemo::new(
             logical_property_builders.clone(),
             physical_property_builders.clone(),
@@ -219,12 +217,12 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
                             WinnerExpr::Enforcer {} => ("enforcer".to_string(), "".to_string()),
                         };
                         format!(
-                            "winner={} weighted_cost={} cost={} stat={} | {}",
+                            "winner={} weighted_cost={} | {}\n  cost={}\n  stat={}",
                             winner_expr,
                             winner.total_weighted_cost,
+                            winner_str,
                             self.cost.explain_cost(&winner.total_cost),
                             self.cost.explain_statistics(&winner.statistics),
-                            winner_str
                         )
                     }
                 };
@@ -241,7 +239,7 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
                     .iter()
                     .enumerate()
                 {
-                    writeln!(buf, "  {}: {}", property.property_name(), goal[id])?;
+                    writeln!(buf, "  {}={}", property.property_name(), goal[id])?;
                 }
                 let group = self.memo.get_group(group_id);
                 for (id, property) in self.logical_property_builders.iter().enumerate() {

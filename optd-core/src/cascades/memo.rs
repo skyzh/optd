@@ -359,6 +359,10 @@ impl<T: NodeType> Memo<T> for NaiveMemo<T> {
         group_id: GroupId,
         required_phys_props: RequiredPhysicalProperties,
     ) -> SubGroupId {
+        assert_eq!(
+            required_phys_props.len(),
+            self.physical_property_builders.len()
+        );
         let group_id = self.reduce_group(group_id);
         let group = self.groups.get_mut(&group_id).unwrap();
         for (subgroup_id, (props, _)) in group.winners.iter() {

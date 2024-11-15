@@ -1,0 +1,130 @@
+use optd_core::{
+    nodes::NodeType,
+    physical_property::{PhysicalProperty, PhysicalPropertyBuilder},
+};
+
+use crate::plan_nodes::{
+    ArcDfPredNode, ColumnRefPred, DfNodeType, DfReprPredNode, ListPred, SortOrderPred,
+    SortOrderType,
+};
+
+pub struct SortPropertyBuilder;
+
+impl SortPropertyBuilder {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SortProp(pub Vec<(SortOrderType, usize)>);
+
+impl std::fmt::Display for SortProp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.0.is_empty() {
+            return write!(f, "<any>");
+        } else {
+            for (order, col) in &self.0 {
+                write!(f, "{:?}#{} ", order, col)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl PhysicalProperty for SortProp {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn to_boxed(&self) -> Box<dyn PhysicalProperty> {
+        Box::new(self.clone())
+    }
+}
+
+impl SortProp {
+    pub fn any_order() -> Self {
+        SortProp(vec![])
+    }
+
+    pub fn satisfies(prop: &SortProp, required: &SortProp) -> bool {
+        // required should be a prefix of the current property
+        for i in 0..required.0.len() {
+            if i >= prop.0.len() || prop.0[i] != required.0[i] {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
+    type Prop = SortProp;
+
+    fn derive(
+        &self,
+        typ: DfNodeType,
+        predicates: &[ArcDfPredNode],
+        children: &[&Self::Prop],
+    ) -> Self::Prop {
+        match typ {
+            DfNodeType::PhysicalSort => {
+                let mut columns = Vec::new();
+                let preds = ListPred::from_pred_node(predicates[0].clone()).unwrap();
+                for pred in preds.to_vec() {
+                    let order = SortOrderPred::from_pred_node(pred).unwrap();
+                    let col_ref = ColumnRefPred::from_pred_node(order.child()).unwrap();
+                    columns.push((order.order(), col_ref.index()));
+                }
+                SortProp(columns)
+            }
+            DfNodeType::Filter => children[0].clone(),
+            DfNodeType::PhysicalHashJoin(_) => SortProp::any_order(),
+            _ if typ.is_logical() => unreachable!("logical node should not be called"),
+            _ => SortProp::any_order(),
+        }
+    }
+
+    fn passthrough(
+        &self,
+        typ: DfNodeType,
+        predicates: &[ArcDfPredNode],
+        required: &Self::Prop,
+    ) -> Vec<Self::Prop> {
+        match typ {
+            DfNodeType::PhysicalFilter => vec![required.clone()],
+            DfNodeType::PhysicalAgg | DfNodeType::PhysicalLimit => vec![SortProp::any_order()],
+            DfNodeType::PhysicalHashJoin(_) | DfNodeType::PhysicalNestedLoopJoin(_) => {
+                vec![SortProp::any_order(), SortProp::any_order()]
+            }
+            DfNodeType::PhysicalScan => vec![],
+            _ if typ.is_logical() => unreachable!("logical node should not be called"),
+            node => unimplemented!("passthrough for {:?}", node),
+        }
+    }
+
+    fn satisfies(&self, prop: &SortProp, required: &SortProp) -> bool {
+        SortProp::satisfies(prop, required)
+    }
+
+    fn default(&self) -> Self::Prop {
+        SortProp(vec![])
+    }
+
+    fn enforce(&self, prop: &Self::Prop) -> (DfNodeType, Vec<ArcDfPredNode>) {
+        let mut predicates = Vec::new();
+        for (order, col_idx) in &prop.0 {
+            predicates.push(
+                SortOrderPred::new(*order, ColumnRefPred::new(*col_idx).into_pred_node())
+                    .into_pred_node(),
+            );
+        }
+        (
+            DfNodeType::PhysicalSort,
+            vec![ListPred::new(predicates).into_pred_node()],
+        )
+    }
+
+    fn property_name(&self) -> &'static str {
+        "sort"
+    }
+}

@@ -29,13 +29,19 @@ PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
 0 0 0 0
 1 1 1 1
 2 2 2 2
-group_id=!2 subgroup_id=.73 winner=75 weighted_cost=1000 cost={compute=0,io=1000} stat={row_cnt=1000} | (PhysicalScan P0)
+group_id=!2 subgroup_id=.73 winner=75 weighted_cost=1000 | (PhysicalScan P0)
+  cost={compute=0,io=1000}
+  stat={row_cnt=1000}
+  sort=<any>
   schema=[t1v1:Int32, t1v2:Int32]
   column_ref=[t1.0, t1.1]
   expr_id=1 | (Scan P0)
   expr_id=75 | (PhysicalScan P0)
   P0=(Constant(Utf8String) "t1")
-group_id=!6 subgroup_id=.68 winner=72 weighted_cost=1003000 cost={compute=1001000,io=2000} stat={row_cnt=10000} | (PhysicalNestedLoopJoin(Cross) !2 !2 P4)
+group_id=!6 subgroup_id=.68 winner=72 weighted_cost=1003000 | (PhysicalNestedLoopJoin(Cross) !2 !2 P4)
+  cost={compute=1001000,io=2000}
+  stat={row_cnt=10000}
+  sort=<any>
   schema=[t1v1:Int32, t1v2:Int32, t1v1:Int32, t1v2:Int32]
   column_ref=[t1.0, t1.1, t1.0, t1.1]
   expr_id=5 | (Join(Cross) !2 !2 P4)
@@ -44,7 +50,10 @@ group_id=!6 subgroup_id=.68 winner=72 weighted_cost=1003000 cost={compute=100100
   expr_id=72 | (PhysicalNestedLoopJoin(Cross) !2 !2 P4)
   P4=(Constant(Bool) true)
   P21=(List (ColumnRef 0(u64)) (ColumnRef 1(u64)) (ColumnRef 2(u64)) (ColumnRef 3(u64)))
-group_id=!15 subgroup_id=.10 winner=84 weighted_cost=5000 cost={compute=3000,io=2000} stat={row_cnt=1000} | (PhysicalHashJoin(Inner) !2 !2 P82 P82)
+group_id=!15 subgroup_id=.10 winner=84 weighted_cost=5000 | (PhysicalHashJoin(Inner) !2 !2 P82 P82)
+  cost={compute=3000,io=2000}
+  stat={row_cnt=1000}
+  sort=<any>
   schema=[t1v1:Int32, t1v2:Int32, t1v1:Int32, t1v2:Int32]
   column_ref=[t1.0, t1.1, t1.0, t1.1]
   expr_id=8 | (Filter !6 P7)
@@ -65,7 +74,10 @@ group_id=!15 subgroup_id=.10 winner=84 weighted_cost=5000 cost={compute=3000,io=
   P16=(List (ColumnRef 2(u64)) (ColumnRef 3(u64)) (ColumnRef 0(u64)) (ColumnRef 1(u64)))
   P21=(List (ColumnRef 0(u64)) (ColumnRef 1(u64)) (ColumnRef 2(u64)) (ColumnRef 3(u64)))
   P82=(List (ColumnRef 0(u64)))
-group_id=!15 subgroup_id=.60 winner=84 weighted_cost=5000 cost={compute=3000,io=2000} stat={row_cnt=1000} | (PhysicalHashJoin(Inner) !2 !2 P82 P82)
+group_id=!15 subgroup_id=.60 winner=84 weighted_cost=5000 | (PhysicalHashJoin(Inner) !2 !2 P82 P82)
+  cost={compute=3000,io=2000}
+  stat={row_cnt=1000}
+  sort=<any>
   schema=[t1v1:Int32, t1v2:Int32, t1v1:Int32, t1v2:Int32]
   column_ref=[t1.0, t1.1, t1.0, t1.1]
   expr_id=8 | (Filter !6 P7)
@@ -86,7 +98,10 @@ group_id=!15 subgroup_id=.60 winner=84 weighted_cost=5000 cost={compute=3000,io=
   P16=(List (ColumnRef 2(u64)) (ColumnRef 3(u64)) (ColumnRef 0(u64)) (ColumnRef 1(u64)))
   P21=(List (ColumnRef 0(u64)) (ColumnRef 1(u64)) (ColumnRef 2(u64)) (ColumnRef 3(u64)))
   P82=(List (ColumnRef 0(u64)))
-group_id=!48 subgroup_id=.63 winner=67 weighted_cost=1053000 cost={compute=1051000,io=2000} stat={row_cnt=10000} | (PhysicalProjection !6 P16)
+group_id=!48 subgroup_id=.63 winner=67 weighted_cost=1053000 | (PhysicalProjection !6 P16)
+  cost={compute=1051000,io=2000}
+  stat={row_cnt=10000}
+  sort=<any>
   schema=[unnamed:UInt64, unnamed:UInt64, unnamed:UInt64, unnamed:UInt64]
   column_ref=[t1.0, t1.1, t1.0, t1.1]
   expr_id=36 | (Projection !6 P16)

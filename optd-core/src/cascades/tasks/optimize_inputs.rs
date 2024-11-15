@@ -3,8 +3,6 @@
 // Use of this source code is governed by an MIT-style license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-use std::sync::Arc;
-
 use anyhow::Result;
 use itertools::Itertools;
 use tracing::trace;
@@ -21,6 +19,7 @@ use crate::nodes::NodeType;
 struct ContinueTask {
     next_group_idx: usize,
     return_from_optimize_group: bool,
+    return_from_inverse_enforce: bool,
 }
 
 struct ContinueTaskDisplay<'a>(&'a Option<ContinueTask>);
@@ -81,6 +80,7 @@ impl OptimizeInputsTask {
         input_statistics: Vec<Option<&Statistics>>,
         operation_cost: Cost,
         total_cost: Cost,
+        winner_expr: WinnerExpr,
         optimizer: &mut CascadesOptimizer<T, M>,
     ) {
         let group_id = optimizer.get_group_id(self.expr_id);
@@ -121,9 +121,7 @@ impl OptimizeInputsTask {
                 group_id,
                 self.subgroup_id,
                 Winner::Full(WinnerInfo {
-                    expr_id: WinnerExpr::Expr {
-                        expr_id: self.expr_id,
-                    },
+                    expr_id: winner_expr,
                     total_weighted_cost,
                     operation_weighted_cost,
                     total_cost,
@@ -138,29 +136,41 @@ impl OptimizeInputsTask {
 impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
     fn execute(&self, optimizer: &mut CascadesOptimizer<T, M>) -> Result<Vec<Box<dyn Task<T, M>>>> {
         if self.continue_from.is_none() {
-            if optimizer.is_expr_explored(self.expr_id) {
+            if optimizer.is_expr_explored(self.expr_id, self.subgroup_id) {
                 // skip optimize_inputs to avoid dead-loop: consider join commute being fired twice
                 // that produces two projections, therefore having groups like
                 // projection1 -> projection2 -> join = projection1.
                 trace!(event = "task_skip", task = "optimize_inputs", expr_id = %self.expr_id);
                 return Ok(vec![]);
             }
-            optimizer.mark_expr_explored(self.expr_id);
+            optimizer.mark_expr_explored(self.expr_id, self.subgroup_id);
         }
         let expr = optimizer.get_expr_memoed(self.expr_id);
+        let predicates = expr
+            .predicates
+            .iter()
+            .map(|pred_id| optimizer.get_pred(*pred_id))
+            .collect_vec();
         let group_id = optimizer.get_group_id(self.expr_id);
-        let child_group_default_property: Arc<[_]> = optimizer
+        let goal = optimizer
+            .memo()
+            .get_subgroup_goal(group_id, self.subgroup_id);
+        // TODO: cache in the task so that we don't need to recompute
+        let child_group_passthrough_properties = optimizer
             .memo()
             .get_physical_property_builders()
-            .default_many()
-            .into(); // TODO: correctly derive the properties
-
+            .passthrough_many(expr.typ.clone(), &predicates, &goal, expr.children.len());
+        assert_eq!(
+            child_group_passthrough_properties.len(),
+            expr.children.len()
+        );
         let children_subgroup_ids = expr
             .children
             .iter()
-            .map(|child_group_id| {
-                let child_subgroup_id = optimizer
-                    .create_or_get_subgroup(*child_group_id, child_group_default_property.clone());
+            .zip(child_group_passthrough_properties)
+            .map(|(child_group_id, required_props)| {
+                let child_subgroup_id =
+                    optimizer.create_or_get_subgroup(*child_group_id, required_props.into());
                 (*child_group_id, child_subgroup_id)
             })
             .collect_vec();
@@ -175,6 +185,7 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
         if let Some(ContinueTask {
             next_group_idx,
             return_from_optimize_group,
+            return_from_inverse_enforce,
         }) = self.continue_from.clone()
         {
             let context = RelNodeContext {
@@ -258,6 +269,7 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
                                 ContinueTask {
                                     next_group_idx,
                                     return_from_optimize_group: true,
+                                    return_from_inverse_enforce: false,
                                 },
                                 self.pruning,
                             )) as Box<dyn Task<T, M>>,
@@ -275,11 +287,80 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
                     ContinueTask {
                         next_group_idx: group_idx + 1,
                         return_from_optimize_group: false,
+                        return_from_inverse_enforce: false,
                     },
                     self.pruning,
                 )) as Box<dyn Task<T, M>>])
             } else {
-                self.update_winner(input_statistics_ref, operation_cost, total_cost, optimizer);
+                let expr = optimizer.get_expr_memoed(self.expr_id);
+                if return_from_inverse_enforce {
+                    self.update_winner(
+                        input_statistics_ref,
+                        operation_cost,
+                        total_cost,
+                        WinnerExpr::Propagate {
+                            group_id: expr.children[0],
+                        },
+                        optimizer,
+                    );
+                } else {
+                    self.update_winner(
+                        input_statistics_ref,
+                        operation_cost,
+                        total_cost,
+                        WinnerExpr::Expr {
+                            expr_id: self.expr_id,
+                        },
+                        optimizer,
+                    );
+                }
+
+                // Apply reverse-enforcer rules if possible only when search goal is default
+                let goal = optimizer
+                    .memo()
+                    .get_subgroup_goal(group_id, self.subgroup_id);
+                let phys_prop_builders = optimizer.memo().get_physical_property_builders();
+                if !return_from_inverse_enforce
+                    && phys_prop_builders.exactly_eq(goal, phys_prop_builders.default_many())
+                {
+                    let predicates = expr
+                        .predicates
+                        .iter()
+                        .map(|pred_id| optimizer.get_pred(*pred_id))
+                        .collect_vec();
+                    for (idx, phys_prop_builder) in optimizer
+                        .memo()
+                        .get_physical_property_builders()
+                        .0
+                        .iter()
+                        .enumerate()
+                    {
+                        if let Some(prop) =
+                            phys_prop_builder.search_goal_any(expr.typ.clone(), &predicates)
+                        {
+                            assert_eq!(expr.children.len(), 1);
+                            trace!(event = "task_yield", task = "optimize_inputs", expr_id = %self.expr_id, yield_to = "optimize_group_reverse_enforce");
+                            let child_group_id = expr.children[0];
+                            let mut required_props = phys_prop_builders.default_many();
+                            required_props[idx] = prop;
+                            let child_subgroup_id = optimizer
+                                .create_or_get_subgroup(child_group_id, required_props.into());
+                            return Ok(vec![
+                                Box::new(self.continue_from(
+                                    ContinueTask {
+                                        next_group_idx,
+                                        return_from_optimize_group: true,
+                                        return_from_inverse_enforce: true,
+                                    },
+                                    self.pruning,
+                                )) as Box<dyn Task<T, M>>,
+                                Box::new(OptimizeGroupTask::new(child_group_id, child_subgroup_id))
+                                    as Box<dyn Task<T, M>>,
+                            ]);
+                        }
+                    }
+                }
+
                 trace!(event = "task_finish", task = "optimize_inputs", expr_id = %self.expr_id, result = "optimized");
                 Ok(vec![])
             }
@@ -289,6 +370,7 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
                 ContinueTask {
                     next_group_idx: 0,
                     return_from_optimize_group: false,
+                    return_from_inverse_enforce: false,
                 },
                 self.pruning,
             )) as Box<dyn Task<T, M>>])

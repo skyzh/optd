@@ -266,17 +266,17 @@ impl<T: NodeType> PhysicalPropertyBuilders<T> {
         required_prop.resize_with(children_len, Vec::new);
         for i in 0..self.0.len() {
             let builder = &self.0[i];
-            let required = builder.passthrough_any(typ.clone(), predicates, required[i].borrow());
+            let required_1 = builder.passthrough_any(typ.clone(), predicates, required[i].borrow());
             assert_eq!(
-                required.len(),
+                required_1.len(),
                 children_len,
                 "required properties length mismatch: passthrough {} != children_num {} for property {} and plan node typ {}",
-                required.len(),
+                required_1.len(),
                 children_len,
                 builder.property_name(),
                 typ
             );
-            for (child_idx, child_prop) in required.into_iter().enumerate() {
+            for (child_idx, child_prop) in required_1.into_iter().enumerate() {
                 required_prop[child_idx].push(child_prop);
             }
         }

@@ -65,8 +65,6 @@ pub enum WinnerExpr {
     Propagate {
         /// The group ID of the enforcer.
         group_id: GroupId,
-        /// The required properties of the child. Only a single child.
-        required_child_physical_properties: RequiredPhysicalProperties,
     },
 }
 
@@ -300,10 +298,9 @@ fn get_best_group_binding_inner<M: Memo<T> + ?Sized, T: NodeType>(
             }
             WinnerExpr::Propagate {
                 group_id: child_group_id,
-                required_child_physical_properties,
             } => {
-                let child_subgroup_id =
-                    this.get_subgroup(*child_group_id, required_child_physical_properties.clone());
+                let input: Arc<[_]> = this.get_physical_property_builders().default_many().into();
+                let child_subgroup_id = this.get_subgroup(*child_group_id, input.clone());
                 let child = get_best_group_binding_inner(
                     this,
                     *child_group_id,
@@ -314,7 +311,7 @@ fn get_best_group_binding_inner<M: Memo<T> + ?Sized, T: NodeType>(
                     .get_physical_property_builders()
                     .enforce_many_if_not_satisfied(
                         PlanNodeOrGroup::PlanNode(child),
-                        required_child_physical_properties.clone(),
+                        input,
                         required_phys_prop,
                     );
                 let node = node.unwrap_plan_node();

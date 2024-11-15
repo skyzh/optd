@@ -194,7 +194,7 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for ApplyRuleTask {
                             self.subgroup_id,
                         )) as Box<dyn Task<T, M>>);
                     }
-                    optimizer.unmark_expr_explored(expr_id);
+                    optimizer.unmark_expr_explored(expr_id, self.subgroup_id);
                     trace!(event = "apply_rule", expr_id = %self.expr_id, rule_id = %self.rule_id, new_expr_id = %expr_id);
                 } else {
                     trace!(event = "apply_rule", expr_id = %self.expr_id, rule_id = %self.rule_id, "triggered group merge");

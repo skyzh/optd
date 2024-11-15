@@ -30,7 +30,7 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for ExploreGroupTask {
     fn execute(&self, optimizer: &mut CascadesOptimizer<T, M>) -> Result<Vec<Box<dyn Task<T, M>>>> {
         trace!(event = "task_begin", task = "explore_group", group_id = %self.group_id);
         let mut tasks = vec![];
-        if optimizer.is_group_explored(self.group_id) {
+        if optimizer.is_group_explored(self.group_id, self.subgroup_id) {
             trace!(target: "task_finish", task = "explore_group", result = "already explored, skipping", group_id = %self.group_id);
             return Ok(vec![]);
         }
@@ -45,7 +45,7 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for ExploreGroupTask {
                 );
             }
         }
-        optimizer.mark_group_explored(self.group_id);
+        optimizer.mark_group_explored(self.group_id, self.subgroup_id);
         trace!(
             event = "task_finish",
             task = "explore_group",

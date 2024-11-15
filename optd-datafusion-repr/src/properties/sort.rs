@@ -1,3 +1,4 @@
+use datafusion_expr::Sort;
 use optd_core::{
     nodes::NodeType,
     physical_property::{PhysicalProperty, PhysicalPropertyBuilder},
@@ -24,9 +25,14 @@ impl std::fmt::Display for SortProp {
         if self.0.is_empty() {
             return write!(f, "<any>");
         } else {
-            for (order, col) in &self.0 {
-                write!(f, "{:?}#{} ", order, col)?;
+            write!(f, "[")?;
+            for (idx, (order, col)) in self.0.iter().enumerate() {
+                if idx != 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "{:?}#{}", order, col)?;
             }
+            write!(f, "]")?;
         }
         Ok(())
     }
@@ -77,8 +83,9 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
                 }
                 SortProp(columns)
             }
-            DfNodeType::Filter => children[0].clone(),
+            DfNodeType::PhysicalFilter => children[0].clone(),
             DfNodeType::PhysicalHashJoin(_) => SortProp::any_order(),
+            DfNodeType::PhysicalProjection => SortProp::any_order(),
             _ if typ.is_logical() => unreachable!("logical node should not be called"),
             _ => SortProp::any_order(),
         }
@@ -97,6 +104,8 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
                 vec![SortProp::any_order(), SortProp::any_order()]
             }
             DfNodeType::PhysicalScan => vec![],
+            DfNodeType::PhysicalProjection => vec![SortProp::any_order()],
+            DfNodeType::PhysicalSort => vec![SortProp::any_order()],
             _ if typ.is_logical() => unreachable!("logical node should not be called"),
             node => unimplemented!("passthrough for {:?}", node),
         }
@@ -112,7 +121,7 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
 
     fn search_goal(&self, typ: DfNodeType, predicates: &[ArcDfPredNode]) -> Option<Self::Prop> {
         match typ {
-            DfNodeType::Sort => {
+            DfNodeType::PhysicalSort => {
                 let mut columns = Vec::new();
                 let preds = ListPred::from_pred_node(predicates[0].clone()).unwrap();
                 for pred in preds.to_vec() {

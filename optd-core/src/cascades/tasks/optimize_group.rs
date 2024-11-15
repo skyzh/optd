@@ -47,6 +47,7 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeGroupTask {
                 );
             }
         }
+        // optimize with the required properties
         for &expr in &exprs {
             let typ = optimizer.get_expr_memoed(expr).typ.clone();
             if !typ.is_logical() {
@@ -54,6 +55,22 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeGroupTask {
                     expr,
                     !optimizer.prop.disable_pruning,
                     self.subgroup_id,
+                )) as Box<dyn Task<T, M>>);
+            }
+        }
+        // optimize with default properties
+        let default_props = optimizer
+            .memo()
+            .get_physical_property_builders()
+            .default_many();
+        let default_goal = optimizer.create_or_get_subgroup(self.group_id, default_props.into());
+        for &expr in &exprs {
+            let typ = optimizer.get_expr_memoed(expr).typ.clone();
+            if !typ.is_logical() {
+                tasks.push(Box::new(OptimizeInputsTask::new(
+                    expr,
+                    !optimizer.prop.disable_pruning,
+                    default_goal,
                 )) as Box<dyn Task<T, M>>);
             }
         }

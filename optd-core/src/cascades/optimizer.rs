@@ -48,8 +48,8 @@ pub struct OptimizerProperties {
 pub struct CascadesOptimizer<T: NodeType, M: Memo<T> = NaiveMemo<T>> {
     memo: M,
     pub(super) tasks: VecDeque<Box<dyn Task<T, M>>>,
-    explored_group: HashSet<GroupId>,
-    explored_expr: HashSet<ExprId>,
+    explored_group: HashSet<(GroupId, SubGroupId)>,
+    explored_expr: HashSet<(ExprId, SubGroupId)>,
     fired_rules: HashMap<ExprId, HashSet<RuleId>>,
     rules: Arc<[Arc<dyn Rule<T, Self>>]>,
     disabled_rules: HashSet<usize>,
@@ -210,10 +210,9 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
                                 let expr = self.memo.get_expr_memoed(*expr_id);
                                 (format!("{}", expr_id), format!("{}", expr))
                             }
-                            WinnerExpr::Propagate {
-                                group_id,
-                                required_child_physical_properties: _,
-                            } => (format!("{}", group_id), format!("{}", group_id)),
+                            WinnerExpr::Propagate { group_id } => {
+                                (format!("{}", group_id), format!("{}", group_id))
+                            }
                             WinnerExpr::Enforcer {} => ("enforcer".to_string(), "".to_string()),
                         };
                         format!(
@@ -433,24 +432,24 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
         self.memo.get_pred(pred_id)
     }
 
-    pub(super) fn is_group_explored(&self, group_id: GroupId) -> bool {
-        self.explored_group.contains(&group_id)
+    pub(super) fn is_group_explored(&self, group_id: GroupId, subgroup_id: SubGroupId) -> bool {
+        self.explored_group.contains(&(group_id, subgroup_id))
     }
 
-    pub(super) fn mark_group_explored(&mut self, group_id: GroupId) {
-        self.explored_group.insert(group_id);
+    pub(super) fn mark_group_explored(&mut self, group_id: GroupId, subgroup_id: SubGroupId) {
+        self.explored_group.insert((group_id, subgroup_id));
     }
 
-    pub(super) fn is_expr_explored(&self, expr_id: ExprId) -> bool {
-        self.explored_expr.contains(&expr_id)
+    pub(super) fn is_expr_explored(&self, expr_id: ExprId, subgroup_id: SubGroupId) -> bool {
+        self.explored_expr.contains(&(expr_id, subgroup_id))
     }
 
-    pub(super) fn mark_expr_explored(&mut self, expr_id: ExprId) {
-        self.explored_expr.insert(expr_id);
+    pub(super) fn mark_expr_explored(&mut self, expr_id: ExprId, subgroup_id: SubGroupId) {
+        self.explored_expr.insert((expr_id, subgroup_id));
     }
 
-    pub(super) fn unmark_expr_explored(&mut self, expr_id: ExprId) {
-        self.explored_expr.remove(&expr_id);
+    pub(super) fn unmark_expr_explored(&mut self, expr_id: ExprId, subgroup_id: SubGroupId) {
+        self.explored_expr.remove(&(expr_id, subgroup_id));
     }
 
     pub(super) fn is_rule_fired(&self, group_expr_id: ExprId, rule_id: RuleId) -> bool {

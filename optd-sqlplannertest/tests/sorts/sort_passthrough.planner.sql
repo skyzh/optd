@@ -31,10 +31,7 @@ LogicalSort
 PhysicalSort
 ├── exprs:SortOrder { order: Asc }
 │   └── #0
-└── PhysicalSort
-    ├── exprs:SortOrder { order: Asc }
-    │   └── #0
-    └── PhysicalScan { table: t1 }
+└── PhysicalScan { table: t1 }
 group_id=!2
   subgroup_id=.27 winner=29 weighted_cost=1000 | (PhysicalScan P0)
     cost={compute=0,io=1000}
@@ -68,8 +65,8 @@ group_id=!8
     cost={compute=6908.754779315221,io=1000}
     stat={row_cnt=1000}
     sort=<any>
-  subgroup_id=.32 winner=23 weighted_cost=14817.509558630441 | (PhysicalSort !5 P3)
-    cost={compute=13817.509558630441,io=1000}
+  subgroup_id=.32 winner=!5 weighted_cost=7908.754779315221 | !5
+    cost={compute=6908.754779315221,io=1000}
     stat={row_cnt=1000}
     sort=[Asc#0]
   schema=[t1v1:Int32, t1v2:Int32]
@@ -78,12 +75,12 @@ group_id=!8
   expr_id=23 | (PhysicalSort !5 P3)
   P3=(List (SortOrder(Asc) (ColumnRef 0(u64))))
 group_id=!11
-  subgroup_id=.18 winner=20 weighted_cost=14817.509558630441 | (PhysicalSort !8 P3)
-    cost={compute=13817.509558630441,io=1000}
+  subgroup_id=.18 winner=!8 weighted_cost=7908.754779315221 | !8
+    cost={compute=6908.754779315221,io=1000}
     stat={row_cnt=1000}
     sort=<any>
-  subgroup_id=.33 winner=20 weighted_cost=14817.509558630441 | (PhysicalSort !8 P3)
-    cost={compute=13817.509558630441,io=1000}
+  subgroup_id=.33 winner=!8 weighted_cost=7908.754779315221 | !8
+    cost={compute=6908.754779315221,io=1000}
     stat={row_cnt=1000}
     sort=[Asc#0]
   schema=[t1v1:Int32, t1v2:Int32]
@@ -92,8 +89,8 @@ group_id=!11
   expr_id=20 | (PhysicalSort !8 P3)
   P3=(List (SortOrder(Asc) (ColumnRef 0(u64))))
 group_id=!14
-  subgroup_id=.15 winner=!11 weighted_cost=14817.509558630441 | !11
-    cost={compute=13817.509558630441,io=1000}
+  subgroup_id=.15 winner=!11 weighted_cost=7908.754779315221 | !11
+    cost={compute=6908.754779315221,io=1000}
     stat={row_cnt=1000}
     sort=<any>
   schema=[t1v1:Int32, t1v2:Int32]

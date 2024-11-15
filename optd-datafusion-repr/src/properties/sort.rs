@@ -120,7 +120,12 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
         SortProp::any_order()
     }
 
-    fn search_goal(&self, typ: DfNodeType, predicates: &[ArcDfPredNode]) -> Option<Self::Prop> {
+    fn search_goal(
+        &self,
+        typ: DfNodeType,
+        predicates: &[ArcDfPredNode],
+        required: &Self::Prop,
+    ) -> Option<Self::Prop> {
         match typ {
             DfNodeType::PhysicalSort => {
                 let mut columns = Vec::new();
@@ -130,7 +135,12 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
                     let col_ref = ColumnRefPred::from_pred_node(order.child()).unwrap();
                     columns.push((order.order(), col_ref.index()));
                 }
-                Some(SortProp(columns))
+                let prop = SortProp(columns);
+                if SortProp::satisfies(&prop, required) {
+                    Some(prop)
+                } else {
+                    None
+                }
             }
             _ => None,
         }

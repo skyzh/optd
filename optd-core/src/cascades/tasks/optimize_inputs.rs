@@ -342,14 +342,11 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
                     );
                 }
 
-                // Apply reverse-enforcer rules if possible only when search goal is default
                 let goal = optimizer
                     .memo()
                     .get_subgroup_goal(group_id, self.subgroup_id);
                 let phys_prop_builders = optimizer.memo().get_physical_property_builders();
-                if !return_from_inverse_enforce
-                    && phys_prop_builders.exactly_eq(goal, phys_prop_builders.default_many())
-                {
+                if !return_from_inverse_enforce {
                     let predicates = expr
                         .predicates
                         .iter()
@@ -362,9 +359,11 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
                         .iter()
                         .enumerate()
                     {
-                        if let Some(prop) =
-                            phys_prop_builder.search_goal_any(expr.typ.clone(), &predicates)
-                        {
+                        if let Some(prop) = phys_prop_builder.search_goal_any(
+                            expr.typ.clone(),
+                            &predicates,
+                            goal[idx].as_ref(),
+                        ) {
                             assert_eq!(expr.children.len(), 1);
                             trace!(event = "task_yield", task = "optimize_inputs", expr_id = %self.expr_id, yield_to = "optimize_group_reverse_enforce");
                             let child_group_id = expr.children[0];

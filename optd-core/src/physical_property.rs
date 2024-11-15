@@ -52,6 +52,7 @@ pub trait PhysicalPropertyBuilderAny<T: NodeType>: 'static + Send + Sync {
         &self,
         typ: T,
         predicates: &[ArcPredNode<T>],
+        required_property: &dyn PhysicalProperty,
     ) -> Option<Box<dyn PhysicalProperty>>;
 
     fn default_any(&self) -> Box<dyn PhysicalProperty>;
@@ -106,9 +107,15 @@ pub trait PhysicalPropertyBuilder<T: NodeType>: 'static + Send + Sync + Sized {
     /// Convert a node back to a search goal (only used in Cascades).
     ///
     /// For example, sort <group> <orders> can be converted to a search goal of requiring <orders> over the <group>.
-    fn search_goal(&self, typ: T, predicates: &[ArcPredNode<T>]) -> Option<Self::Prop> {
+    fn search_goal(
+        &self,
+        typ: T,
+        predicates: &[ArcPredNode<T>],
+        required_property: &Self::Prop,
+    ) -> Option<Self::Prop> {
         let _ = typ;
         let _ = predicates;
+        let _ = required_property;
         // The default implementation indicates this physical property cannot be converted back to a search goal.
         None
     }
@@ -195,8 +202,13 @@ impl<T: NodeType, P: PhysicalPropertyBuilder<T>> PhysicalPropertyBuilderAny<T> f
         &self,
         typ: T,
         predicates: &[ArcPredNode<T>],
+        required_property: &dyn PhysicalProperty,
     ) -> Option<Box<dyn PhysicalProperty>> {
-        self.search_goal(typ, predicates)
+        let required_property = required_property
+            .as_any()
+            .downcast_ref::<P::Prop>()
+            .expect("Failed to downcast required property");
+        self.search_goal(typ, predicates, required_property)
             .map(|prop| Box::new(prop) as Box<dyn PhysicalProperty>)
     }
 

@@ -10,4 +10,4 @@
   desc: test self join
   tasks:
     - explain:logical_join_orders,logical_optd,physical_optd
-    - execute[dump_memo_table]
+    - execute

@@ -1,4 +1,5 @@
-use datafusion_expr::Sort;
+use std::borrow::Borrow;
+
 use optd_core::{
     nodes::NodeType,
     physical_property::{PhysicalProperty, PhysicalPropertyBuilder},
@@ -70,7 +71,7 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
         &self,
         typ: DfNodeType,
         predicates: &[ArcDfPredNode],
-        children: &[&Self::Prop],
+        children: &[impl Borrow<Self::Prop>],
     ) -> Self::Prop {
         match typ {
             DfNodeType::PhysicalSort => {
@@ -83,7 +84,7 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
                 }
                 SortProp(columns)
             }
-            DfNodeType::PhysicalFilter => children[0].clone(),
+            DfNodeType::PhysicalFilter => children[0].borrow().clone(),
             DfNodeType::PhysicalHashJoin(_) => SortProp::any_order(),
             DfNodeType::PhysicalProjection => SortProp::any_order(),
             _ if typ.is_logical() => unreachable!("logical node should not be called"),
@@ -94,12 +95,12 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
     fn passthrough(
         &self,
         typ: DfNodeType,
-        predicates: &[ArcDfPredNode],
+        _: &[ArcDfPredNode],
         required: &Self::Prop,
     ) -> Vec<Self::Prop> {
         match typ {
             DfNodeType::PhysicalFilter => vec![required.clone()],
-            DfNodeType::PhysicalAgg | DfNodeType::PhysicalLimit => vec![SortProp::any_order()],
+            DfNodeType::PhysicalHashAgg | DfNodeType::PhysicalLimit => vec![SortProp::any_order()],
             DfNodeType::PhysicalHashJoin(_) | DfNodeType::PhysicalNestedLoopJoin(_) => {
                 vec![SortProp::any_order(), SortProp::any_order()]
             }

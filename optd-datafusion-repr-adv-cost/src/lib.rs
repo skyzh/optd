@@ -165,7 +165,7 @@ impl CostModel<DfNodeType, NaiveMemo<DfNodeType>> for AdvancedCostModel {
                 );
                 DfCostModel::stat(row_cnt)
             }
-            DfNodeType::PhysicalAgg => {
+            DfNodeType::PhysicalHashAgg => {
                 let output_column_ref = optimizer
                     .unwrap()
                     .get_column_ref_of(context.unwrap().group_id.into());

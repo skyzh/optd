@@ -502,14 +502,15 @@ impl<T: NodeType> Memo<T> for NaiveMemo<T> {
             ..
         }) = &winner
         {
-            let WinnerExpr::Expr { expr_id } = expr_id else {
-                unimplemented!()
-            };
-            assert!(
-                *total_weighted_cost != 0.0,
-                "{}",
-                self.expr_id_to_expr_node[expr_id]
-            );
+            if let WinnerExpr::Expr { expr_id } = expr_id {
+                assert!(
+                    *total_weighted_cost != 0.0,
+                    "{}",
+                    self.expr_id_to_expr_node[expr_id]
+                );
+            } else {
+                assert!(*total_weighted_cost != 0.0);
+            }
         }
         group.winners.get_mut(&subgroup_id).unwrap().1 = winner;
     }

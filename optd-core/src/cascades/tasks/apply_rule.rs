@@ -189,6 +189,7 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for ApplyRuleTask {
                         )) as Box<dyn Task<T, M>>);
                     } else {
                         tasks.push(Box::new(OptimizeInputsTask::new(
+                            group_id,
                             expr_id,
                             !optimizer.prop.disable_pruning,
                             self.subgroup_id,

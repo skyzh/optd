@@ -11,9 +11,9 @@ use crate::plan_nodes::{
     DataTypePred, DependentJoin, DfNodeType, DfPredType, DfReprPlanNode, DfReprPredNode,
     ExternColumnRefPred, FuncPred, InListPred, LikePred, ListPred, LogOpPred, LogicalAgg,
     LogicalEmptyRelation, LogicalFilter, LogicalJoin, LogicalLimit, LogicalProjection, LogicalScan,
-    LogicalSort, PhysicalAgg, PhysicalEmptyRelation, PhysicalFilter, PhysicalHashJoin,
+    LogicalSort, PhysicalEmptyRelation, PhysicalFilter, PhysicalHashAgg, PhysicalHashJoin,
     PhysicalLimit, PhysicalNestedLoopJoin, PhysicalProjection, PhysicalScan, PhysicalSort,
-    RawDependentJoin, SortOrderPred, UnOpPred,
+    PhysicalStreamAgg, RawDependentJoin, SortOrderPred, UnOpPred,
 };
 
 pub trait Insertable<'a> {
@@ -102,7 +102,9 @@ pub fn explain_plan_node(
         DfNodeType::PhysicalProjection => PhysicalProjection::from_plan_node(node)
             .unwrap()
             .explain(meta_map),
-        DfNodeType::PhysicalAgg => PhysicalAgg::from_plan_node(node).unwrap().explain(meta_map),
+        DfNodeType::PhysicalHashAgg => PhysicalHashAgg::from_plan_node(node)
+            .unwrap()
+            .explain(meta_map),
         DfNodeType::PhysicalSort => PhysicalSort::from_plan_node(node)
             .unwrap()
             .explain(meta_map),
@@ -116,6 +118,9 @@ pub fn explain_plan_node(
             .unwrap()
             .explain(meta_map),
         DfNodeType::PhysicalNestedLoopJoin(_) => PhysicalNestedLoopJoin::from_plan_node(node)
+            .unwrap()
+            .explain(meta_map),
+        DfNodeType::PhysicalStreamAgg => PhysicalStreamAgg::from_plan_node(node)
             .unwrap()
             .explain(meta_map),
     }

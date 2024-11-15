@@ -23,8 +23,8 @@ use optd_core::nodes::{PlanNodeMetaMap, PlanNodeOrGroup};
 use optd_datafusion_repr::plan_nodes::{
     ArcDfPlanNode, ArcDfPredNode, BetweenPred, BinOpPred, BinOpType, CastPred, ColumnRefPred,
     ConstantPred, ConstantType, DfNodeType, DfPredType, DfReprPlanNode, DfReprPredNode, FuncPred,
-    FuncType, InListPred, JoinType, LikePred, LogOpPred, LogOpType, PhysicalAgg,
-    PhysicalEmptyRelation, PhysicalFilter, PhysicalHashJoin, PhysicalLimit, PhysicalNestedLoopJoin,
+    FuncType, InListPred, JoinType, LikePred, LogOpPred, LogOpType, PhysicalEmptyRelation,
+    PhysicalFilter, PhysicalHashAgg, PhysicalHashJoin, PhysicalLimit, PhysicalNestedLoopJoin,
     PhysicalProjection, PhysicalScan, PhysicalSort, SortOrderPred, SortOrderType,
 };
 use optd_datafusion_repr::properties::schema::Schema as OptdSchema;
@@ -385,7 +385,7 @@ impl OptdPlanContext<'_> {
     #[async_recursion]
     async fn conv_from_optd_agg(
         &mut self,
-        node: PhysicalAgg,
+        node: PhysicalHashAgg,
         meta: &PlanNodeMetaMap,
     ) -> Result<Arc<dyn ExecutionPlan + 'static>> {
         let input_exec = self.conv_from_optd_plan_node(node.child(), meta).await?;
@@ -560,8 +560,8 @@ impl OptdPlanContext<'_> {
                 self.conv_from_optd_sort(PhysicalSort::from_plan_node(rel_node).unwrap(), meta)
                     .await?
             }
-            DfNodeType::PhysicalAgg => {
-                self.conv_from_optd_agg(PhysicalAgg::from_plan_node(rel_node).unwrap(), meta)
+            DfNodeType::PhysicalHashAgg => {
+                self.conv_from_optd_agg(PhysicalHashAgg::from_plan_node(rel_node).unwrap(), meta)
                     .await?
             }
             DfNodeType::PhysicalNestedLoopJoin(_) => {

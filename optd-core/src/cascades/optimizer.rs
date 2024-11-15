@@ -200,6 +200,7 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
 
     pub fn dump(&self, mut buf: impl std::fmt::Write) -> std::fmt::Result {
         for group_id in self.memo.get_all_group_ids() {
+            writeln!(buf, "group_id={}", group_id)?;
             for subgroup_id in self.memo.get_all_subgroup_ids(group_id) {
                 let winner_str = match &self.memo.get_group_winner(group_id, subgroup_id) {
                     Winner::Impossible => "winner=<impossible>".to_string(),
@@ -213,10 +214,12 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
                             WinnerExpr::Propagate { group_id } => {
                                 (format!("{}", group_id), format!("{}", group_id))
                             }
-                            WinnerExpr::Enforcer {} => ("enforcer".to_string(), "".to_string()),
+                            WinnerExpr::Enforcer {} => {
+                                ("enforcer".to_string(), "enforcer".to_string())
+                            }
                         };
                         format!(
-                            "winner={} weighted_cost={} | {}\n  cost={}\n  stat={}",
+                            "winner={} weighted_cost={} | {}\n    cost={}\n    stat={}",
                             winner_expr,
                             winner.total_weighted_cost,
                             winner_str,
@@ -225,11 +228,7 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
                         )
                     }
                 };
-                writeln!(
-                    buf,
-                    "group_id={} subgroup_id={} {}",
-                    group_id, subgroup_id, winner_str
-                )?;
+                writeln!(buf, "  subgroup_id={} {}", subgroup_id, winner_str)?;
                 let goal = self.memo.get_subgroup_goal(group_id, subgroup_id);
                 for (id, property) in self
                     .memo
@@ -238,28 +237,28 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
                     .iter()
                     .enumerate()
                 {
-                    writeln!(buf, "  {}={}", property.property_name(), goal[id])?;
+                    writeln!(buf, "    {}={}", property.property_name(), goal[id])?;
                 }
-                let group = self.memo.get_group(group_id);
-                for (id, property) in self.logical_property_builders.iter().enumerate() {
-                    writeln!(
-                        buf,
-                        "  {}={}",
-                        property.property_name(),
-                        group.logical_properties[id]
-                    )?;
+            }
+            let group = self.memo.get_group(group_id);
+            for (id, property) in self.logical_property_builders.iter().enumerate() {
+                writeln!(
+                    buf,
+                    "  {}={}",
+                    property.property_name(),
+                    group.logical_properties[id]
+                )?;
+            }
+            let mut all_predicates = BTreeSet::new();
+            for expr_id in self.memo.get_all_exprs_in_group(group_id) {
+                let memo_node = self.memo.get_expr_memoed(expr_id);
+                for pred in &memo_node.predicates {
+                    all_predicates.insert(*pred);
                 }
-                let mut all_predicates = BTreeSet::new();
-                for expr_id in self.memo.get_all_exprs_in_group(group_id) {
-                    let memo_node = self.memo.get_expr_memoed(expr_id);
-                    for pred in &memo_node.predicates {
-                        all_predicates.insert(*pred);
-                    }
-                    writeln!(buf, "  expr_id={} | {}", expr_id, memo_node)?;
-                }
-                for pred in all_predicates {
-                    writeln!(buf, "  {}={}", pred, self.memo.get_pred(pred))?;
-                }
+                writeln!(buf, "  expr_id={} | {}", expr_id, memo_node)?;
+            }
+            for pred in all_predicates {
+                writeln!(buf, "  {}={}", pred, self.memo.get_pred(pred))?;
             }
         }
         Ok(())

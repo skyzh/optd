@@ -4,12 +4,13 @@
 // https://opensource.org/licenses/MIT.
 
 use anyhow::Result;
+use itertools::Itertools;
 use tracing::trace;
 
 use super::Task;
 use crate::cascades::optimizer::GroupId;
 use crate::cascades::tasks::optimize_expression::OptimizeExpressionTask;
-use crate::cascades::tasks::OptimizeInputsTask;
+use crate::cascades::tasks::{OptimizeInputFinalizeTask, OptimizeInputsTask};
 use crate::cascades::{CascadesOptimizer, Memo, SubGroupId};
 use crate::nodes::NodeType;
 
@@ -37,6 +38,12 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeGroupTask {
         }
         let exprs = optimizer.get_all_exprs_in_group(self.group_id);
         let mut tasks = vec![];
+
+        tasks.push(Box::new(OptimizeInputFinalizeTask::new(
+            self.group_id,
+            self.subgroup_id,
+        )) as Box<dyn Task<T, M>>);
+
         let exprs_cnt = exprs.len();
         for &expr in &exprs {
             let typ = optimizer.get_expr_memoed(expr).typ.clone();
@@ -47,15 +54,30 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeGroupTask {
                 );
             }
         }
-        // optimize with the required properties
-        for &expr in &exprs {
-            let typ = optimizer.get_expr_memoed(expr).typ.clone();
-            if !typ.is_logical() {
-                tasks.push(Box::new(OptimizeInputsTask::new(
-                    expr,
-                    !optimizer.prop.disable_pruning,
-                    self.subgroup_id,
-                )) as Box<dyn Task<T, M>>);
+        let goal = optimizer
+            .memo()
+            .get_subgroup_goal(self.group_id, self.subgroup_id);
+        // optimize with the required properties, only do optimize_input for those nodes that can pass through
+        for &expr_id in &exprs {
+            let expr = optimizer.get_expr_memoed(expr_id);
+            if !expr.typ.is_logical() {
+                let predicates = expr
+                    .predicates
+                    .iter()
+                    .map(|pred_id| optimizer.get_pred(*pred_id))
+                    .collect_vec();
+                if optimizer
+                    .memo()
+                    .get_physical_property_builders()
+                    .can_passthrough_any_many(expr.typ.clone(), &predicates, &goal)
+                {
+                    tasks.push(Box::new(OptimizeInputsTask::new(
+                        self.group_id,
+                        expr_id,
+                        !optimizer.prop.disable_pruning,
+                        self.subgroup_id,
+                    )) as Box<dyn Task<T, M>>);
+                }
             }
         }
         // optimize with default properties
@@ -68,6 +90,7 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeGroupTask {
             let typ = optimizer.get_expr_memoed(expr).typ.clone();
             if !typ.is_logical() {
                 tasks.push(Box::new(OptimizeInputsTask::new(
+                    self.group_id,
                     expr,
                     !optimizer.prop.disable_pruning,
                     default_goal,

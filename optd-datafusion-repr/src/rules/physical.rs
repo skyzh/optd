@@ -103,7 +103,7 @@ impl<O: Optimizer<DfNodeType>> Rule<DfNodeType, O> for PhysicalConversionRule {
             }
             DfNodeType::Agg => {
                 let node = PlanNode {
-                    typ: DfNodeType::PhysicalAgg,
+                    typ: DfNodeType::PhysicalHashAgg,
                     children,
                     predicates,
                 };

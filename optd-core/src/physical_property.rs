@@ -37,6 +37,13 @@ pub trait PhysicalPropertyBuilderAny<T: NodeType>: 'static + Send + Sync {
         required_property: &dyn PhysicalProperty,
     ) -> Vec<Box<dyn PhysicalProperty>>;
 
+    fn can_passthrough_any(
+        &self,
+        typ: T,
+        predicates: &[ArcPredNode<T>],
+        required_property: &dyn PhysicalProperty,
+    ) -> bool;
+
     fn satisfies_any(&self, prop: &dyn PhysicalProperty, required: &dyn PhysicalProperty) -> bool;
 
     fn enforce_any(&self, prop: &dyn PhysicalProperty) -> (T, Vec<ArcPredNode<T>>);
@@ -59,8 +66,12 @@ pub trait PhysicalPropertyBuilder<T: NodeType>: 'static + Send + Sync + Sized {
     type Prop: PhysicalProperty + Clone + Sized + PartialEq + Eq;
 
     /// Derive the output physical property based on the input physical properties and the current plan node information.
-    fn derive(&self, typ: T, predicates: &[ArcPredNode<T>], children: &[&Self::Prop])
-        -> Self::Prop;
+    fn derive(
+        &self,
+        typ: T,
+        predicates: &[ArcPredNode<T>],
+        children: &[impl Borrow<Self::Prop>],
+    ) -> Self::Prop;
 
     /// Passsthrough the `required` properties to the children if possible. Returns the derived properties for each child.
     /// If nothing can be passthroughed, simply return the default properties for each child.
@@ -70,6 +81,21 @@ pub trait PhysicalPropertyBuilder<T: NodeType>: 'static + Send + Sync + Sized {
         predicates: &[ArcPredNode<T>],
         required: &Self::Prop,
     ) -> Vec<Self::Prop>;
+
+    /// Check if the input physical property can always be passed through to the output physical property. This is done
+    /// by check if `satisfies(derive(passthrough(input)), input)`. The implementor can override this function to provide
+    /// a more efficient implementation. If the plan node always satisfies a property (i.e., sort always satisfies sort
+    /// property), then this function should also return true.
+    fn can_passthrough(
+        &self,
+        typ: T,
+        predicates: &[ArcPredNode<T>],
+        required: &Self::Prop,
+    ) -> bool {
+        let inputs = self.passthrough(typ.clone(), predicates, required);
+        let derived = self.derive(typ, predicates, &inputs);
+        self.satisfies(&derived, required)
+    }
 
     /// Check if the input physical property satisfies the required output physical property.
     fn satisfies(&self, prop: &Self::Prop, required: &Self::Prop) -> bool;
@@ -130,6 +156,19 @@ impl<T: NodeType, P: PhysicalPropertyBuilder<T>> PhysicalPropertyBuilderAny<T> f
             .into_iter()
             .map(|prop| Box::new(prop) as Box<dyn PhysicalProperty>)
             .collect()
+    }
+
+    fn can_passthrough_any(
+        &self,
+        typ: T,
+        predicates: &[ArcPredNode<T>],
+        required_property: &dyn PhysicalProperty,
+    ) -> bool {
+        let required = required_property
+            .as_any()
+            .downcast_ref::<P::Prop>()
+            .expect("Failed to downcast required property");
+        self.can_passthrough(typ, predicates, required)
     }
 
     fn satisfies_any(&self, prop: &dyn PhysicalProperty, required: &dyn PhysicalProperty) -> bool {
@@ -281,6 +320,27 @@ impl<T: NodeType> PhysicalPropertyBuilders<T> {
             }
         }
         required_prop
+    }
+
+    pub fn can_passthrough_any_many<X, Y>(
+        &self,
+        typ: T,
+        predicates: &[ArcPredNode<T>],
+        required: Y,
+    ) -> bool
+    where
+        X: Borrow<dyn PhysicalProperty>,
+        Y: AsRef<[X]>,
+    {
+        let required = required.as_ref();
+        assert_eq!(self.0.len(), required.len());
+        for i in 0..self.0.len() {
+            let builder = &self.0[i];
+            if !builder.can_passthrough_any(typ.clone(), predicates, required[i].borrow()) {
+                return false;
+            }
+        }
+        true
     }
 
     pub fn default_many(&self) -> PhysicalPropertySet {

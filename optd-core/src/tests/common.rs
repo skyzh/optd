@@ -3,7 +3,7 @@
 // Use of this source code is governed by an MIT-style license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-use std::sync::Arc;
+use std::{borrow::Borrow, sync::Arc};
 
 use itertools::Itertools;
 
@@ -281,7 +281,7 @@ impl LogicalPropertyBuilder<MemoTestRelTyp> for TestPropertyBuilder {
 
 pub struct SortPropertyBuilder;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SortProp(pub Vec<String>);
 
 impl std::fmt::Display for SortProp {
@@ -305,18 +305,18 @@ impl PhysicalPropertyBuilder<MemoTestRelTyp> for SortPropertyBuilder {
         &self,
         typ: MemoTestRelTyp,
         predicates: &[ArcPredNode<MemoTestRelTyp>],
-        children: &[&Self::Prop],
+        children: &[impl Borrow<Self::Prop>],
     ) -> Self::Prop {
         match typ {
             // the node doesn't have any sort properties
             MemoTestRelTyp::PhysicalHashAgg => SortProp(vec![]),
             MemoTestRelTyp::PhysicalScan => SortProp(vec![]),
             // passthrough child sort properties
-            MemoTestRelTyp::PhysicalPartition => children[0].clone(),
-            MemoTestRelTyp::PhysicalNestedLoopJoin => children[0].clone(),
-            MemoTestRelTyp::PhysicalProject => children[0].clone(),
-            MemoTestRelTyp::PhysicalFilter => children[0].clone(),
-            MemoTestRelTyp::PhysicalStreamingAgg => children[0].clone(),
+            MemoTestRelTyp::PhysicalPartition => children[0].borrow().clone(),
+            MemoTestRelTyp::PhysicalNestedLoopJoin => children[0].borrow().clone(),
+            MemoTestRelTyp::PhysicalProject => children[0].borrow().clone(),
+            MemoTestRelTyp::PhysicalFilter => children[0].borrow().clone(),
+            MemoTestRelTyp::PhysicalStreamingAgg => children[0].borrow().clone(),
             // assume sort node doesn't ensure stable sort, the derived sort property is simply the predicates
             MemoTestRelTyp::PhysicalSort => {
                 let columns = predicates[0]

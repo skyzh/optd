@@ -119,7 +119,9 @@ impl CostModel<DfNodeType, NaiveMemo<DfNodeType>> for DfCostModel {
                 let row_cnt_2 = Self::row_cnt(children[1]);
                 Self::stat(row_cnt_1.min(row_cnt_2).max(1.0))
             }
-            DfNodeType::PhysicalSort | DfNodeType::PhysicalAgg | DfNodeType::PhysicalProjection => {
+            DfNodeType::PhysicalSort
+            | DfNodeType::PhysicalHashAgg
+            | DfNodeType::PhysicalProjection => {
                 let row_cnt = Self::row_cnt(children[0]);
                 Self::stat(row_cnt)
             }
@@ -174,7 +176,7 @@ impl CostModel<DfNodeType, NaiveMemo<DfNodeType>> for DfCostModel {
                 let row_cnt = row_cnts[0];
                 Self::cost(row_cnt * row_cnt.ln_1p().max(1.0), 0.0)
             }
-            DfNodeType::PhysicalAgg => {
+            DfNodeType::PhysicalHashAgg => {
                 let row_cnt = row_cnts[0];
                 let (compute_cost_1, _) = Self::cost_tuple(&derive_pred_cost(&predicates[0]));
                 let (compute_cost_2, _) = Self::cost_tuple(&derive_pred_cost(&predicates[1]));

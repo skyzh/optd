@@ -5,5 +5,6 @@
 
 pub mod column_ref;
 pub mod schema;
+pub mod sort;
 
 const DEFAULT_NAME: &str = "unnamed";

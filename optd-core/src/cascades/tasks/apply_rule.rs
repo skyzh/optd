@@ -13,7 +13,7 @@ use super::Task;
 use crate::cascades::memo::ArcMemoPlanNode;
 use crate::cascades::optimizer::{CascadesOptimizer, ExprId, RuleId};
 use crate::cascades::tasks::{OptimizeExpressionTask, OptimizeInputsTask};
-use crate::cascades::{GroupId, Memo};
+use crate::cascades::{GroupId, Memo, SubGroupId};
 use crate::nodes::{ArcPlanNode, NodeType, PlanNode, PlanNodeOrGroup};
 use crate::rules::RuleMatcher;
 
@@ -21,14 +21,16 @@ pub struct ApplyRuleTask {
     rule_id: RuleId,
     expr_id: ExprId,
     exploring: bool,
+    subgroup_id: SubGroupId,
 }
 
 impl ApplyRuleTask {
-    pub fn new(rule_id: RuleId, expr_id: ExprId, exploring: bool) -> Self {
+    pub fn new(rule_id: RuleId, expr_id: ExprId, subgroup_id: SubGroupId, exploring: bool) -> Self {
         Self {
             rule_id,
             expr_id,
             exploring,
+            subgroup_id,
         }
     }
 }
@@ -180,17 +182,20 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for ApplyRuleTask {
                 if let Some(expr_id) = optimizer.add_expr_to_group(expr.clone(), group_id) {
                     let typ = expr.unwrap_typ();
                     if typ.is_logical() {
-                        tasks.push(
-                            Box::new(OptimizeExpressionTask::new(expr_id, self.exploring))
-                                as Box<dyn Task<T, M>>,
-                        );
+                        tasks.push(Box::new(OptimizeExpressionTask::new(
+                            expr_id,
+                            self.subgroup_id,
+                            self.exploring,
+                        )) as Box<dyn Task<T, M>>);
                     } else {
                         tasks.push(Box::new(OptimizeInputsTask::new(
+                            group_id,
                             expr_id,
                             !optimizer.prop.disable_pruning,
+                            self.subgroup_id,
                         )) as Box<dyn Task<T, M>>);
                     }
-                    optimizer.unmark_expr_explored(expr_id);
+                    optimizer.unmark_expr_explored(expr_id, self.subgroup_id);
                     trace!(event = "apply_rule", expr_id = %self.expr_id, rule_id = %self.rule_id, new_expr_id = %expr_id);
                 } else {
                     trace!(event = "apply_rule", expr_id = %self.expr_id, rule_id = %self.rule_id, "triggered group merge");

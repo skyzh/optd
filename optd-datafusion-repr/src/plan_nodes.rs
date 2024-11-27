@@ -19,7 +19,7 @@ mod subquery;
 
 use std::fmt::Debug;
 
-pub use agg::{LogicalAgg, PhysicalAgg};
+pub use agg::{LogicalAgg, PhysicalHashAgg, PhysicalStreamAgg};
 use arrow_schema::DataType;
 pub use empty_relation::{
     decode_empty_relation_schema, LogicalEmptyRelation, PhysicalEmptyRelation,
@@ -88,7 +88,8 @@ pub enum DfNodeType {
     PhysicalFilter,
     PhysicalScan,
     PhysicalSort,
-    PhysicalAgg,
+    PhysicalHashAgg,
+    PhysicalStreamAgg,
     PhysicalHashJoin(JoinType),
     PhysicalNestedLoopJoin(JoinType),
     PhysicalEmptyRelation,

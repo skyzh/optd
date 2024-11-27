@@ -21,11 +21,25 @@ define_plan_node!(
 );
 
 #[derive(Clone, Debug)]
-pub struct PhysicalAgg(pub ArcDfPlanNode);
+pub struct PhysicalHashAgg(pub ArcDfPlanNode);
 
 define_plan_node!(
-    PhysicalAgg : DfPlanNode,
-    PhysicalAgg, [
+    PhysicalHashAgg : DfPlanNode,
+    PhysicalHashAgg, [
+        { 0, child: ArcDfPlanNode }
+    ], [
+        { 0, aggrs: ListPred },
+        { 1, groups: ListPred }
+    ]
+);
+
+/// Requires input to be sorted
+#[derive(Clone, Debug)]
+pub struct PhysicalStreamAgg(pub ArcDfPlanNode);
+
+define_plan_node!(
+    PhysicalStreamAgg : DfPlanNode,
+    PhysicalStreamAgg, [
         { 0, child: ArcDfPlanNode }
     ], [
         { 0, aggrs: ListPred },

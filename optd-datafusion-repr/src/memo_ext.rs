@@ -124,6 +124,7 @@ impl<M: Memo<DfNodeType>> MemoExt for M {
 mod tests {
     use optd_core::cascades::NaiveMemo;
     use optd_core::nodes::{PlanNodeOrGroup, Value};
+    use optd_core::physical_property::PhysicalPropertyBuilders;
 
     use super::*;
     use crate::plan_nodes::{
@@ -133,7 +134,10 @@ mod tests {
 
     #[test]
     fn enumerate_join_orders() {
-        let mut memo = NaiveMemo::<DfNodeType>::new(Arc::new([]));
+        let mut memo = NaiveMemo::<DfNodeType>::new(
+            Arc::new([]),
+            PhysicalPropertyBuilders::new_empty_for_test(),
+        );
         let (group, _) = memo.add_new_expr(
             LogicalJoin::new(
                 LogicalScan::new("t1".to_string()).into_plan_node(),

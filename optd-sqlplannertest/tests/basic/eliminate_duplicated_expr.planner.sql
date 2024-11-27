@@ -59,7 +59,7 @@ select * from t1 group by v1, v2, v1;
 LogicalProjection { exprs: [ #0, #1 ] }
 └── LogicalAgg { exprs: [], groups: [ #0, #1, #0 ] }
     └── LogicalScan { table: t1 }
-PhysicalAgg { aggrs: [], groups: [ #0, #1 ] }
+PhysicalHashAgg { aggrs: [], groups: [ #0, #1 ] }
 └── PhysicalScan { table: t1 }
 0 0
 1 1
@@ -93,7 +93,7 @@ PhysicalSort
 │   │   └── #0
 │   └── SortOrder { order: Asc }
 │       └── #1
-└── PhysicalAgg { aggrs: [], groups: [ #0, #1 ] }
+└── PhysicalHashAgg { aggrs: [], groups: [ #0, #1 ] }
     └── PhysicalScan { table: t1 }
 0 0
 0 2

@@ -18,11 +18,13 @@ use optd_core::logical_property::LogicalPropertyBuilderAny;
 use optd_core::nodes::PlanNodeMetaMap;
 pub use optd_core::nodes::Value;
 use optd_core::optimizer::Optimizer;
+use optd_core::physical_property::PhysicalPropertyBuilderAny;
 use optd_core::rules::Rule;
 pub use optimizer_ext::OptimizerExt;
 use plan_nodes::{ArcDfPlanNode, DfNodeType};
 use properties::column_ref::ColumnRefPropertyBuilder;
 use properties::schema::{Catalog, SchemaPropertyBuilder};
+use properties::sort::{SortProp, SortPropertyBuilder};
 
 pub mod cost;
 mod explain;
@@ -134,19 +136,20 @@ impl DatafusionOptimizer {
     ) -> Self {
         let cascades_rules = Self::default_cascades_rules();
         let heuristic_rules = Self::default_heuristic_rules();
-        let property_builders: Arc<[Box<dyn LogicalPropertyBuilderAny<DfNodeType>>]> = Arc::new([
-            Box::new(SchemaPropertyBuilder::new(catalog.clone())),
-            Box::new(ColumnRefPropertyBuilder::new(catalog.clone())),
-        ]);
+        let logical_property_builders: Arc<[Box<dyn LogicalPropertyBuilderAny<DfNodeType>>]> =
+            Arc::new([
+                Box::new(SchemaPropertyBuilder::new(catalog.clone())),
+                Box::new(ColumnRefPropertyBuilder::new(catalog.clone())),
+            ]);
+        let physical_property_builders: Arc<[Box<dyn PhysicalPropertyBuilderAny<DfNodeType>>]> =
+            Arc::new([Box::new(SortPropertyBuilder::new())]);
         Self {
             runtime_statistics: runtime_map,
-            cascades_optimizer: CascadesOptimizer::new_with_prop(
+            cascades_optimizer: CascadesOptimizer::new_with_options(
                 cascades_rules,
                 Box::new(cost_model),
-                vec![
-                    Box::new(SchemaPropertyBuilder::new(catalog.clone())),
-                    Box::new(ColumnRefPropertyBuilder::new(catalog.clone())),
-                ],
+                logical_property_builders.clone(),
+                physical_property_builders,
                 OptimizerProperties {
                     panic_on_budget: false,
                     partial_explore_iter: Some(1 << 20),
@@ -160,8 +163,8 @@ impl DatafusionOptimizer {
                     apply_order: ApplyOrder::TopDown, // uhh TODO reconsider
                     enable_physical_prop_passthrough: true,
                 },
-                property_builders.clone(),
-                Arc::new([]),
+                logical_property_builders,
+                Arc::new([]), // We don't enforce physical properties in heuristics
             ),
             enable_adaptive,
             enable_heuristic: true,
@@ -181,15 +184,19 @@ impl DatafusionOptimizer {
         rule_wrappers.insert(2, Arc::new(rules::ProjectionPullUpJoin::new()));
         rule_wrappers.insert(3, Arc::new(rules::EliminateFilterRule::new()));
 
+        let logical_property_builders: Arc<[Box<dyn LogicalPropertyBuilderAny<DfNodeType>>]> =
+            Arc::new([
+                Box::new(SchemaPropertyBuilder::new(catalog.clone())),
+                Box::new(ColumnRefPropertyBuilder::new(catalog.clone())),
+            ]);
+
         let cost_model = AdaptiveCostModel::new(1000);
         let runtime_statistics = cost_model.get_runtime_map();
         let optimizer = CascadesOptimizer::new(
             rule_wrappers,
             Box::new(cost_model),
-            vec![
-                Box::new(SchemaPropertyBuilder::new(catalog.clone())),
-                Box::new(ColumnRefPropertyBuilder::new(catalog)),
-            ],
+            logical_property_builders.clone(),
+            Arc::new([]),
         );
         Self {
             runtime_statistics,
@@ -202,7 +209,7 @@ impl DatafusionOptimizer {
                     apply_order: ApplyOrder::BottomUp,
                     enable_physical_prop_passthrough: true,
                 },
-                Arc::new([]),
+                logical_property_builders,
                 Arc::new([]),
             ),
         }
@@ -225,12 +232,14 @@ impl DatafusionOptimizer {
             self.cascades_optimizer.step_clear();
         }
 
-        let group_id = self.cascades_optimizer.step_optimize_rel(root_rel)?;
+        let (group_id, subgroup_id) = self
+            .cascades_optimizer
+            .step_optimize_rel(root_rel, &[&SortProp::any_order()])?;
 
         let mut meta = Some(HashMap::new());
-        let optimized_rel = self
-            .cascades_optimizer
-            .step_get_optimize_rel(group_id, &mut meta)?;
+        let optimized_rel =
+            self.cascades_optimizer
+                .step_get_optimize_rel(group_id, subgroup_id, &mut meta)?;
 
         Ok((group_id, optimized_rel, meta.unwrap()))
     }

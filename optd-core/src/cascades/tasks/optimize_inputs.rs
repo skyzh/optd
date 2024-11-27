@@ -118,12 +118,12 @@ impl OptimizeInputsTask {
                     .iter()
                     .map(|x| x.expect("child winner should always have statistics?"))
                     .collect::<Vec<_>>(),
-                Some(RelNodeContext {
+                RelNodeContext {
                     group_id,
                     expr_id: self.expr_id,
                     children_group_ids: expr.children.clone(),
-                }),
-                Some(optimizer),
+                },
+                optimizer,
             );
             optimizer.update_group_winner(
                 group_id,
@@ -241,8 +241,8 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeInputsTask {
                 &expr.typ,
                 &preds,
                 &input_statistics_ref,
-                Some(context.clone()),
-                Some(optimizer),
+                context.clone(),
+                optimizer,
             );
             let total_cost = cost.sum(&operation_cost, &input_cost);
 

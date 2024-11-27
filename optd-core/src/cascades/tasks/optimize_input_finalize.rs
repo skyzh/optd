@@ -10,7 +10,7 @@ use tracing::trace;
 
 use super::Task;
 use crate::cascades::memo::{Winner, WinnerExpr, WinnerInfo};
-use crate::cascades::{CascadesOptimizer, GroupId, Memo, SubGroupId};
+use crate::cascades::{CascadesOptimizer, ExprId, GroupId, Memo, RelNodeContext, SubGroupId};
 use crate::cost::{Cost, Statistics};
 use crate::nodes::NodeType;
 
@@ -67,7 +67,7 @@ impl OptimizeInputFinalizeTask {
                     operation_weighted_cost,
                     total_cost,
                     operation_cost,
-                    statistics: statistics.into(),
+                    statistics,
                 }),
             );
         }
@@ -107,8 +107,12 @@ impl<T: NodeType, M: Memo<T>> Task<T, M> for OptimizeInputFinalizeTask {
                         &typ,
                         &predicates,
                         &[Some(&statistics)],
-                        None, // enforcers are not part of the memo table, and therefore there's no context
-                        Some(optimizer),
+                        RelNodeContext {
+                            group_id: self.group_id,
+                            expr_id: ExprId(0),
+                            children_group_ids: vec![],
+                        },
+                        optimizer,
                     );
                     cost.accumulate(&mut operation_cost, &op_cost);
                     cost.accumulate(&mut total_cost, &op_cost);

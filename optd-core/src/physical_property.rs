@@ -315,6 +315,7 @@ impl<T: NodeType> PhysicalPropertyBuilders<T> {
         assert_eq!(self.0.len(), required.len());
         let mut required_prop = Vec::with_capacity(children_len);
         required_prop.resize_with(children_len, Vec::new);
+        #[allow(clippy::needless_range_loop)]
         for i in 0..self.0.len() {
             let builder = &self.0[i];
             let required_1 = builder.passthrough_any(typ.clone(), predicates, required[i].borrow());
@@ -346,6 +347,7 @@ impl<T: NodeType> PhysicalPropertyBuilders<T> {
     {
         let required = required.as_ref();
         assert_eq!(self.0.len(), required.len());
+        #[allow(clippy::needless_range_loop)]
         for i in 0..self.0.len() {
             let builder = &self.0[i];
             if !builder.can_passthrough_any(typ.clone(), predicates, required[i].borrow()) {

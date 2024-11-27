@@ -170,7 +170,7 @@ impl OptimizeInputsTask {
                     operation_weighted_cost,
                     total_cost,
                     operation_cost,
-                    statistics: statistics.into(),
+                    statistics,
                 }),
             );
         }

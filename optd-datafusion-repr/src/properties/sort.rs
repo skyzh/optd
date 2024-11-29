@@ -121,7 +121,7 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
                     // pass it through b/c this node is a no-op (is this correct...?)
                     vec![this_prop]
                 } else {
-                    vec![]
+                    vec![SortProp::any_order()]
                 }
             }
             _ if typ.is_logical() => unreachable!("logical node should not be called"),

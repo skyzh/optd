@@ -7,10 +7,10 @@
 
 mod memo;
 mod optimizer;
-mod tasks;
+pub(super) mod rule_match;
+mod tasks2;
 
 pub use memo::{Memo, NaiveMemo};
 pub use optimizer::{
-    CascadesOptimizer, ExprId, GroupId, OptimizerProperties, RelNodeContext, SubGroupId,
+    CascadesOptimizer, ExprId, GroupId, OptimizerProperties, RelNodeContext, SubGoalId,
 };
-use tasks::Task;

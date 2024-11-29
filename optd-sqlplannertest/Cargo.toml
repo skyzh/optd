@@ -25,6 +25,8 @@ datafusion = { version = "32.0.0", features = [
     "unicode_expressions",
     "compression",
 ] }
+backtrace-on-stack-overflow = "0.3"
+
 env_logger = "0.9"
 mimalloc = { version = "0.1", default-features = false }
 regex = "1.8"

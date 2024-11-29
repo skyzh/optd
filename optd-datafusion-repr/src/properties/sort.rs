@@ -18,7 +18,7 @@ impl SortPropertyBuilder {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SortProp(pub Vec<(SortOrderType, usize)>);
 
 impl std::fmt::Display for SortProp {

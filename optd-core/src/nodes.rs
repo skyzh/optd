@@ -16,7 +16,7 @@ use chrono::NaiveDate;
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::cascades::{GroupId, SubGroupId};
+use crate::cascades::{GroupId, SubGoalId};
 use crate::cost::{Cost, Statistics};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -366,7 +366,7 @@ pub struct PlanNodeMeta {
     /// The group (id) of the `RelNode`
     pub group_id: GroupId,
     /// The subgroup (id) of the `RelNode`
-    pub subgroup_id: SubGroupId,
+    pub subgoal_id: SubGoalId,
     /// Weighted cost of the `RelNode`
     pub weighted_cost: f64,
     /// Cost of the `RelNode`
@@ -384,7 +384,7 @@ pub struct PlanNodeMeta {
 impl PlanNodeMeta {
     pub fn new(
         group_id: GroupId,
-        subgroup_id: SubGroupId,
+        subgoal_id: SubGoalId,
         weighted_cost: f64,
         cost: Cost,
         stat: Arc<Statistics>,
@@ -393,7 +393,7 @@ impl PlanNodeMeta {
     ) -> Self {
         Self {
             group_id,
-            subgroup_id,
+            subgoal_id,
             weighted_cost,
             cost,
             stat,

@@ -25,6 +25,7 @@ struct Cli {
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
+    unsafe { backtrace_on_stack_overflow::enable() };
 
     let cli = Cli::parse();
 

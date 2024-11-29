@@ -3,8 +3,10 @@
 // Use of this source code is governed by an MIT-style license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt::Display;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -12,9 +14,9 @@ use itertools::Itertools;
 use tracing::trace;
 
 use super::memo::{ArcMemoPlanNode, Memo, RequiredPhysicalProperties};
-use super::tasks::OptimizeGroupTask;
-use super::{NaiveMemo, Task};
+use super::NaiveMemo;
 use crate::cascades::memo::{Winner, WinnerExpr};
+use crate::cascades::tasks2::{TaskContext, TaskDesc};
 use crate::cost::CostModel;
 use crate::logical_property::{LogicalPropertyBuilder, LogicalPropertyBuilderAny};
 use crate::nodes::{
@@ -47,9 +49,8 @@ pub struct OptimizerProperties {
 
 pub struct CascadesOptimizer<T: NodeType, M: Memo<T> = NaiveMemo<T>> {
     memo: M,
-    pub(super) tasks: VecDeque<Box<dyn Task<T, M>>>,
-    explored_group: HashSet<(GroupId, SubGroupId)>,
-    explored_expr: HashSet<(ExprId, SubGroupId)>,
+    explored_group: HashSet<(GroupId, SubGoalId)>,
+    explored_expr: HashSet<TaskDesc>,
     fired_rules: HashMap<ExprId, HashSet<RuleId>>,
     rules: Arc<[Arc<dyn Rule<T, Self>>]>,
     disabled_rules: HashSet<usize>,
@@ -74,7 +75,7 @@ pub struct RelNodeContext {
 pub struct GroupId(pub(super) usize);
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default, Hash)]
-pub struct SubGroupId(pub(super) usize);
+pub struct SubGoalId(pub(super) usize);
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Default, Hash)]
 pub struct ExprId(pub usize);
@@ -88,7 +89,7 @@ impl Display for GroupId {
     }
 }
 
-impl Display for SubGroupId {
+impl Display for SubGoalId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, ".{}", self.0)
     }
@@ -129,7 +130,6 @@ impl<T: NodeType> CascadesOptimizer<T, NaiveMemo<T>> {
         physical_property_builders: Arc<[Box<dyn PhysicalPropertyBuilderAny<T>>]>,
         prop: OptimizerProperties,
     ) -> Self {
-        let tasks = VecDeque::new();
         let physical_property_builders = PhysicalPropertyBuilders(physical_property_builders);
         let memo = NaiveMemo::new(
             logical_property_builders.clone(),
@@ -137,7 +137,6 @@ impl<T: NodeType> CascadesOptimizer<T, NaiveMemo<T>> {
         );
         Self {
             memo,
-            tasks,
             explored_group: HashSet::new(),
             explored_expr: HashSet::new(),
             fired_rules: HashMap::new(),
@@ -201,8 +200,8 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
     pub fn dump(&self, mut buf: impl std::fmt::Write) -> std::fmt::Result {
         for group_id in self.memo.get_all_group_ids() {
             writeln!(buf, "group_id={}", group_id)?;
-            for subgroup_id in self.memo.get_all_subgroup_ids(group_id) {
-                let winner_str = match &self.memo.get_group_winner(group_id, subgroup_id) {
+            for subgoal_id in self.memo.get_all_subgoal_ids(group_id) {
+                let winner_str = match &self.memo.get_group_winner(group_id, subgoal_id) {
                     Winner::Impossible => "winner=<impossible>".to_string(),
                     Winner::Unknown => "winner=<unknown>".to_string(),
                     Winner::Full(winner) => {
@@ -228,8 +227,8 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
                         )
                     }
                 };
-                writeln!(buf, "  subgroup_id={} {}", subgroup_id, winner_str)?;
-                let goal = self.memo.get_subgroup_goal(group_id, subgroup_id);
+                writeln!(buf, "  subgoal_id={} {}", subgoal_id, winner_str)?;
+                let goal = self.memo.get_subgroup_goal(group_id, subgoal_id);
                 for (id, property) in self
                     .memo
                     .get_physical_property_builders()
@@ -269,32 +268,33 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
         &mut self,
         root_rel: ArcPlanNode<T>,
         required_props: &[&dyn PhysicalProperty],
-    ) -> Result<(GroupId, SubGroupId)> {
+    ) -> Result<(GroupId, SubGoalId)> {
+        trace!(event = "step_optimize_rel", required_props = ?required_props, rel = %root_rel);
         let (group_id, _) = self.add_new_expr(root_rel);
         let required_props = required_props.iter().map(|x| x.to_boxed()).collect_vec();
-        let subgroup_id = self
+        let subgoal_id = self
             .memo
             .create_or_get_subgroup(group_id, required_props.into());
-        self.fire_optimize_tasks(group_id, subgroup_id)?;
-        Ok((group_id, subgroup_id))
+        self.fire_optimize_tasks(group_id, subgoal_id)?;
+        Ok((group_id, subgoal_id))
     }
 
     /// Gets the group binding.
     pub fn step_get_optimize_rel(
         &self,
         group_id: GroupId,
-        subgroup_id: SubGroupId,
+        subgoal_id: SubGoalId,
         meta: &mut Option<PlanNodeMetaMap>,
     ) -> Result<ArcPlanNode<T>> {
         let res = self.memo.get_best_group_binding(
             group_id,
-            subgroup_id,
-            |node, group_id, subgroup_id, info| {
+            subgoal_id,
+            |node, group_id, subgoal_id, info| {
                 if let Some(meta) = meta {
                     let node = node.as_ref() as *const _ as usize;
                     let node_meta = PlanNodeMeta::new(
                         group_id,
-                        subgroup_id,
+                        subgoal_id,
                         info.total_weighted_cost,
                         info.total_cost.clone(),
                         info.statistics.clone(),
@@ -313,45 +313,16 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
         res
     }
 
-    fn fire_optimize_tasks(&mut self, group_id: GroupId, subgroup_id: SubGroupId) -> Result<()> {
-        trace!(event = "fire_optimize_tasks", root_group_id = %group_id, root_subgroup_id = %subgroup_id);
-        self.tasks
-            .push_back(Box::new(OptimizeGroupTask::new(group_id, subgroup_id)));
-        // get the task from the stack
-        self.ctx.budget_used = false;
-        let plan_space_begin = self.memo.estimated_plan_space();
-        let mut iter = 0;
-        while let Some(task) = self.tasks.pop_back() {
-            let new_tasks = task.execute(self)?;
-            self.tasks.extend(new_tasks);
-            iter += 1;
-            if !self.ctx.budget_used {
-                let plan_space = self.memo.estimated_plan_space();
-                if let Some(partial_explore_space) = self.prop.partial_explore_space {
-                    if plan_space - plan_space_begin > partial_explore_space {
-                        println!(
-                            "plan space size budget used, not applying logical rules any more. current plan space: {}",
-                            plan_space
-                        );
-                        self.ctx.budget_used = true;
-                        if self.prop.panic_on_budget {
-                            panic!("plan space size budget used");
-                        }
-                    }
-                } else if let Some(partial_explore_iter) = self.prop.partial_explore_iter {
-                    if iter >= partial_explore_iter {
-                        println!(
-                            "plan explore iter budget used, not applying logical rules any more. current plan space: {}",
-                            plan_space
-                        );
-                        self.ctx.budget_used = true;
-                        if self.prop.panic_on_budget {
-                            panic!("plan space size budget used");
-                        }
-                    }
-                }
-            }
-        }
+    fn fire_optimize_tasks(&mut self, group_id: GroupId, subgoal_id: SubGoalId) -> Result<()> {
+        use pollster::FutureExt as _;
+        trace!(event = "fire_optimize_tasks", root_group_id = %group_id, root_subgoal_id = %subgoal_id);
+        let mut task = TaskContext::new(self);
+        // 16MB stack for the optimization process
+        stacker::maybe_grow(32 * 1024, 1024 * 1024, || {
+            let fut: Pin<Box<dyn Future<Output = ()>>> =
+                Box::pin(task.optimize_group(group_id, subgoal_id));
+            fut.block_on();
+        });
         Ok(())
     }
 
@@ -362,12 +333,12 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
     ) -> Result<ArcPlanNode<T>> {
         let (group_id, _) = self.add_new_expr(root_rel);
         let required_props = required_props.iter().map(|x| x.to_boxed()).collect_vec();
-        let subgroup_id = self
+        let subgoal_id = self
             .memo
             .create_or_get_subgroup(group_id, required_props.into());
-        self.fire_optimize_tasks(group_id, subgroup_id)?;
+        self.fire_optimize_tasks(group_id, subgoal_id)?;
         self.memo
-            .get_best_group_binding(group_id, subgroup_id, |_, _, _, _| {})
+            .get_best_group_binding(group_id, subgoal_id, |_, _, _, _| {})
     }
 
     pub fn resolve_group_id(&self, root_rel: PlanNodeOrGroup<T>) -> GroupId {
@@ -390,17 +361,17 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
         self.memo.add_expr_to_group(rel_node, group_id)
     }
 
-    pub(super) fn get_group_winner(&self, group_id: GroupId, subgroup_id: SubGroupId) -> &Winner {
-        self.memo.get_group_winner(group_id, subgroup_id)
+    pub(super) fn get_group_winner(&self, group_id: GroupId, subgoal_id: SubGoalId) -> &Winner {
+        self.memo.get_group_winner(group_id, subgoal_id)
     }
 
     pub(super) fn update_group_winner(
         &mut self,
         group_id: GroupId,
-        subgroup_id: SubGroupId,
+        subgoal_id: SubGoalId,
         winner: Winner,
     ) {
-        self.memo.update_winner(group_id, subgroup_id, winner)
+        self.memo.update_winner(group_id, subgoal_id, winner)
     }
 
     /// Get the properties of a Cascades group
@@ -419,10 +390,6 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
             .clone()
     }
 
-    pub(super) fn get_group_id(&self, expr_id: ExprId) -> GroupId {
-        self.memo.get_group_id(expr_id)
-    }
-
     pub(super) fn get_expr_memoed(&self, expr_id: ExprId) -> ArcMemoPlanNode<T> {
         self.memo.get_expr_memoed(expr_id)
     }
@@ -431,24 +398,24 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
         self.memo.get_pred(pred_id)
     }
 
-    pub(super) fn is_group_explored(&self, group_id: GroupId, subgroup_id: SubGroupId) -> bool {
-        self.explored_group.contains(&(group_id, subgroup_id))
+    pub(super) fn is_group_explored(&self, group_id: GroupId, subgoal_id: SubGoalId) -> bool {
+        self.explored_group.contains(&(group_id, subgoal_id))
     }
 
-    pub(super) fn mark_group_explored(&mut self, group_id: GroupId, subgroup_id: SubGroupId) {
-        self.explored_group.insert((group_id, subgroup_id));
+    pub(super) fn mark_group_explored(&mut self, group_id: GroupId, subgoal_id: SubGoalId) {
+        self.explored_group.insert((group_id, subgoal_id));
     }
 
-    pub(super) fn is_expr_explored(&self, expr_id: ExprId, subgroup_id: SubGroupId) -> bool {
-        self.explored_expr.contains(&(expr_id, subgroup_id))
+    pub(super) fn has_task_started(&self, task_desc: &TaskDesc) -> bool {
+        self.explored_expr.contains(task_desc)
     }
 
-    pub(super) fn mark_expr_explored(&mut self, expr_id: ExprId, subgroup_id: SubGroupId) {
-        self.explored_expr.insert((expr_id, subgroup_id));
+    pub(super) fn mark_task_start(&mut self, task_desc: &TaskDesc) {
+        self.explored_expr.insert(task_desc.clone());
     }
 
-    pub(super) fn unmark_expr_explored(&mut self, expr_id: ExprId, subgroup_id: SubGroupId) {
-        self.explored_expr.remove(&(expr_id, subgroup_id));
+    pub(super) fn mark_task_end(&mut self, task_desc: &TaskDesc) {
+        self.explored_expr.remove(task_desc);
     }
 
     pub(super) fn is_rule_fired(&self, group_expr_id: ExprId, rule_id: RuleId) -> bool {
@@ -469,7 +436,7 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
         &mut self,
         group_id: GroupId,
         required_phys_props: RequiredPhysicalProperties,
-    ) -> SubGroupId {
+    ) -> SubGoalId {
         self.memo
             .create_or_get_subgroup(group_id, required_phys_props)
     }

@@ -55,7 +55,7 @@ LogicalProjection { exprs: [ #0, #1 ] }
                             └── LogicalScan { table: t2 }
 PhysicalProjection { exprs: [ #2, #3 ], cost: {compute=8019,io=3000}, stat: {row_cnt=1} }
 └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ], cost: {compute=8016,io=3000}, stat: {row_cnt=1} }
-    ├── PhysicalAgg
+    ├── PhysicalHashAgg
     │   ├── aggrs:Agg(Sum)
     │   │   └── [ Cast { cast_to: Int64, child: #2 } ]
     │   ├── groups: [ #1 ]
@@ -70,7 +70,7 @@ PhysicalProjection { exprs: [ #2, #3 ], cost: {compute=8019,io=3000}, stat: {row
     │           │   ├── cost: {compute=3000,io=1000}
     │           │   ├── stat: {row_cnt=1}
     │           │   └── PhysicalScan { table: t2, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
-    │           └── PhysicalAgg { aggrs: [], groups: [ #0 ], cost: {compute=3000,io=1000}, stat: {row_cnt=1000} }
+    │           └── PhysicalHashAgg { aggrs: [], groups: [ #0 ], cost: {compute=3000,io=1000}, stat: {row_cnt=1000} }
     │               └── PhysicalScan { table: t1, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
     └── PhysicalScan { table: t1, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
 */
@@ -137,7 +137,7 @@ LogicalProjection { exprs: [ #0, #1 ] }
                                     └── LogicalScan { table: t3 }
 PhysicalProjection { exprs: [ #2, #3 ], cost: {compute=9021,io=4000}, stat: {row_cnt=1} }
 └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ], cost: {compute=9018,io=4000}, stat: {row_cnt=1} }
-    ├── PhysicalAgg
+    ├── PhysicalHashAgg
     │   ├── aggrs:Agg(Sum)
     │   │   └── [ Cast { cast_to: Int64, child: #2 } ]
     │   ├── groups: [ #1 ]
@@ -153,7 +153,7 @@ PhysicalProjection { exprs: [ #2, #3 ], cost: {compute=9021,io=4000}, stat: {row
     │       │       │   ├── cost: {compute=3000,io=1000}
     │       │       │   ├── stat: {row_cnt=1}
     │       │       │   └── PhysicalScan { table: t2, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
-    │       │       └── PhysicalAgg { aggrs: [], groups: [ #0 ], cost: {compute=3000,io=1000}, stat: {row_cnt=1000} }
+    │       │       └── PhysicalHashAgg { aggrs: [], groups: [ #0 ], cost: {compute=3000,io=1000}, stat: {row_cnt=1000} }
     │       │           └── PhysicalScan { table: t1, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
     │       └── PhysicalScan { table: t3, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
     └── PhysicalScan { table: t1, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }

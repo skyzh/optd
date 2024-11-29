@@ -6,6 +6,7 @@
 use std::any::Any;
 use std::borrow::Borrow;
 use std::fmt::{Debug, Display};
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 
 use itertools::Itertools;
@@ -60,11 +61,13 @@ pub trait PhysicalPropertyBuilderAny<T: NodeType>: 'static + Send + Sync {
     fn property_name(&self) -> &'static str;
 
     fn exactly_eq_any(&self, a: &dyn PhysicalProperty, b: &dyn PhysicalProperty) -> bool;
+
+    fn hash_to_u64(&self, prop: &dyn PhysicalProperty) -> u64;
 }
 
 /// The trait for building physical properties for a plan node.
 pub trait PhysicalPropertyBuilder<T: NodeType>: 'static + Send + Sync + Sized {
-    type Prop: PhysicalProperty + Clone + Sized + PartialEq + Eq;
+    type Prop: PhysicalProperty + Clone + Sized + PartialEq + Eq + Hash;
 
     /// Derive the output physical property based on the input physical properties and the current plan node information.
     fn derive(
@@ -230,6 +233,16 @@ impl<T: NodeType, P: PhysicalPropertyBuilder<T>> PhysicalPropertyBuilderAny<T> f
 
     fn property_name(&self) -> &'static str {
         PhysicalPropertyBuilder::property_name(self)
+    }
+
+    fn hash_to_u64(&self, prop: &dyn PhysicalProperty) -> u64 {
+        let prop = prop
+            .as_any()
+            .downcast_ref::<P::Prop>()
+            .expect("Failed to downcast property");
+        let mut hasher = DefaultHasher::new();
+        prop.hash(&mut hasher);
+        hasher.finish()
     }
 }
 
@@ -424,5 +437,17 @@ impl<T: NodeType> PhysicalPropertyBuilders<T> {
             }
         }
         true
+    }
+
+    pub fn hash_any<X: Borrow<dyn PhysicalProperty>, H: std::hash::Hasher>(
+        &self,
+        props: &[X],
+        state: &mut H,
+    ) {
+        for (i, prop) in props.iter().enumerate() {
+            let builder = &self.0[i];
+            let prop = prop.borrow();
+            state.write_u64(builder.hash_to_u64(prop));
+        }
     }
 }

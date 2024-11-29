@@ -11,7 +11,7 @@ use anyhow::{bail, Context, Result};
 use itertools::Itertools;
 use tracing::trace;
 
-use super::optimizer::{ExprId, GroupId, PredId, SubGroupId};
+use super::optimizer::{ExprId, GroupId, PredId, SubGoalId};
 use crate::cost::{Cost, Statistics};
 use crate::logical_property::{LogicalProperty, LogicalPropertyBuilderAny};
 use crate::nodes::{ArcPlanNode, ArcPredNode, NodeType, PlanNode, PlanNodeOrGroup};
@@ -123,7 +123,7 @@ pub struct Group {
     /// Note that the winner does not necessarily have a physical property exactly equal
     /// to the required property. It could be a stronger property that satisfies the
     /// required property.
-    pub(crate) winners: HashMap<SubGroupId, (RequiredPhysicalProperties, Winner)>,
+    pub(crate) winners: HashMap<SubGoalId, (RequiredPhysicalProperties, Winner)>,
     /// Logical properties of the group. This is inferred from the first expression added to the
     /// group.
     pub(crate) logical_properties: Arc<[Box<dyn LogicalProperty>]>,
@@ -164,7 +164,7 @@ pub trait Memo<T: NodeType>: 'static + Send + Sync {
     fn get_pred(&self, pred_id: PredId) -> ArcPredNode<T>;
 
     /// Update the winner.
-    fn update_winner(&mut self, group_id: GroupId, subgroup_id: SubGroupId, winner: Winner);
+    fn update_winner(&mut self, group_id: GroupId, subgoal_id: SubGoalId, winner: Winner);
 
     /// Add a sub-group to the group, this creates a new search goal for a winner that satisfies
     /// the required physical properties.
@@ -172,23 +172,23 @@ pub trait Memo<T: NodeType>: 'static + Send + Sync {
         &mut self,
         group_id: GroupId,
         required_phys_props: RequiredPhysicalProperties,
-    ) -> SubGroupId;
+    ) -> SubGoalId;
 
     /// Get a subgroup based on required properties.
     fn get_subgroup(
         &self,
         group_id: GroupId,
         required_phys_props: RequiredPhysicalProperties,
-    ) -> SubGroupId;
+    ) -> SubGoalId;
 
     /// Get all subgroups of a group.
-    fn get_all_subgroup_ids(&self, group_id: GroupId) -> Vec<SubGroupId>;
+    fn get_all_subgoal_ids(&self, group_id: GroupId) -> Vec<SubGoalId>;
 
     /// Get the goal of a subgroup.
     fn get_subgroup_goal(
         &self,
         group_id: GroupId,
-        subgroup_id: SubGroupId,
+        subgoal_id: SubGoalId,
     ) -> RequiredPhysicalProperties;
 
     /// Estimated plan space for the memo table, only useful when plan exploration budget is
@@ -209,18 +209,19 @@ pub trait Memo<T: NodeType>: 'static + Send + Sync {
     }
 
     /// Get winner of a group and a subgroup.
-    fn get_group_winner(&self, group_id: GroupId, subgroup_id: SubGroupId) -> &Winner {
-        &self.get_group(group_id).winners[&subgroup_id].1
+    fn get_group_winner(&self, group_id: GroupId, subgoal_id: SubGoalId) -> &Winner {
+        &self.get_group(group_id).winners[&subgoal_id].1
     }
 
     /// Get the best group binding based on the cost
     fn get_best_group_binding(
         &self,
         group_id: GroupId,
-        subgroup_id: SubGroupId,
-        mut post_process: impl FnMut(ArcPlanNode<T>, GroupId, SubGroupId, &WinnerInfo),
+        subgoal_id: SubGoalId,
+        mut post_process: impl FnMut(ArcPlanNode<T>, GroupId, SubGoalId, &WinnerInfo),
     ) -> Result<ArcPlanNode<T>> {
-        get_best_group_binding_inner(self, group_id, subgroup_id, &mut post_process)
+        let mut visited = HashSet::new();
+        get_best_group_binding_inner(self, group_id, subgoal_id, &mut post_process, &mut visited)
     }
 
     /// Get the physical property builders.
@@ -230,12 +231,23 @@ pub trait Memo<T: NodeType>: 'static + Send + Sync {
 fn get_best_group_binding_inner<M: Memo<T> + ?Sized, T: NodeType>(
     this: &M,
     group_id: GroupId,
-    subgroup_id: SubGroupId,
-    post_process: &mut impl FnMut(ArcPlanNode<T>, GroupId, SubGroupId, &WinnerInfo),
+    subgoal_id: SubGoalId,
+    post_process: &mut impl FnMut(ArcPlanNode<T>, GroupId, SubGoalId, &WinnerInfo),
+    visited: &mut HashSet<(GroupId, SubGoalId)>,
 ) -> Result<ArcPlanNode<T>> {
-    let winner = this.get_group_winner(group_id, subgroup_id);
+    let winner = this.get_group_winner(group_id, subgoal_id);
+
+    if visited.contains(&(group_id, subgoal_id)) {
+        bail!(
+            "cycle detected in the winner result: group_id={}, subgoal_id={}",
+            group_id,
+            subgoal_id
+        );
+    }
+    visited.insert((group_id, subgoal_id));
+
     if let Winner::Full(info @ WinnerInfo { expr_id, .. }) = winner {
-        let required_phys_prop = this.get_subgroup_goal(group_id, subgroup_id);
+        let required_phys_prop = this.get_subgroup_goal(group_id, subgoal_id);
         match expr_id {
             WinnerExpr::Expr { expr_id } => {
                 let expr = this.get_expr_memoed(*expr_id);
@@ -265,6 +277,7 @@ fn get_best_group_binding_inner<M: Memo<T> + ?Sized, T: NodeType>(
                             child,
                             child_required_phys_prop,
                             post_process,
+                            visited,
                         )
                         .with_context(|| format!("when processing expr {}", expr_id))?,
                     ));
@@ -275,16 +288,22 @@ fn get_best_group_binding_inner<M: Memo<T> + ?Sized, T: NodeType>(
                     predicates,
                 });
                 // TODO: verify the node satisfies all required phys props
-                post_process(node.clone(), group_id, subgroup_id, info);
+                post_process(node.clone(), group_id, subgoal_id, info);
+                visited.remove(&(group_id, subgoal_id));
                 return Ok(node);
             }
             WinnerExpr::Enforcer {} => {
                 let child_default_required_phys_prop: Arc<[_]> =
                     this.get_physical_property_builders().default_many().into();
-                let child_subgroup_id =
+                let child_subgoal_id =
                     this.get_subgroup(group_id, child_default_required_phys_prop.clone());
-                let child =
-                    get_best_group_binding_inner(this, group_id, child_subgroup_id, post_process)?;
+                let child = get_best_group_binding_inner(
+                    this,
+                    group_id,
+                    child_subgoal_id,
+                    post_process,
+                    visited,
+                )?;
                 let (node, _) = this
                     .get_physical_property_builders()
                     .enforce_many_if_not_satisfied(
@@ -293,19 +312,21 @@ fn get_best_group_binding_inner<M: Memo<T> + ?Sized, T: NodeType>(
                         required_phys_prop,
                     );
                 let node = node.unwrap_plan_node();
-                post_process(node.clone(), group_id, subgroup_id, info);
+                post_process(node.clone(), group_id, subgoal_id, info);
+                visited.remove(&(group_id, subgoal_id));
                 return Ok(node);
             }
             WinnerExpr::Propagate {
                 group_id: child_group_id,
             } => {
                 let input: Arc<[_]> = this.get_physical_property_builders().default_many().into();
-                let child_subgroup_id = this.get_subgroup(*child_group_id, input.clone());
+                let child_subgoal_id = this.get_subgroup(*child_group_id, input.clone());
                 let child = get_best_group_binding_inner(
                     this,
                     *child_group_id,
-                    child_subgroup_id,
+                    child_subgoal_id,
                     post_process,
+                    visited,
                 )?;
                 let (node, _) = this
                     .get_physical_property_builders()
@@ -315,7 +336,8 @@ fn get_best_group_binding_inner<M: Memo<T> + ?Sized, T: NodeType>(
                         required_phys_prop,
                     );
                 let node = node.unwrap_plan_node();
-                post_process(node.clone(), group_id, subgroup_id, info);
+                post_process(node.clone(), group_id, subgoal_id, info);
+                visited.remove(&(group_id, subgoal_id));
                 return Ok(node);
             }
         }
@@ -355,42 +377,42 @@ impl<T: NodeType> Memo<T> for NaiveMemo<T> {
         &mut self,
         group_id: GroupId,
         required_phys_props: RequiredPhysicalProperties,
-    ) -> SubGroupId {
+    ) -> SubGoalId {
         assert_eq!(
             required_phys_props.len(),
             self.physical_property_builders.len()
         );
         let group_id = self.reduce_group(group_id);
         let group = self.groups.get_mut(&group_id).unwrap();
-        for (subgroup_id, (props, _)) in group.winners.iter() {
+        for (subgoal_id, (props, _)) in group.winners.iter() {
             if self
                 .physical_property_builders
                 .exactly_eq(props, &required_phys_props)
             {
-                return *subgroup_id;
+                return *subgoal_id;
             }
         }
-        let subgroup_id = self.next_subgroup_id();
+        let subgoal_id = self.next_subgoal_id();
         let group = self.groups.get_mut(&group_id).unwrap();
         group
             .winners
-            .insert(subgroup_id, (required_phys_props, Winner::Unknown));
-        subgroup_id
+            .insert(subgoal_id, (required_phys_props, Winner::Unknown));
+        subgoal_id
     }
 
     fn get_subgroup(
         &self,
         group_id: GroupId,
         required_phys_props: RequiredPhysicalProperties,
-    ) -> SubGroupId {
+    ) -> SubGoalId {
         let group_id = self.reduce_group(group_id);
         let group = self.groups.get(&group_id).unwrap();
-        for (subgroup_id, (props, _)) in group.winners.iter() {
+        for (subgoal_id, (props, _)) in group.winners.iter() {
             if self
                 .physical_property_builders
                 .exactly_eq(props, &required_phys_props)
             {
-                return *subgroup_id;
+                return *subgoal_id;
             }
         }
         unreachable!("subgroup not found")
@@ -399,13 +421,13 @@ impl<T: NodeType> Memo<T> for NaiveMemo<T> {
     fn get_subgroup_goal(
         &self,
         group_id: GroupId,
-        subgroup_id: SubGroupId,
+        subgoal_id: SubGoalId,
     ) -> RequiredPhysicalProperties {
         let group_id = self.reduce_group(group_id);
-        self.groups[&group_id].winners[&subgroup_id].0.clone()
+        self.groups[&group_id].winners[&subgoal_id].0.clone()
     }
 
-    fn get_all_subgroup_ids(&self, group_id: GroupId) -> Vec<SubGroupId> {
+    fn get_all_subgoal_ids(&self, group_id: GroupId) -> Vec<SubGoalId> {
         let group_id = self.reduce_group(group_id);
         let mut subgroups = self.groups[&group_id].winners.keys().copied().collect_vec();
         subgroups.sort();
@@ -493,7 +515,7 @@ impl<T: NodeType> Memo<T> for NaiveMemo<T> {
         self.groups.get(&group_id).as_ref().unwrap()
     }
 
-    fn update_winner(&mut self, group_id: GroupId, subgroup_id: SubGroupId, winner: Winner) {
+    fn update_winner(&mut self, group_id: GroupId, subgoal_id: SubGoalId, winner: Winner) {
         let group_id = self.reduce_group(group_id);
         let group = self.groups.get_mut(&group_id).unwrap();
         if let Winner::Full(WinnerInfo {
@@ -512,7 +534,17 @@ impl<T: NodeType> Memo<T> for NaiveMemo<T> {
                 assert!(*total_weighted_cost != 0.0);
             }
         }
-        group.winners.get_mut(&subgroup_id).unwrap().1 = winner;
+        let (winner_prop, current_winner) = group.winners.get_mut(&subgoal_id).unwrap();
+        *current_winner = winner.clone();
+        let winner_prop = winner_prop.clone();
+        for (_, (prop, other_winner)) in &mut group.winners {
+            if self
+                .physical_property_builders
+                .exactly_eq(prop, &winner_prop)
+            {
+                *other_winner = winner.clone();
+            }
+        }
     }
 
     fn estimated_plan_space(&self) -> usize {
@@ -549,10 +581,10 @@ impl<T: NodeType> NaiveMemo<T> {
     }
 
     /// Get the next subgroup id. Group id and expr id shares the same counter, so as to make it easier
-    fn next_subgroup_id(&mut self) -> SubGroupId {
+    fn next_subgoal_id(&mut self) -> SubGoalId {
         let id = self.group_expr_counter;
         self.group_expr_counter += 1;
-        SubGroupId(id)
+        SubGoalId(id)
     }
 
     /// Get the next expr id. Group id and expr id shares the same counter, so as to make it easier
@@ -626,8 +658,58 @@ impl<T: NodeType> NaiveMemo<T> {
             assert!(ret.is_some());
             group_merge_into.group_exprs.insert(from_expr);
         }
-        // TODO: ensure we consolidate the winners with the same property, or it doesn't matter actually?
         group_merge_into.winners.extend(group_merge_from.winners);
+        let mut new_winners = HashMap::new();
+        fn better_winner<'a>(a: &'a Winner, b: &'a Winner) -> &'a Winner {
+            match (a, b) {
+                (left @ Winner::Full(a), right @ Winner::Full(b)) => {
+                    if a.total_weighted_cost < b.total_weighted_cost {
+                        left
+                    } else {
+                        right
+                    }
+                }
+                (left @ Winner::Full(_), _) => left,
+                (_, right @ Winner::Full(_)) => right,
+                (_, other) => other,
+            }
+        }
+        struct HashableGoal<T: NodeType> {
+            props: RequiredPhysicalProperties,
+            builder: PhysicalPropertyBuilders<T>,
+        }
+        impl<T: NodeType> PartialEq for HashableGoal<T> {
+            fn eq(&self, other: &Self) -> bool {
+                self.builder.exactly_eq(&self.props, &other.props)
+            }
+        }
+        impl<T: NodeType> Eq for HashableGoal<T> {}
+        impl<T: NodeType> std::hash::Hash for HashableGoal<T> {
+            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                self.builder.hash_any(&self.props, state);
+            }
+        }
+
+        // Update the winners based on the cost
+        for (_, (required_prop, winner)) in &group_merge_into.winners {
+            let entry = new_winners
+                .entry(HashableGoal {
+                    props: required_prop.clone(),
+                    builder: self.physical_property_builders.clone(),
+                })
+                .or_insert_with(|| winner.clone());
+            *entry = better_winner(entry, winner).clone();
+        }
+        for (_, (required_prop, winner)) in &mut group_merge_into.winners {
+            let entry = new_winners
+                .get(&HashableGoal {
+                    props: required_prop.clone(),
+                    builder: self.physical_property_builders.clone(),
+                })
+                .unwrap();
+            *winner = entry.clone();
+        }
+
         self.merged_group_mapping.insert(merge_from, merge_into);
 
         // Update all indexes and other data structures

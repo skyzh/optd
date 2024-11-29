@@ -199,23 +199,25 @@ PhysicalSort
     ├── join_type: Inner
     ├── cond:Gt
     │   ├── Cast { cast_to: Decimal128(38, 15), child: #1 }
-    │   └── #0
-    ├── PhysicalAgg
+    │   └── #2
+    ├── PhysicalHashAgg
     │   ├── aggrs:Agg(Sum)
     │   │   └── Mul
     │   │       ├── #2
     │   │       └── Cast { cast_to: Decimal128(10, 0), child: #1 }
     │   ├── groups: [ #0 ]
-    │   └── PhysicalProjection { exprs: [ #11, #13, #14 ] }
-    │       └── PhysicalHashJoin { join_type: Inner, left_keys: [ #4 ], right_keys: [ #1 ] }
-    │           ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #3 ] }
-    │           │   ├── PhysicalFilter
-    │           │   │   ├── cond:Eq
-    │           │   │   │   ├── #1
-    │           │   │   │   └── "CHINA"
-    │           │   │   └── PhysicalScan { table: nation }
-    │           │   └── PhysicalScan { table: supplier }
-    │           └── PhysicalScan { table: partsupp }
+    │   └── PhysicalProjection { exprs: [ #0, #1, #2 ] }
+    │       └── PhysicalProjection { exprs: [ #1, #2, #3, #4, #0 ] }
+    │           └── PhysicalProjection { exprs: [ #0, #11, #13, #14, #7 ] }
+    │               └── PhysicalHashJoin { join_type: Inner, left_keys: [ #4 ], right_keys: [ #1 ] }
+    │                   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #3 ] }
+    │                   │   ├── PhysicalFilter
+    │                   │   │   ├── cond:Eq
+    │                   │   │   │   ├── #1
+    │                   │   │   │   └── "CHINA"
+    │                   │   │   └── PhysicalScan { table: nation }
+    │                   │   └── PhysicalScan { table: supplier }
+    │                   └── PhysicalScan { table: partsupp }
     └── PhysicalProjection
         ├── exprs:Cast
         │   ├── cast_to: Decimal128(38, 15)
@@ -223,7 +225,7 @@ PhysicalSort
         │   │   ├── Cast { cast_to: Float64, child: #0 }
         │   │   └── 0.0001(float)
 
-        └── PhysicalAgg
+        └── PhysicalHashAgg
             ├── aggrs:Agg(Sum)
             │   └── Mul
             │       ├── #1
@@ -325,7 +327,7 @@ LogicalSort
 PhysicalSort
 ├── exprs:SortOrder { order: Asc }
 │   └── #0
-└── PhysicalAgg
+└── PhysicalHashAgg
     ├── aggrs:
     │   ┌── Agg(Sum)
     │   │   └── Case
@@ -434,7 +436,7 @@ PhysicalProjection
 │   │   ├── 100(float)
 │   │   └── Cast { cast_to: Float64, child: #0 }
 │   └── Cast { cast_to: Float64, child: #1 }
-└── PhysicalAgg
+└── PhysicalHashAgg
     ├── aggrs:
     │   ┌── Agg(Sum)
     │   │   └── Case
@@ -568,14 +570,13 @@ LogicalSort
 PhysicalSort
 ├── exprs:SortOrder { order: Asc }
 │   └── #0
-└── PhysicalProjection { exprs: [ #3, #4, #5, #7, #2 ] }
-    └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #1 ] }
-        ├── PhysicalAgg
-        │   ├── aggrs:Agg(Max)
-        │   │   └── [ #0 ]
-        │   ├── groups: []
-        │   └── PhysicalProjection { exprs: [ #1 ] }
-        │       └── PhysicalAgg
+└── PhysicalProjection { exprs: [ #0, #1, #2, #3, #4 ] }
+    └── PhysicalHashJoin { join_type: Inner, left_keys: [ #4 ], right_keys: [ #0 ] }
+        ├── PhysicalProjection { exprs: [ #0, #1, #2, #3, #5 ] }
+        │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
+        │       ├── PhysicalProjection { exprs: [ #0, #1, #2, #4 ] }
+        │       │   └── PhysicalScan { table: supplier }
+        │       └── PhysicalHashAgg
         │           ├── aggrs:Agg(Sum)
         │           │   └── Mul
         │           │       ├── #1
@@ -583,35 +584,40 @@ PhysicalSort
         │           │           ├── 1(float)
         │           │           └── #2
         │           ├── groups: [ #0 ]
-        │           └── PhysicalProjection { exprs: [ #2, #5, #6 ] }
+        │           └── PhysicalProjection { exprs: [ #0, #1, #2 ] }
         │               └── PhysicalFilter
         │                   ├── cond:And
         │                   │   ├── Geq
-        │                   │   │   ├── #10
+        │                   │   │   ├── #3
         │                   │   │   └── 8401(i64)
         │                   │   └── Lt
-        │                   │       ├── #10
+        │                   │       ├── #3
         │                   │       └── 8491(i64)
-        │                   └── PhysicalScan { table: lineitem }
-        └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
-            ├── PhysicalAgg
-            │   ├── aggrs:Agg(Sum)
-            │   │   └── Mul
-            │   │       ├── #1
-            │   │       └── Sub
-            │   │           ├── 1(float)
-            │   │           └── #2
-            │   ├── groups: [ #0 ]
-            │   └── PhysicalProjection { exprs: [ #2, #5, #6 ] }
-            │       └── PhysicalFilter
-            │           ├── cond:And
-            │           │   ├── Geq
-            │           │   │   ├── #10
-            │           │   │   └── 8401(i64)
-            │           │   └── Lt
-            │           │       ├── #10
-            │           │       └── 8491(i64)
-            │           └── PhysicalScan { table: lineitem }
-            └── PhysicalScan { table: supplier }
+        │                   └── PhysicalProjection { exprs: [ #2, #5, #6, #10 ] }
+        │                       └── PhysicalScan { table: lineitem }
+        └── PhysicalHashAgg
+            ├── aggrs:Agg(Max)
+            │   └── [ #0 ]
+            ├── groups: []
+            └── PhysicalProjection { exprs: [ #1 ] }
+                └── PhysicalHashAgg
+                    ├── aggrs:Agg(Sum)
+                    │   └── Mul
+                    │       ├── #1
+                    │       └── Sub
+                    │           ├── 1(float)
+                    │           └── #2
+                    ├── groups: [ #0 ]
+                    └── PhysicalProjection { exprs: [ #0, #1, #2 ] }
+                        └── PhysicalFilter
+                            ├── cond:And
+                            │   ├── Geq
+                            │   │   ├── #3
+                            │   │   └── 8401(i64)
+                            │   └── Lt
+                            │       ├── #3
+                            │       └── 8491(i64)
+                            └── PhysicalProjection { exprs: [ #2, #5, #6, #10 ] }
+                                └── PhysicalScan { table: lineitem }
 */
 

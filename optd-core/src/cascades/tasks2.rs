@@ -315,6 +315,7 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
                 self.optimize_input(group_id, expr_id, new_goal_id).await;
                 // TODO: update winner
             }
+            self.optimizer.mark_task_end(&desc);
             return;
         }
 
@@ -421,8 +422,13 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
                     .optimizer
                     .get_group_winner(child_group_id, child_subgoal_id)
                 {
-                    self.optimizer
-                        .update_group_winner(group_id, subgoal_id, Winner::Impossible);
+                    if let Winner::Unknown = self.optimizer.get_group_winner(group_id, subgoal_id) {
+                        self.optimizer.update_group_winner(
+                            group_id,
+                            subgoal_id,
+                            Winner::Impossible,
+                        );
+                    }
                     self.optimizer.mark_task_end(&desc);
                     trace!(event = "task_finish", task = "optimize_inputs", expr_id = %expr_id, result = "impossible");
                     return;

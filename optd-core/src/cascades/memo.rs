@@ -250,8 +250,20 @@ fn get_best_group_binding_inner<M: Memo<T> + ?Sized, T: NodeType>(
     }
     visited.insert((group_id, subgoal_id));
 
-    if let Winner::Full(info @ WinnerInfo { expr_id, .. }) = winner {
+    if let Winner::Full(
+        info @ WinnerInfo {
+            expr_id,
+            derived_physical_properties,
+            ..
+        },
+    ) = winner
+    {
         let required_phys_prop = this.get_subgroup_goal(group_id, subgoal_id);
+        assert!(
+            this.get_physical_property_builders()
+                .satisfies_many(&derived_physical_properties, &required_phys_prop),
+            "derived physical properties do not satisfy the required physical properties"
+        );
         match expr_id {
             WinnerExpr::Expr { expr_id } => {
                 let expr = this.get_expr_memoed(*expr_id);

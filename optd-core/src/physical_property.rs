@@ -374,6 +374,28 @@ impl<T: NodeType> PhysicalPropertyBuilders<T> {
         self.0.iter().map(|builder| builder.default_any()).collect()
     }
 
+    pub fn satisfies_many<X1, Y1, X2, Y2>(&self, prop: Y1, required: Y2) -> bool
+    where
+        X1: Borrow<dyn PhysicalProperty>,
+        Y1: AsRef<[X1]>,
+        X2: Borrow<dyn PhysicalProperty>,
+        Y2: AsRef<[X2]>,
+    {
+        let required = required.as_ref();
+        let prop = prop.as_ref();
+        assert_eq!(required.len(), self.0.len());
+        assert_eq!(prop.len(), self.0.len());
+        for i in 0..self.0.len() {
+            let builder = &self.0[i];
+            let required = required[i].borrow();
+            let prop = prop[i].borrow();
+            if !builder.satisfies_any(prop, required) {
+                return false;
+            }
+        }
+        true
+    }
+
     /// Enforces the required properties on the input plan node if not satisfied.
     pub fn enforce_many_if_not_satisfied<X1, Y1, X2, Y2>(
         &self,

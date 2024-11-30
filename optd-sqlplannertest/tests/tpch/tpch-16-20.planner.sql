@@ -180,7 +180,7 @@ PhysicalProjection
             ├── cond:And
             │   ├── Eq
             │   │   ├── #0
-            │   │   └── #26
+            │   │   └── #0
             │   └── Lt
             │       ├── Cast { cast_to: Decimal128(30, 15), child: #13 }
             │       └── #25

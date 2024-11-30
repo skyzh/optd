@@ -202,7 +202,6 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
             writeln!(buf, "group_id={}", group_id)?;
             for subgoal_id in self.memo.get_all_subgoal_ids(group_id) {
                 let winner_str = match &self.memo.get_group_winner(group_id, subgoal_id) {
-                    Winner::Impossible => "winner=<impossible>".to_string(),
                     Winner::Unknown => "winner=<unknown>".to_string(),
                     Winner::Full(winner) => {
                         let (winner_expr, winner_str) = match &winner.expr_id {
@@ -210,11 +209,22 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
                                 let expr = self.memo.get_expr_memoed(*expr_id);
                                 (format!("{}", expr_id), format!("{}", expr))
                             }
-                            WinnerExpr::Propagate { group_id } => {
-                                (format!("{}", group_id), format!("{}", group_id))
-                            }
-                            WinnerExpr::Enforcer {} => {
-                                ("enforcer".to_string(), "enforcer".to_string())
+                            WinnerExpr::Propagate {
+                                group_id,
+                                subgoal_id,
+                            } => (
+                                format!("{}{}", group_id, subgoal_id),
+                                format!("{}{}", group_id, subgoal_id),
+                            ),
+                            WinnerExpr::Enforcer {
+                                expr_id,
+                                child_goal_id,
+                            } => {
+                                let expr = self.memo.get_expr_memoed(*expr_id);
+                                (
+                                    format!("(Enforcer){}", expr_id),
+                                    format!("{} goal={}", expr, child_goal_id),
+                                )
                             }
                         };
                         format!(

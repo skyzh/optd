@@ -41,7 +41,7 @@ impl<T: NodeType> std::fmt::Display for MemoPlanNode<T> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum WinnerExpr {
     /// The winner is a physical expression, and the expression can passthrough all the required physical properties,
     /// or does not require any physical properties.
@@ -52,19 +52,24 @@ pub enum WinnerExpr {
         // providing required output properties and the plan node type to the physical property builder. Of course,
         // we can cache it throughout the computation process, so that we don't need to compute it multiple times.
     },
-    /// The winner is an enforcer of the current group.
-    /// Maybe not a single enforcer -- if there are multiple physical properties to enforce. But now, we assume
-    /// the winner is enforcer + the winner of no required physical properties, which isn't necessarily the best
-    /// plan if there are still some properties that can be passed-through?
-    Enforcer {},
+    /// The winner is an enforcer of some group.
+    Enforcer {
+        /// The enforcer expression ID. Note that the expression might not belong to any of the group.
+        expr_id: ExprId,
+        /// The enforcer should have a single child (which is the current group) and we need to store the subgoal
+        /// ID within the winner info.
+        child_goal_id: SubGoalId,
+    },
     /// The winner is another group with a required set of physical properties.
     /// For example, if a group X contains a logical sort on group Y, it will trigger a cascades search
     /// on group Y with a required sort property corresponding to the logical sort node. If any of the
     /// expression in group Y satisfies the required sort property, the "group Y with required property"
     /// will be the winner of group X.
     Propagate {
-        /// The group ID of the enforcer.
+        /// The group ID of the winner.
         group_id: GroupId,
+        /// The subgoal ID of the winner.
+        subgoal_id: SubGoalId,
     },
 }
 
@@ -86,18 +91,15 @@ pub struct WinnerInfo {
 
 #[derive(Clone)]
 pub enum Winner {
+    /// The winner is unknown, or it's impossible (due to no physical transformation).
     Unknown,
-    Impossible,
+    /// The winner is a full winner.
     Full(WinnerInfo),
 }
 
 impl Winner {
     pub fn has_full_winner(&self) -> bool {
         matches!(self, Self::Full { .. })
-    }
-
-    pub fn has_decided(&self) -> bool {
-        matches!(self, Self::Full { .. } | Self::Impossible)
     }
 
     pub fn as_full_winner(&self) -> Option<&WinnerInfo> {
@@ -282,7 +284,7 @@ fn get_best_group_binding_inner<M: Memo<T> + ?Sized, T: NodeType>(
                         .with_context(|| format!("when processing expr {}", expr_id))?,
                     ));
                 }
-                let node = Arc::new(PlanNode {
+                let node: Arc<PlanNode<T>> = Arc::new(PlanNode {
                     typ: expr.typ.clone(),
                     children,
                     predicates,
@@ -292,50 +294,44 @@ fn get_best_group_binding_inner<M: Memo<T> + ?Sized, T: NodeType>(
                 visited.remove(&(group_id, subgoal_id));
                 return Ok(node);
             }
-            WinnerExpr::Enforcer {} => {
-                let child_default_required_phys_prop: Arc<[_]> =
-                    this.get_physical_property_builders().default_many().into();
-                let child_subgoal_id =
-                    this.get_subgroup(group_id, child_default_required_phys_prop.clone());
-                let child = get_best_group_binding_inner(
+            WinnerExpr::Enforcer {
+                expr_id,
+                child_goal_id,
+            } => {
+                let expr = this.get_expr_memoed(*expr_id);
+                assert_eq!(expr.children.len(), 1);
+                let child_group_id = expr.children[0];
+                let child_node = get_best_group_binding_inner(
                     this,
-                    group_id,
-                    child_subgoal_id,
+                    child_group_id,
+                    *child_goal_id,
                     post_process,
                     visited,
                 )?;
-                let (node, _) = this
-                    .get_physical_property_builders()
-                    .enforce_many_if_not_satisfied(
-                        PlanNodeOrGroup::PlanNode(child),
-                        child_default_required_phys_prop,
-                        required_phys_prop,
-                    );
-                let node = node.unwrap_plan_node();
+                let node = Arc::new(PlanNode {
+                    typ: expr.typ.clone(),
+                    children: vec![PlanNodeOrGroup::PlanNode(child_node)],
+                    predicates: expr
+                        .predicates
+                        .iter()
+                        .map(|x| this.get_pred(*x))
+                        .collect_vec(),
+                });
                 post_process(node.clone(), group_id, subgoal_id, info);
                 visited.remove(&(group_id, subgoal_id));
                 return Ok(node);
             }
             WinnerExpr::Propagate {
                 group_id: child_group_id,
+                subgoal_id: child_subgoal_id,
             } => {
-                let input: Arc<[_]> = this.get_physical_property_builders().default_many().into();
-                let child_subgoal_id = this.get_subgroup(*child_group_id, input.clone());
-                let child = get_best_group_binding_inner(
+                let node = get_best_group_binding_inner(
                     this,
                     *child_group_id,
-                    child_subgoal_id,
+                    *child_subgoal_id,
                     post_process,
                     visited,
                 )?;
-                let (node, _) = this
-                    .get_physical_property_builders()
-                    .enforce_many_if_not_satisfied(
-                        PlanNodeOrGroup::PlanNode(child),
-                        input,
-                        required_phys_prop,
-                    );
-                let node = node.unwrap_plan_node();
                 post_process(node.clone(), group_id, subgoal_id, info);
                 visited.remove(&(group_id, subgoal_id));
                 return Ok(node);
@@ -537,7 +533,7 @@ impl<T: NodeType> Memo<T> for NaiveMemo<T> {
         let (winner_prop, current_winner) = group.winners.get_mut(&subgoal_id).unwrap();
         *current_winner = winner.clone();
         let winner_prop = winner_prop.clone();
-        for (_, (prop, other_winner)) in &mut group.winners {
+        for (prop, other_winner) in group.winners.values_mut() {
             if self
                 .physical_property_builders
                 .exactly_eq(prop, &winner_prop)
@@ -691,7 +687,7 @@ impl<T: NodeType> NaiveMemo<T> {
         }
 
         // Update the winners based on the cost
-        for (_, (required_prop, winner)) in &group_merge_into.winners {
+        for (required_prop, winner) in group_merge_into.winners.values() {
             let entry = new_winners
                 .entry(HashableGoal {
                     props: required_prop.clone(),
@@ -700,7 +696,7 @@ impl<T: NodeType> NaiveMemo<T> {
                 .or_insert_with(|| winner.clone());
             *entry = better_winner(entry, winner).clone();
         }
-        for (_, (required_prop, winner)) in &mut group_merge_into.winners {
+        for (required_prop, winner) in group_merge_into.winners.values_mut() {
             let entry = new_winners
                 .get(&HashableGoal {
                     props: required_prop.clone(),

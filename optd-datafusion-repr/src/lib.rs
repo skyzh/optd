@@ -141,10 +141,9 @@ impl DatafusionOptimizer {
                 Box::new(SchemaPropertyBuilder::new(catalog.clone())),
                 Box::new(ColumnRefPropertyBuilder::new(catalog.clone())),
             ]);
-        // let physical_property_builders: Arc<[Box<dyn PhysicalPropertyBuilderAny<DfNodeType>>]> =
-        //     Arc::new([Box::new(SortPropertyBuilder::new())]);
         let physical_property_builders: Arc<[Box<dyn PhysicalPropertyBuilderAny<DfNodeType>>]> =
-            Arc::new([]);
+            Arc::new([Box::new(SortPropertyBuilder::new())]);
+
         Self {
             runtime_statistics: runtime_map,
             cascades_optimizer: CascadesOptimizer::new_with_options(
@@ -234,11 +233,9 @@ impl DatafusionOptimizer {
             self.cascades_optimizer.step_clear();
         }
 
-        // let (group_id, subgoal_id) = self
-        //     .cascades_optimizer
-        //     .step_optimize_rel(root_rel, &[&SortProp::any_order()])?;
-
-        let (group_id, subgoal_id) = self.cascades_optimizer.step_optimize_rel(root_rel, &[])?;
+        let (group_id, subgoal_id) = self
+            .cascades_optimizer
+            .step_optimize_rel(root_rel, &[&SortProp::any_order()])?;
 
         let mut meta = Some(HashMap::new());
         let optimized_rel = self

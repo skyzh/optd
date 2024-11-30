@@ -144,7 +144,7 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
         required: &Self::Prop,
     ) -> Option<Self::Prop> {
         match typ {
-            DfNodeType::PhysicalSort => {
+            DfNodeType::Sort => {
                 let mut columns = Vec::new();
                 let preds = ListPred::from_pred_node(predicates[0].clone()).unwrap();
                 for pred in preds.to_vec() {

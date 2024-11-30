@@ -147,6 +147,7 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
                 assert!(child_sorts.len() >= group_by_len);
                 let mut sorts = Vec::new();
                 // the output is always sorted by group by columns (0, 1, 2, ...)
+                #[allow(clippy::needless_range_loop)]
                 for i in 0..predicates[1].children.len() {
                     sorts.push((child_sorts[i].0, i));
                 }

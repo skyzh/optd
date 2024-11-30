@@ -170,7 +170,7 @@ PhysicalProjection
 │       │   ├── Cast { cast_to: Float64, child: #0 }
 │       │   └── 7(float)
 │       └── 16(i64)
-└── PhysicalHashAgg
+└── PhysicalStreamAgg
     ├── aggrs:Agg(Sum)
     │   └── [ #0 ]
     ├── groups: []
@@ -180,7 +180,7 @@ PhysicalProjection
             ├── cond:And
             │   ├── Eq
             │   │   ├── #0
-            │   │   └── #10
+            │   │   └── #0
             │   └── Lt
             │       ├── Cast { cast_to: Decimal128(30, 15), child: #13 }
             │       └── #25
@@ -317,7 +317,7 @@ LogicalProjection { exprs: [ #0 ] }
         └── LogicalJoin { join_type: Cross, cond: true }
             ├── LogicalScan { table: lineitem }
             └── LogicalScan { table: part }
-PhysicalHashAgg
+PhysicalStreamAgg
 ├── aggrs:Agg(Sum)
 │   └── Mul
 │       ├── #5

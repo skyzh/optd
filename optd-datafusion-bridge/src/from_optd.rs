@@ -439,6 +439,10 @@ impl OptdPlanContext<'_> {
                 },
             })
             .collect_vec();
+
+        if physical_exprs.is_empty() {
+            return Ok(agg);
+        }
         Ok(
             Arc::new(datafusion::physical_plan::sorts::sort::SortExec::new(
                 physical_exprs,

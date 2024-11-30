@@ -225,7 +225,7 @@ PhysicalSort
         │   │   ├── Cast { cast_to: Float64, child: #0 }
         │   │   └── 0.0001(float)
 
-        └── PhysicalHashAgg
+        └── PhysicalStreamAgg
             ├── aggrs:Agg(Sum)
             │   └── Mul
             │       ├── #1
@@ -436,7 +436,7 @@ PhysicalProjection
 │   │   ├── 100(float)
 │   │   └── Cast { cast_to: Float64, child: #0 }
 │   └── Cast { cast_to: Float64, child: #1 }
-└── PhysicalHashAgg
+└── PhysicalStreamAgg
     ├── aggrs:
     │   ┌── Agg(Sum)
     │   │   └── Case
@@ -595,7 +595,7 @@ PhysicalSort
         │                   │       └── 8491(i64)
         │                   └── PhysicalProjection { exprs: [ #2, #5, #6, #10 ] }
         │                       └── PhysicalScan { table: lineitem }
-        └── PhysicalHashAgg
+        └── PhysicalStreamAgg
             ├── aggrs:Agg(Max)
             │   └── [ #0 ]
             ├── groups: []

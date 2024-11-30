@@ -1,10 +1,9 @@
 -- (no id or description)
 create table t1(t1v1 int, t1v2 int);
-insert into t2 values (0, 200), (3, 201), (2, 202);
+insert into t1 values (0, 200), (3, 201), (2, 202);
 
 /*
-Error
-Error during planning: table 'datafusion.public.t2' not found
+3
 */
 
 -- test order by passthrough
@@ -32,6 +31,9 @@ PhysicalSort
 ├── exprs:SortOrder { order: Asc }
 │   └── #0
 └── PhysicalScan { table: t1 }
+0 200
+2 202
+3 201
 group_id=!2
   subgoal_id=.19 winner=(Enforcer)24 weighted_cost=7908.754779315221 | (PhysicalSort !2 P3) goal=.22
     cost={compute=6908.754779315221,io=1000}
@@ -117,6 +119,9 @@ PhysicalSort
 ├── exprs:SortOrder { order: Asc }
 │   └── #0
 └── PhysicalScan { table: t1 }
+0 200
+2 202
+3 201
 */
 
 -- test order by passthrough
@@ -142,6 +147,9 @@ PhysicalSort
 │   └── SortOrder { order: Asc }
 │       └── #1
 └── PhysicalScan { table: t1 }
+0 200
+2 202
+3 201
 */
 
 -- test order by passthrough
@@ -170,5 +178,8 @@ PhysicalSort
     ├── exprs:SortOrder { order: Asc }
     │   └── #0
     └── PhysicalScan { table: t1 }
+0 200
+2 202
+3 201
 */
 

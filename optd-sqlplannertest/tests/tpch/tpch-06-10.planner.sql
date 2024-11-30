@@ -120,7 +120,7 @@ LogicalProjection { exprs: [ #0 ] }
         │       ├── Cast { cast_to: Decimal128(22, 2), child: #4 }
         │       └── Cast { cast_to: Decimal128(22, 2), child: 24(i64) }
         └── LogicalScan { table: lineitem }
-PhysicalHashAgg
+PhysicalStreamAgg
 ├── aggrs:Agg(Sum)
 │   └── Mul
 │       ├── #5
@@ -251,18 +251,18 @@ LogicalSort
                     │   │   └── LogicalScan { table: customer }
                     │   └── LogicalScan { table: nation }
                     └── LogicalScan { table: nation }
-PhysicalSort
-├── exprs:
-│   ┌── SortOrder { order: Asc }
-│   │   └── #0
-│   ├── SortOrder { order: Asc }
-│   │   └── #1
-│   └── SortOrder { order: Asc }
-│       └── #2
-└── PhysicalHashAgg
-    ├── aggrs:Agg(Sum)
-    │   └── [ #3 ]
-    ├── groups: [ #0, #1, #2 ]
+PhysicalStreamAgg
+├── aggrs:Agg(Sum)
+│   └── [ #3 ]
+├── groups: [ #0, #1, #2 ]
+└── PhysicalSort
+    ├── exprs:
+    │   ┌── SortOrder { order: Asc }
+    │   │   └── #0
+    │   ├── SortOrder { order: Asc }
+    │   │   └── #1
+    │   └── SortOrder { order: Asc }
+    │       └── #2
     └── PhysicalProjection
         ├── exprs:
         │   ┌── #41
@@ -597,16 +597,16 @@ LogicalSort
                     │   │   └── LogicalScan { table: partsupp }
                     │   └── LogicalScan { table: orders }
                     └── LogicalScan { table: nation }
-PhysicalSort
-├── exprs:
-│   ┌── SortOrder { order: Asc }
-│   │   └── #0
-│   └── SortOrder { order: Desc }
-│       └── #1
-└── PhysicalHashAgg
-    ├── aggrs:Agg(Sum)
-    │   └── [ #2 ]
-    ├── groups: [ #0, #1 ]
+PhysicalStreamAgg
+├── aggrs:Agg(Sum)
+│   └── [ #2 ]
+├── groups: [ #0, #1 ]
+└── PhysicalSort
+    ├── exprs:
+    │   ┌── SortOrder { order: Asc }
+    │   │   └── #0
+    │   └── SortOrder { order: Desc }
+    │       └── #1
     └── PhysicalProjection
         ├── exprs:
         │   ┌── #47
@@ -747,16 +747,16 @@ LogicalSort
                     │   │   └── LogicalScan { table: partsupp }
                     │   └── LogicalScan { table: orders }
                     └── LogicalScan { table: nation }
-PhysicalSort
-├── exprs:
-│   ┌── SortOrder { order: Asc }
-│   │   └── #0
-│   └── SortOrder { order: Desc }
-│       └── #1
-└── PhysicalHashAgg
-    ├── aggrs:Agg(Sum)
-    │   └── [ #2 ]
-    ├── groups: [ #0, #1 ]
+PhysicalStreamAgg
+├── aggrs:Agg(Sum)
+│   └── [ #2 ]
+├── groups: [ #0, #1 ]
+└── PhysicalSort
+    ├── exprs:
+    │   ┌── SortOrder { order: Asc }
+    │   │   └── #0
+    │   └── SortOrder { order: Desc }
+    │       └── #1
     └── PhysicalProjection
         ├── exprs:
         │   ┌── #47

@@ -19,13 +19,15 @@ use datafusion::physical_plan::joins::{CrossJoinExec, PartitionMode};
 use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_plan::{self, AggregateExpr, ExecutionPlan, PhysicalExpr};
 use datafusion::scalar::ScalarValue;
+use itertools::Itertools;
 use optd_core::nodes::{PlanNodeMetaMap, PlanNodeOrGroup};
 use optd_datafusion_repr::plan_nodes::{
     ArcDfPlanNode, ArcDfPredNode, BetweenPred, BinOpPred, BinOpType, CastPred, ColumnRefPred,
     ConstantPred, ConstantType, DfNodeType, DfPredType, DfReprPlanNode, DfReprPredNode, FuncPred,
     FuncType, InListPred, JoinType, LikePred, LogOpPred, LogOpType, PhysicalEmptyRelation,
     PhysicalFilter, PhysicalHashAgg, PhysicalHashJoin, PhysicalLimit, PhysicalNestedLoopJoin,
-    PhysicalProjection, PhysicalScan, PhysicalSort, SortOrderPred, SortOrderType,
+    PhysicalProjection, PhysicalScan, PhysicalSort, PhysicalStreamAgg, SortOrderPred,
+    SortOrderType,
 };
 use optd_datafusion_repr::properties::schema::Schema as OptdSchema;
 
@@ -383,7 +385,70 @@ impl OptdPlanContext<'_> {
     }
 
     #[async_recursion]
-    async fn conv_from_optd_agg(
+    async fn conv_from_optd_stream_agg(
+        &mut self,
+        node: PhysicalStreamAgg,
+        meta: &PlanNodeMetaMap,
+    ) -> Result<Arc<dyn ExecutionPlan + 'static>> {
+        let input_exec = self.conv_from_optd_plan_node(node.child(), meta).await?;
+        let agg_exprs = node
+            .aggrs()
+            .to_vec()
+            .into_iter()
+            .map(|expr| self.conv_from_optd_agg_expr(expr, &input_exec.schema()))
+            .collect::<Result<Vec<_>>>()?;
+        let group_exprs = node
+            .groups()
+            .to_vec()
+            .into_iter()
+            .map(|expr| {
+                Ok((
+                    Self::conv_from_optd_expr(expr, &input_exec.schema())?,
+                    "<agg_expr>".to_string(),
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let group_exprs = physical_plan::aggregates::PhysicalGroupBy::new_single(group_exprs);
+        let agg_num = agg_exprs.len();
+        let schema = input_exec.schema().clone();
+
+        let agg = Arc::new(
+            datafusion::physical_plan::aggregates::AggregateExec::try_new(
+                AggregateMode::Single,
+                group_exprs,
+                agg_exprs,
+                vec![None; agg_num],
+                vec![None; agg_num],
+                input_exec,
+                schema,
+            )?,
+        ) as Arc<dyn ExecutionPlan + 'static>;
+
+        let physical_exprs = node
+            .groups()
+            .to_vec()
+            .into_iter()
+            .enumerate()
+            .map(|(idx, _)| physical_expr::PhysicalSortExpr {
+                expr: Arc::new(datafusion::physical_plan::expressions::Column::new(
+                    "<expr>", idx,
+                )),
+                options: datafusion::arrow::compute::SortOptions {
+                    descending: false,
+                    nulls_first: true,
+                },
+            })
+            .collect_vec();
+        Ok(
+            Arc::new(datafusion::physical_plan::sorts::sort::SortExec::new(
+                physical_exprs,
+                agg,
+            )) as Arc<dyn ExecutionPlan + 'static>,
+        )
+    }
+
+    #[async_recursion]
+    async fn conv_from_optd_hash_agg(
         &mut self,
         node: PhysicalHashAgg,
         meta: &PlanNodeMetaMap,
@@ -561,8 +626,18 @@ impl OptdPlanContext<'_> {
                     .await?
             }
             DfNodeType::PhysicalHashAgg => {
-                self.conv_from_optd_agg(PhysicalHashAgg::from_plan_node(rel_node).unwrap(), meta)
-                    .await?
+                self.conv_from_optd_hash_agg(
+                    PhysicalHashAgg::from_plan_node(rel_node).unwrap(),
+                    meta,
+                )
+                .await?
+            }
+            DfNodeType::PhysicalStreamAgg => {
+                self.conv_from_optd_stream_agg(
+                    PhysicalStreamAgg::from_plan_node(rel_node).unwrap(),
+                    meta,
+                )
+                .await?
             }
             DfNodeType::PhysicalNestedLoopJoin(_) => {
                 self.conv_from_optd_nested_loop_join(

@@ -1,6 +1,6 @@
 - sql: |
     create table t1(t1v1 int, t1v2 int);
-    insert into t2 values (0, 200), (3, 201), (2, 202);
+    insert into t1 values (0, 200), (3, 201), (2, 202);
   tasks:
     - execute
 - sql: |

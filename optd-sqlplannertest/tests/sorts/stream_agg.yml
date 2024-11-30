@@ -1,0 +1,11 @@
+- sql: |
+    create table t1(t1v1 int, t1v2 int);
+    insert into t1 values (0, 200), (3, 201), (2, 202);
+  tasks:
+    - execute
+- sql: |
+    select * from (select t1v1, sum(t1v2) from (select * from t1 order by t1v1) group by t1v1) order by t1v1;
+  desc: test stream agg passthrough
+  tasks:
+    - explain:logical_optd,physical_optd
+    - execute[dump_memo_table]

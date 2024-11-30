@@ -18,8 +18,15 @@ impl SortPropertyBuilder {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub enum SortPropType {
+    AnySorted, // Only used as required prop, Asc/Desc all satisfies this
+    Asc,
+    Desc,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct SortProp(pub Vec<(SortOrderType, usize)>);
+pub struct SortProp(pub Vec<(SortPropType, usize)>);
 
 impl std::fmt::Display for SortProp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -56,11 +63,62 @@ impl SortProp {
     pub fn satisfies(prop: &SortProp, required: &SortProp) -> bool {
         // required should be a prefix of the current property
         for i in 0..required.0.len() {
-            if i >= prop.0.len() || prop.0[i] != required.0[i] {
+            if i >= prop.0.len() {
                 return false;
+            }
+            if prop.0[i].1 != required.0[i].1 {
+                return false;
+            }
+            match (prop.0[i].0, required.0[i].0) {
+                (SortPropType::AnySorted, SortPropType::AnySorted)
+                | (SortPropType::Asc, SortPropType::Asc)
+                | (SortPropType::Desc, SortPropType::Desc)
+                | (SortPropType::Asc, SortPropType::AnySorted)
+                | (SortPropType::Desc, SortPropType::AnySorted) => {}
+                (SortPropType::Asc, SortPropType::Desc)
+                | (SortPropType::Desc, SortPropType::Asc)
+                | (SortPropType::AnySorted, SortPropType::Asc)
+                | (SortPropType::AnySorted, SortPropType::Desc) => return false,
             }
         }
         true
+    }
+
+    fn from_sort_order_predicates(preds: ListPred) -> Option<Self> {
+        let mut columns = Vec::new();
+        for pred in preds.to_vec() {
+            let order = SortOrderPred::from_pred_node(pred).unwrap();
+            // TODO: return None in case we sort by an expression
+            let col_ref = ColumnRefPred::from_pred_node(order.child()).unwrap();
+            let order = match order.order() {
+                SortOrderType::Asc => SortPropType::Asc,
+                SortOrderType::Desc => SortPropType::Desc,
+            };
+            columns.push((order, col_ref.index()));
+        }
+        Some(SortProp(columns))
+    }
+
+    fn from_list_predicates(preds: ListPred, required: &SortProp) -> Option<Self> {
+        let mut columns = Vec::new();
+        let mut take_from_required = true;
+        for (idx, pred) in preds.to_vec().into_iter().enumerate() {
+            // TODO: return None in case we sort by an expression
+            let col_ref = ColumnRefPred::from_pred_node(pred).unwrap();
+            if idx >= required.0.len() {
+                take_from_required = false;
+            }
+            if take_from_required && col_ref.index() != required.0[idx].1 {
+                take_from_required = false;
+            }
+            let order_req = if take_from_required {
+                required.0[idx].0
+            } else {
+                SortPropType::AnySorted
+            };
+            columns.push((order_req, col_ref.index()));
+        }
+        Some(SortProp(columns))
     }
 }
 
@@ -75,15 +133,24 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
     ) -> Self::Prop {
         match typ {
             DfNodeType::PhysicalSort => {
-                // TODO: helper function for sort order predicate <-> sort prop
-                let mut columns = Vec::new();
-                let preds = ListPred::from_pred_node(predicates[0].clone()).unwrap();
-                for pred in preds.to_vec() {
-                    let order = SortOrderPred::from_pred_node(pred).unwrap();
-                    let col_ref = ColumnRefPred::from_pred_node(order.child()).unwrap();
-                    columns.push((order.order(), col_ref.index()));
+                match SortProp::from_sort_order_predicates(
+                    ListPred::from_pred_node(predicates[0].clone()).unwrap(),
+                ) {
+                    Some(prop) => prop,
+                    None => SortProp::any_order(),
                 }
-                SortProp(columns)
+            }
+            DfNodeType::PhysicalStreamAgg => {
+                // child props should at least satisfy the group by columns as we passthroughed them
+                let group_by_len = predicates[1].children.len();
+                let child_sorts = &children[0].borrow().0;
+                assert!(child_sorts.len() >= group_by_len);
+                let mut sorts = Vec::new();
+                // the output is always sorted by group by columns (0, 1, 2, ...)
+                for i in 0..predicates[1].children.len() {
+                    sorts.push((child_sorts[i].0, i));
+                }
+                SortProp(sorts)
             }
             DfNodeType::PhysicalFilter => children[0].borrow().clone(),
             DfNodeType::PhysicalHashJoin(_) => SortProp::any_order(),
@@ -108,21 +175,23 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
             DfNodeType::PhysicalScan | DfNodeType::PhysicalEmptyRelation => vec![],
             DfNodeType::PhysicalProjection => vec![SortProp::any_order()],
             DfNodeType::PhysicalSort => {
-                let mut columns = Vec::new();
-                let preds = ListPred::from_pred_node(predicates[0].clone()).unwrap();
-                for pred in preds.to_vec() {
-                    let order = SortOrderPred::from_pred_node(pred).unwrap();
-                    let col_ref = ColumnRefPred::from_pred_node(order.child()).unwrap();
-                    columns.push((order.order(), col_ref.index()));
+                let this_prop = SortProp::from_sort_order_predicates(
+                    ListPred::from_pred_node(predicates[0].clone()).unwrap(),
+                );
+                match this_prop {
+                    Some(this_prop) if self.satisfies(required, &this_prop) => {
+                        vec![this_prop]
+                    }
+                    _ => vec![SortProp::any_order()],
                 }
-                let this_prop = SortProp(columns);
-                if self.satisfies(required, &this_prop) {
-                    // If the required property satisfies the current property, we can
-                    // pass it through b/c this node is a no-op (is this correct...?)
-                    vec![this_prop]
-                } else {
-                    vec![SortProp::any_order()]
-                }
+            }
+            DfNodeType::PhysicalStreamAgg => {
+                let group_by = SortProp::from_list_predicates(
+                    ListPred::from_pred_node(predicates[1].clone()).unwrap(),
+                    required,
+                )
+                .unwrap();
+                vec![group_by]
             }
             _ if typ.is_logical() => unreachable!("logical node should not be called"),
             node => unimplemented!("passthrough for {:?}", node),
@@ -145,18 +214,12 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
     ) -> Option<Self::Prop> {
         match typ {
             DfNodeType::Sort => {
-                let mut columns = Vec::new();
-                let preds = ListPred::from_pred_node(predicates[0].clone()).unwrap();
-                for pred in preds.to_vec() {
-                    let order = SortOrderPred::from_pred_node(pred).unwrap();
-                    let col_ref = ColumnRefPred::from_pred_node(order.child()).unwrap();
-                    columns.push((order.order(), col_ref.index()));
-                }
-                let prop = SortProp(columns);
-                if SortProp::satisfies(&prop, required) {
-                    Some(prop)
-                } else {
-                    None
+                let prop = SortProp::from_sort_order_predicates(
+                    ListPred::from_pred_node(predicates[0].clone()).unwrap(),
+                );
+                match prop {
+                    Some(prop) if SortProp::satisfies(&prop, required) => Some(prop),
+                    _ => None,
                 }
             }
             _ => None,
@@ -166,8 +229,13 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
     fn enforce(&self, prop: &Self::Prop) -> (DfNodeType, Vec<ArcDfPredNode>) {
         let mut predicates = Vec::new();
         for (order, col_idx) in &prop.0 {
+            let order = match order {
+                SortPropType::Asc => SortOrderType::Asc,
+                SortPropType::Desc => SortOrderType::Desc,
+                SortPropType::AnySorted => SortOrderType::Asc,
+            };
             predicates.push(
-                SortOrderPred::new(*order, ColumnRefPred::new(*col_idx).into_pred_node())
+                SortOrderPred::new(order, ColumnRefPred::new(*col_idx).into_pred_node())
                     .into_pred_node(),
             );
         }

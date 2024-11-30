@@ -102,12 +102,17 @@ impl<O: Optimizer<DfNodeType>> Rule<DfNodeType, O> for PhysicalConversionRule {
                 vec![node.into()]
             }
             DfNodeType::Agg => {
-                let node = PlanNode {
+                let node1 = PlanNode {
                     typ: DfNodeType::PhysicalHashAgg,
+                    children: children.clone(),
+                    predicates: predicates.clone(),
+                };
+                let node2 = PlanNode {
+                    typ: DfNodeType::PhysicalStreamAgg,
                     children,
                     predicates,
                 };
-                vec![node.into()]
+                vec![node1.into(), node2.into()]
             }
             DfNodeType::EmptyRelation => {
                 let node = PlanNode {

@@ -87,13 +87,13 @@ LogicalSort
 └── LogicalProjection { exprs: [ #0, #1 ] }
     └── LogicalAgg { exprs: [], groups: [ #0, #1, #0, #1, #1 ] }
         └── LogicalScan { table: t1 }
-PhysicalSort
-├── exprs:
-│   ┌── SortOrder { order: Asc }
-│   │   └── #0
-│   └── SortOrder { order: Asc }
-│       └── #1
-└── PhysicalHashAgg { aggrs: [], groups: [ #0, #1 ] }
+PhysicalStreamAgg { aggrs: [], groups: [ #0, #1 ] }
+└── PhysicalSort
+    ├── exprs:
+    │   ┌── SortOrder { order: Asc }
+    │   │   └── #0
+    │   └── SortOrder { order: Asc }
+    │       └── #1
     └── PhysicalScan { table: t1 }
 0 0
 0 2

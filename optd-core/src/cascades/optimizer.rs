@@ -201,7 +201,8 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
         for group_id in self.memo.get_all_group_ids() {
             writeln!(buf, "group_id={}", group_id)?;
             for subgoal_id in self.memo.get_all_subgoal_ids(group_id) {
-                let winner_str = match &self.memo.get_group_winner(group_id, subgoal_id) {
+                let winner = self.memo.get_group_winner(group_id, subgoal_id);
+                let winner_str = match &winner {
                     Winner::Unknown => "winner=<unknown>".to_string(),
                     Winner::Full(winner) => {
                         let (winner_expr, winner_str) = match &winner.expr_id {
@@ -246,7 +247,28 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
                     .iter()
                     .enumerate()
                 {
-                    writeln!(buf, "    {}={}", property.property_name(), goal[id])?;
+                    writeln!(
+                        buf,
+                        "    (required) {}={}",
+                        property.property_name(),
+                        goal[id]
+                    )?;
+                }
+                if let Some(winner) = winner.as_full_winner() {
+                    for (id, property) in self
+                        .memo
+                        .get_physical_property_builders()
+                        .0
+                        .iter()
+                        .enumerate()
+                    {
+                        writeln!(
+                            buf,
+                            "    (derived) {}={}",
+                            property.property_name(),
+                            winner.derived_physical_properties[id]
+                        )?;
+                    }
                 }
             }
             let group = self.memo.get_group(group_id);

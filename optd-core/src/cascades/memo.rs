@@ -87,6 +87,8 @@ pub struct WinnerInfo {
     pub operation_cost: Cost,
     /// The statistics of the group.
     pub statistics: Arc<Statistics>,
+    /// The derived physical properties of this winner.
+    pub derived_physical_properties: Arc<[Box<dyn PhysicalProperty>]>,
 }
 
 #[derive(Clone)]

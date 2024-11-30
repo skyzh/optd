@@ -13,6 +13,7 @@ use crate::cascades::{
 };
 use crate::cost::{Cost, Statistics};
 use crate::nodes::{ArcPredNode, PlanNode, PlanNodeOrGroup};
+use crate::physical_property::PhysicalProperty;
 use crate::{nodes::NodeType, rules::RuleMatcher};
 
 pub struct TaskContext<'a, T: NodeType, M: Memo<T>> {
@@ -289,6 +290,7 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     fn gather_statistics_and_costs(
         &mut self,
         group_id: GroupId,
@@ -296,13 +298,19 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
         expr: &MemoPlanNode<T>,
         children_subgoal_ids: &[SubGoalId],
         predicates: &[ArcPredNode<T>],
-    ) -> (Vec<Option<Arc<Statistics>>>, Cost, Cost) {
+    ) -> (
+        Vec<Option<Arc<Statistics>>>,
+        Cost,
+        Cost,
+        Vec<Option<Arc<[Box<dyn PhysicalProperty>]>>>,
+    ) {
         let context = RelNodeContext {
             expr_id,
             group_id,
             children_group_ids: expr.children.clone(),
         };
         let mut input_stats = Vec::with_capacity(expr.children.len());
+        let mut input_props = Vec::with_capacity(expr.children.len());
         let mut input_cost = Vec::with_capacity(expr.children.len());
         let cost = self.optimizer.cost();
         #[allow(clippy::needless_range_loop)]
@@ -312,6 +320,7 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
                 .get_group_winner(expr.children[idx], children_subgoal_ids[idx])
                 .as_full_winner();
             input_stats.push(winner.map(|x| x.statistics.clone()));
+            input_props.push(winner.map(|x| x.derived_physical_properties.clone()));
             input_cost.push(
                 winner
                     .map(|x| x.total_cost.clone())
@@ -330,7 +339,7 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
             self.optimizer,
         );
         let total_cost = cost.sum(&operation_cost, &input_cost);
-        (input_stats, total_cost, operation_cost)
+        (input_stats, total_cost, operation_cost, input_props)
     }
 
     #[async_recursion]
@@ -414,6 +423,16 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
                     );
                     let total_cost =
                         cost_model.sum(&operation_cost, &[child_winner.total_cost.clone()]);
+                    let derived_physical_properties = self
+                        .optimizer
+                        .memo()
+                        .get_physical_property_builders()
+                        .derive_many(
+                            e_typ.clone(),
+                            &e_preds,
+                            &[child_winner.derived_physical_properties.clone()],
+                            1,
+                        );
                     // Assume enforcer doesn't change statistics
                     let winner_info = WinnerInfo {
                         expr_id: WinnerExpr::Enforcer {
@@ -425,6 +444,7 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
                         total_cost,
                         operation_cost,
                         statistics: child_winner.statistics.clone(),
+                        derived_physical_properties: derived_physical_properties.into(),
                     };
                     self.update_winner_if_better(group_id, subgoal_id, winner_info);
                 }
@@ -456,7 +476,7 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
 
         for (input_group_idx, _) in expr.children.iter().enumerate() {
             // Before optimizing each of the child, infer a current lower bound cost
-            let (_, total_cost, _) = self.gather_statistics_and_costs(
+            let (_, total_cost, _, _) = self.gather_statistics_and_costs(
                 group_id,
                 expr_id,
                 &expr,
@@ -508,13 +528,14 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
         }
 
         // Compute everything again
-        let (input_stats, total_cost, operation_cost) = self.gather_statistics_and_costs(
-            group_id,
-            expr_id,
-            &expr,
-            &children_subgoal_ids,
-            &predicates,
-        );
+        let (input_stats, total_cost, operation_cost, child_phys_props) = self
+            .gather_statistics_and_costs(
+                group_id,
+                expr_id,
+                &expr,
+                &children_subgoal_ids,
+                &predicates,
+            );
         let input_stats_ref = input_stats
             .iter()
             .map(|x| {
@@ -522,6 +543,10 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
                     .expect("stats should be available for full winners")
                     .as_ref()
             })
+            .collect_vec();
+        let child_phys_props = child_phys_props
+            .iter()
+            .map(|x| x.as_ref().expect("phys props should be available").as_ref())
             .collect_vec();
         let statistics = Arc::new(cost.derive_statistics(
             &expr.typ,
@@ -534,6 +559,16 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
             },
             self.optimizer,
         ));
+        let derived_physical_properties = self
+            .optimizer
+            .memo()
+            .get_physical_property_builders()
+            .derive_many(
+                expr.typ.clone(),
+                &predicates,
+                &child_phys_props,
+                expr.children.len(),
+            );
         let proposed_winner = WinnerInfo {
             expr_id: WinnerExpr::Expr { expr_id },
             total_cost: total_cost.clone(),
@@ -541,6 +576,7 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
             total_weighted_cost: cost.weighted_cost(&total_cost),
             operation_weighted_cost: cost.weighted_cost(&operation_cost),
             statistics,
+            derived_physical_properties: derived_physical_properties.into(),
         };
         self.update_winner_if_better(group_id, subgoal_id, proposed_winner);
         trace!(event = "task_finish", task = "optimize_inputs", subgoal_id = %subgoal_id, expr_id = %expr_id, result = "resolved");

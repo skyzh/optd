@@ -52,7 +52,7 @@ fn rewrite_extern_column_refs(
 define_rule!(
     DepInitialDistinct,
     apply_dep_initial_distinct,
-    (RawDepJoin(JoinType::Cross), left, right)
+    (RawDepJoin(JoinType::Inner), left, right)
 );
 
 /// Initial rule to generate a join above this dependent join, and push the dependent
@@ -81,13 +81,13 @@ fn apply_dep_initial_distinct(
         .map(|x| ExternColumnRefPred::from_pred_node(x).unwrap().index())
         .collect::<Vec<usize>>();
 
-    // If we have no correlated columns, just emit a cross join instead
+    // If we have no correlated columns, just emit a Inner join instead
     if correlated_col_indices.is_empty() {
         let new_join = LogicalJoin::new_unchecked(
             left,
             right,
             ConstantPred::bool(true).into_pred_node(),
-            JoinType::Cross,
+            JoinType::Inner,
         );
 
         return vec![new_join.into_plan_node().into()];
@@ -111,7 +111,7 @@ fn apply_dep_initial_distinct(
         right,
         cond,
         extern_cols,
-        JoinType::Cross,
+        JoinType::Inner,
     );
 
     // Our join condition is going to make sure that all of the correlated columns
@@ -161,7 +161,7 @@ fn apply_dep_initial_distinct(
 define_rule!(
     DepJoinPastProj,
     apply_dep_join_past_proj,
-    (DepJoin(JoinType::Cross), left, (Projection, right))
+    (DepJoin(JoinType::Inner), left, (Projection, right))
 );
 
 /// Pushes a dependent join past a projection node.
@@ -180,7 +180,7 @@ fn apply_dep_join_past_proj(
     let right = proj.child();
 
     // TODO: can we have external columns in projection node? I don't think so?
-    // Cross join should always have true cond
+    // Inner join should always have true cond
     assert!(cond == ConstantPred::bool(true).into_pred_node());
     let left_schema_len = optimizer.get_schema_of(left.clone()).len();
     let right_schema_len = optimizer.get_schema_of(right.clone()).len();
@@ -197,7 +197,7 @@ fn apply_dep_join_past_proj(
     );
 
     let new_dep_join =
-        DependentJoin::new_unchecked(left, right, cond, extern_cols, JoinType::Cross);
+        DependentJoin::new_unchecked(left, right, cond, extern_cols, JoinType::Inner);
     let new_proj = LogicalProjection::new(new_dep_join.into_plan_node(), new_proj_exprs);
 
     vec![new_proj.into_plan_node().into()]
@@ -206,7 +206,7 @@ fn apply_dep_join_past_proj(
 define_rule!(
     DepJoinPastFilter,
     apply_dep_join_past_filter,
-    (DepJoin(JoinType::Cross), left, (Filter, right))
+    (DepJoin(JoinType::Inner), left, (Filter, right))
 );
 
 /// Pushes a dependent join past a projection node.
@@ -225,7 +225,7 @@ fn apply_dep_join_past_filter(
     let right = filter.child();
     let filter_cond = filter.cond();
 
-    // Cross join should always have true cond
+    // Inner join should always have true cond
     assert!(cond == ConstantPred::bool(true).into_pred_node());
 
     let left_schema_len = optimizer.get_schema_of(left.clone()).len();
@@ -259,7 +259,7 @@ fn apply_dep_join_past_filter(
                 .map(|x| ExternColumnRefPred::new(x).into_pred_node())
                 .collect(),
         ),
-        JoinType::Cross,
+        JoinType::Inner,
     );
 
     let new_filter = LogicalFilter::new(new_dep_join.into_plan_node(), rewritten_expr);
@@ -270,7 +270,7 @@ fn apply_dep_join_past_filter(
 define_rule!(
     DepJoinPastAgg,
     apply_dep_join_past_agg,
-    (DepJoin(JoinType::Cross), left, (Agg, right))
+    (DepJoin(JoinType::Inner), left, (Agg, right))
 );
 
 /// Pushes a dependent join past an aggregation node
@@ -296,7 +296,7 @@ fn apply_dep_join_past_agg(
     let groups = agg.groups();
     let right = agg.child();
 
-    // Cross join should always have true cond
+    // Inner join should always have true cond
     assert!(cond == ConstantPred::bool(true).into_pred_node());
 
     // TODO: OUTER JOIN TRANSFORMATION
@@ -337,7 +337,7 @@ fn apply_dep_join_past_agg(
     );
 
     let new_dep_join =
-        DependentJoin::new_unchecked(left, right, cond, extern_cols, JoinType::Cross);
+        DependentJoin::new_unchecked(left, right, cond, extern_cols, JoinType::Inner);
 
     let new_agg = LogicalAgg::new(new_dep_join.into_plan_node(), new_exprs, new_groups);
 
@@ -349,7 +349,7 @@ fn apply_dep_join_past_agg(
 define_rule!(
     DepJoinEliminate,
     apply_dep_join_eliminate_at_scan, // TODO matching is all wrong
-    (DepJoin(JoinType::Cross), left, right)
+    (DepJoin(JoinType::Inner), left, right)
 );
 
 /// If we've gone all the way down to the scan node, we can swap the dependent join
@@ -363,7 +363,7 @@ fn apply_dep_join_eliminate_at_scan(
     let right = join.right();
     let cond = join.cond();
 
-    // Cross join should always have true cond
+    // Inner join should always have true cond
     assert!(cond == ConstantPred::bool(true).into_pred_node());
 
     fn inspect_pred(node: &ArcDfPredNode) -> bool {

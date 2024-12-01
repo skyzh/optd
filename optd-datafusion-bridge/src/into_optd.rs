@@ -55,7 +55,7 @@ impl OptdPlanContext<'_> {
                         })
                         .collect(),
                 ),
-                JoinType::Cross,
+                JoinType::Inner,
             );
             node = dep_join.into_plan_node();
         }
@@ -476,7 +476,7 @@ impl OptdPlanContext<'_> {
             left,
             right,
             ConstantPred::bool(true).into_pred_node(),
-            JoinType::Cross,
+            JoinType::Inner,
         ))
     }
 

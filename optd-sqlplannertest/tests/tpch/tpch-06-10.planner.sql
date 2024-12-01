@@ -240,11 +240,11 @@ LogicalSort
                 │   │           ├── #45
                 │   │           └── "FRANCE"
                 │   └── Between { child: #17, lower: Cast { cast_to: Date32, child: "1995-01-01" }, upper: Cast { cast_to: Date32, child: "1996-12-31" } }
-                └── LogicalJoin { join_type: Cross, cond: true }
-                    ├── LogicalJoin { join_type: Cross, cond: true }
-                    │   ├── LogicalJoin { join_type: Cross, cond: true }
-                    │   │   ├── LogicalJoin { join_type: Cross, cond: true }
-                    │   │   │   ├── LogicalJoin { join_type: Cross, cond: true }
+                └── LogicalJoin { join_type: Inner, cond: true }
+                    ├── LogicalJoin { join_type: Inner, cond: true }
+                    │   ├── LogicalJoin { join_type: Inner, cond: true }
+                    │   │   ├── LogicalJoin { join_type: Inner, cond: true }
+                    │   │   │   ├── LogicalJoin { join_type: Inner, cond: true }
                     │   │   │   │   ├── LogicalScan { table: supplier }
                     │   │   │   │   └── LogicalScan { table: lineitem }
                     │   │   │   └── LogicalScan { table: orders }
@@ -274,39 +274,50 @@ PhysicalStreamAgg
         │       └── Sub
         │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
         │           └── #13
-        └── PhysicalNestedLoopJoin
-            ├── join_type: Inner
+        └── PhysicalFilter
             ├── cond:And
+            │   ├── Eq
+            │   │   ├── #0
+            │   │   └── #9
+            │   ├── Eq
+            │   │   ├── #23
+            │   │   └── #7
+            │   ├── Eq
+            │   │   ├── #32
+            │   │   └── #24
+            │   ├── Eq
+            │   │   ├── #3
+            │   │   └── #40
             │   ├── Eq
             │   │   ├── #35
             │   │   └── #44
-            │   └── Or
-            │       ├── And
-            │       │   ├── Eq
-            │       │   │   ├── #41
-            │       │   │   └── "FRANCE"
-            │       │   └── Eq
-            │       │       ├── #45
-            │       │       └── "GERMANY"
-            │       └── And
-            │           ├── Eq
-            │           │   ├── #41
-            │           │   └── "GERMANY"
-            │           └── Eq
-            │               ├── #45
-            │               └── "FRANCE"
-            ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #3 ], right_keys: [ #0 ] }
-            │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #24 ], right_keys: [ #0 ] }
-            │   │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #7 ], right_keys: [ #0 ] }
-            │   │   │   ├── PhysicalProjection { exprs: [ #16, #17, #18, #19, #20, #21, #22, #0, #1, #2, #3, #4, #5, #6, #7, #8, #9, #10, #11, #12, #13, #14, #15 ] }
-            │   │   │   │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #2 ], right_keys: [ #0 ] }
-            │   │   │   │       ├── PhysicalFilter { cond: Between { child: #10, lower: Cast { cast_to: Date32, child: "1995-01-01" }, upper: Cast { cast_to: Date32, child: "1996-12-31" } } }
-            │   │   │   │       │   └── PhysicalScan { table: lineitem }
-            │   │   │   │       └── PhysicalScan { table: supplier }
-            │   │   │   └── PhysicalScan { table: orders }
-            │   │   └── PhysicalScan { table: customer }
-            │   └── PhysicalScan { table: nation }
-            └── PhysicalScan { table: nation }
+            │   ├── Or
+            │   │   ├── And
+            │   │   │   ├── Eq
+            │   │   │   │   ├── #41
+            │   │   │   │   └── "FRANCE"
+            │   │   │   └── Eq
+            │   │   │       ├── #45
+            │   │   │       └── "GERMANY"
+            │   │   └── And
+            │   │       ├── Eq
+            │   │       │   ├── #41
+            │   │       │   └── "GERMANY"
+            │   │       └── Eq
+            │   │           ├── #45
+            │   │           └── "FRANCE"
+            │   └── Between { child: #17, lower: Cast { cast_to: Date32, child: "1995-01-01" }, upper: Cast { cast_to: Date32, child: "1996-12-31" } }
+            └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                │   │   ├── PhysicalScan { table: supplier }
+                │   │   └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                │   │       ├── PhysicalScan { table: lineitem }
+                │   │       └── PhysicalScan { table: orders }
+                │   └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                │       ├── PhysicalScan { table: customer }
+                │       └── PhysicalScan { table: nation }
+                └── PhysicalScan { table: nation }
 */
 
 -- TPC-H Q8 without top-most limit node
@@ -411,13 +422,13 @@ LogicalSort
                 │   └── Eq
                 │       ├── #4
                 │       └── "ECONOMY ANODIZED STEEL"
-                └── LogicalJoin { join_type: Cross, cond: true }
-                    ├── LogicalJoin { join_type: Cross, cond: true }
-                    │   ├── LogicalJoin { join_type: Cross, cond: true }
-                    │   │   ├── LogicalJoin { join_type: Cross, cond: true }
-                    │   │   │   ├── LogicalJoin { join_type: Cross, cond: true }
-                    │   │   │   │   ├── LogicalJoin { join_type: Cross, cond: true }
-                    │   │   │   │   │   ├── LogicalJoin { join_type: Cross, cond: true }
+                └── LogicalJoin { join_type: Inner, cond: true }
+                    ├── LogicalJoin { join_type: Inner, cond: true }
+                    │   ├── LogicalJoin { join_type: Inner, cond: true }
+                    │   │   ├── LogicalJoin { join_type: Inner, cond: true }
+                    │   │   │   ├── LogicalJoin { join_type: Inner, cond: true }
+                    │   │   │   │   ├── LogicalJoin { join_type: Inner, cond: true }
+                    │   │   │   │   │   ├── LogicalJoin { join_type: Inner, cond: true }
                     │   │   │   │   │   │   ├── LogicalScan { table: part }
                     │   │   │   │   │   │   └── LogicalScan { table: supplier }
                     │   │   │   │   │   └── LogicalScan { table: lineitem }
@@ -488,13 +499,13 @@ PhysicalSort
                 │   └── Eq
                 │       ├── #4
                 │       └── "ECONOMY ANODIZED STEEL"
-                └── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
-                    ├── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
-                    │   ├── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
-                    │   │   ├── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
-                    │   │   │   ├── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
-                    │   │   │   │   ├── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
-                    │   │   │   │   │   ├── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
+                └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                    ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                    │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                    │   │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                    │   │   │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                    │   │   │   │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                    │   │   │   │   │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
                     │   │   │   │   │   │   ├── PhysicalScan { table: part }
                     │   │   │   │   │   │   └── PhysicalScan { table: supplier }
                     │   │   │   │   │   └── PhysicalScan { table: lineitem }
@@ -586,11 +597,11 @@ LogicalSort
                 │   │   ├── #12
                 │   │   └── #46
                 │   └── Like { expr: #1, pattern: "%green%", negated: false, case_insensitive: false }
-                └── LogicalJoin { join_type: Cross, cond: true }
-                    ├── LogicalJoin { join_type: Cross, cond: true }
-                    │   ├── LogicalJoin { join_type: Cross, cond: true }
-                    │   │   ├── LogicalJoin { join_type: Cross, cond: true }
-                    │   │   │   ├── LogicalJoin { join_type: Cross, cond: true }
+                └── LogicalJoin { join_type: Inner, cond: true }
+                    ├── LogicalJoin { join_type: Inner, cond: true }
+                    │   ├── LogicalJoin { join_type: Inner, cond: true }
+                    │   │   ├── LogicalJoin { join_type: Inner, cond: true }
+                    │   │   │   ├── LogicalJoin { join_type: Inner, cond: true }
                     │   │   │   │   ├── LogicalScan { table: part }
                     │   │   │   │   └── LogicalScan { table: supplier }
                     │   │   │   └── LogicalScan { table: lineitem }
@@ -642,11 +653,11 @@ PhysicalStreamAgg
             │   │   ├── #12
             │   │   └── #46
             │   └── Like { expr: #1, pattern: "%green%", negated: false, case_insensitive: false }
-            └── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
-                ├── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
-                │   ├── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
-                │   │   ├── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
-                │   │   │   ├── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
+            └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                │   │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                │   │   │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
                 │   │   │   │   ├── PhysicalScan { table: part }
                 │   │   │   │   └── PhysicalScan { table: supplier }
                 │   │   │   └── PhysicalScan { table: lineitem }
@@ -736,11 +747,11 @@ LogicalSort
                 │   │   ├── #12
                 │   │   └── #46
                 │   └── Like { expr: #1, pattern: "%green%", negated: false, case_insensitive: false }
-                └── LogicalJoin { join_type: Cross, cond: true }
-                    ├── LogicalJoin { join_type: Cross, cond: true }
-                    │   ├── LogicalJoin { join_type: Cross, cond: true }
-                    │   │   ├── LogicalJoin { join_type: Cross, cond: true }
-                    │   │   │   ├── LogicalJoin { join_type: Cross, cond: true }
+                └── LogicalJoin { join_type: Inner, cond: true }
+                    ├── LogicalJoin { join_type: Inner, cond: true }
+                    │   ├── LogicalJoin { join_type: Inner, cond: true }
+                    │   │   ├── LogicalJoin { join_type: Inner, cond: true }
+                    │   │   │   ├── LogicalJoin { join_type: Inner, cond: true }
                     │   │   │   │   ├── LogicalScan { table: part }
                     │   │   │   │   └── LogicalScan { table: supplier }
                     │   │   │   └── LogicalScan { table: lineitem }
@@ -792,11 +803,11 @@ PhysicalStreamAgg
             │   │   ├── #12
             │   │   └── #46
             │   └── Like { expr: #1, pattern: "%green%", negated: false, case_insensitive: false }
-            └── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
-                ├── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
-                │   ├── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
-                │   │   ├── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
-                │   │   │   ├── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
+            └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                │   │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                │   │   │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
                 │   │   │   │   ├── PhysicalScan { table: part }
                 │   │   │   │   └── PhysicalScan { table: supplier }
                 │   │   │   └── PhysicalScan { table: lineitem }
@@ -875,9 +886,9 @@ LogicalLimit { skip: 0(u64), fetch: 20(u64) }
                 │   └── Eq
                 │       ├── #3
                 │       └── #33
-                └── LogicalJoin { join_type: Cross, cond: true }
-                    ├── LogicalJoin { join_type: Cross, cond: true }
-                    │   ├── LogicalJoin { join_type: Cross, cond: true }
+                └── LogicalJoin { join_type: Inner, cond: true }
+                    ├── LogicalJoin { join_type: Inner, cond: true }
+                    │   ├── LogicalJoin { join_type: Inner, cond: true }
                     │   │   ├── LogicalScan { table: customer }
                     │   │   └── LogicalScan { table: orders }
                     │   └── LogicalScan { table: lineitem }
@@ -917,9 +928,9 @@ PhysicalLimit { skip: 0(u64), fetch: 20(u64) }
                 │   └── Eq
                 │       ├── #3
                 │       └── #33
-                └── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
-                    ├── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
-                    │   ├── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
+                └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                    ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                    │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
                     │   │   ├── PhysicalScan { table: customer }
                     │   │   └── PhysicalScan { table: orders }
                     │   └── PhysicalScan { table: lineitem }

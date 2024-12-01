@@ -104,7 +104,6 @@ impl DatafusionOptimizer {
             rule_wrappers.push(rule);
         }
         rule_wrappers.push(Arc::new(rules::FilterProjectTransposeRule::new()));
-        rule_wrappers.push(Arc::new(rules::FilterCrossJoinTransposeRule::new()));
         rule_wrappers.push(Arc::new(rules::FilterInnerJoinTransposeRule::new()));
         rule_wrappers.push(Arc::new(rules::FilterSortTransposeRule::new()));
         rule_wrappers.push(Arc::new(rules::FilterAggTransposeRule::new()));

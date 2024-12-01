@@ -43,7 +43,7 @@ LogicalProjection { exprs: [ #0, #1, #2, #3 ] }
     │   │   ├── #0
     │   │   └── #2
     │   └── false
-    └── LogicalJoin { join_type: Cross, cond: true }
+    └── LogicalJoin { join_type: Inner, cond: true }
         ├── LogicalScan { table: t1 }
         └── LogicalScan { table: t2 }
 PhysicalEmptyRelation { produce_one_row: false }
@@ -63,12 +63,13 @@ LogicalProjection { exprs: [ #0, #1, #2, #3 ] }
     │   │   ├── #0
     │   │   └── #3
     │   └── true
-    └── LogicalJoin { join_type: Cross, cond: true }
+    └── LogicalJoin { join_type: Inner, cond: true }
         ├── LogicalScan { table: t1 }
         └── LogicalScan { table: t2 }
-PhysicalHashJoin { join_type: Inner, left_keys: [ #0, #0 ], right_keys: [ #0, #1 ] }
-├── PhysicalScan { table: t1 }
-└── PhysicalScan { table: t2 }
+PhysicalProjection { exprs: [ #2, #3, #0, #1 ] }
+└── PhysicalHashJoin { join_type: Inner, left_keys: [ #0, #1 ], right_keys: [ #0, #0 ] }
+    ├── PhysicalScan { table: t2 }
+    └── PhysicalScan { table: t1 }
 */
 
 -- Test SimplifyFilterRule (skip true filter for and)
@@ -86,7 +87,7 @@ LogicalProjection { exprs: [ #0, #1, #2, #3 ] }
     │       │   ├── #0
     │       │   └── #3
     │       └── true
-    └── LogicalJoin { join_type: Cross, cond: true }
+    └── LogicalJoin { join_type: Inner, cond: true }
         ├── LogicalScan { table: t1 }
         └── LogicalScan { table: t2 }
 PhysicalFilter
@@ -97,7 +98,7 @@ PhysicalFilter
 │   └── Eq
 │       ├── #0
 │       └── #3
-└── PhysicalNestedLoopJoin { join_type: Cross, cond: true }
+└── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
     ├── PhysicalScan { table: t1 }
     └── PhysicalScan { table: t2 }
 0 0 0 200
@@ -119,10 +120,10 @@ LogicalProjection { exprs: [ #0, #1, #2, #3 ] }
     │   │   ├── #0
     │   │   └── #3
     │   └── true
-    └── LogicalJoin { join_type: Cross, cond: true }
+    └── LogicalJoin { join_type: Inner, cond: true }
         ├── LogicalScan { table: t1 }
         └── LogicalScan { table: t2 }
-PhysicalNestedLoopJoin { join_type: Cross, cond: true }
+PhysicalNestedLoopJoin { join_type: Inner, cond: true }
 ├── PhysicalScan { table: t1 }
 └── PhysicalScan { table: t2 }
 0 0 0 200
@@ -153,12 +154,13 @@ LogicalProjection { exprs: [ #0, #1, #2, #3 ] }
     │       └── Eq
     │           ├── #0
     │           └── #2
-    └── LogicalJoin { join_type: Cross, cond: true }
+    └── LogicalJoin { join_type: Inner, cond: true }
         ├── LogicalScan { table: t1 }
         └── LogicalScan { table: t2 }
-PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
-├── PhysicalScan { table: t1 }
-└── PhysicalScan { table: t2 }
+PhysicalProjection { exprs: [ #2, #3, #0, #1 ] }
+└── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
+    ├── PhysicalScan { table: t2 }
+    └── PhysicalScan { table: t1 }
 0 0 0 200
 1 1 1 201
 2 2 2 202
@@ -254,7 +256,7 @@ LogicalProjection { exprs: [ #0, #1, #2, #3 ] }
     │   └── true
     ├── LogicalScan { table: t1 }
     └── LogicalScan { table: t2 }
-PhysicalNestedLoopJoin { join_type: Cross, cond: true }
+PhysicalNestedLoopJoin { join_type: Inner, cond: true }
 ├── PhysicalScan { table: t1 }
 └── PhysicalScan { table: t2 }
 0 0 0 200

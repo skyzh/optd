@@ -15,7 +15,7 @@ use datafusion::physical_expr;
 use datafusion::physical_plan::aggregates::AggregateMode;
 use datafusion::physical_plan::expressions::create_aggregate_expr;
 use datafusion::physical_plan::joins::utils::{ColumnIndex, JoinFilter};
-use datafusion::physical_plan::joins::{CrossJoinExec, PartitionMode};
+use datafusion::physical_plan::joins::PartitionMode;
 use datafusion::physical_plan::projection::ProjectionExec;
 use datafusion::physical_plan::{self, AggregateExpr, ExecutionPlan, PhysicalExpr};
 use datafusion::scalar::ScalarValue;
@@ -512,11 +512,6 @@ impl OptdPlanContext<'_> {
 
         let physical_expr =
             Self::conv_from_optd_expr(node.cond(), &Arc::new(filter_schema.clone()))?;
-
-        if let JoinType::Cross = node.join_type() {
-            return Ok(Arc::new(CrossJoinExec::new(left_exec, right_exec))
-                as Arc<dyn ExecutionPlan + 'static>);
-        }
 
         let join_type = match node.join_type() {
             JoinType::Inner => datafusion::logical_expr::JoinType::Inner,

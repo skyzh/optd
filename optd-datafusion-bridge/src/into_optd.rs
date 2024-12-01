@@ -11,10 +11,10 @@ use datafusion_expr::Subquery;
 use optd_core::nodes::PredNode;
 use optd_datafusion_repr::plan_nodes::{
     ArcDfPlanNode, ArcDfPredNode, BetweenPred, BinOpPred, BinOpType, CastPred, ColumnRefPred,
-    ConstantPred, DfReprPlanNode, DfReprPredNode, ExternColumnRefPred, FuncPred, FuncType,
-    InListPred, JoinType, LikePred, ListPred, LogOpPred, LogOpType, LogicalAgg,
+    ConstantPred, DependentJoin, DfReprPlanNode, DfReprPredNode, ExternColumnRefPred, FuncPred,
+    FuncType, InListPred, JoinType, LikePred, ListPred, LogOpPred, LogOpType, LogicalAgg,
     LogicalEmptyRelation, LogicalFilter, LogicalJoin, LogicalLimit, LogicalProjection, LogicalScan,
-    LogicalSort, RawDependentJoin, SortOrderPred, SortOrderType,
+    LogicalSort, SortOrderPred, SortOrderType,
 };
 use optd_datafusion_repr::properties::schema::Schema as OptdSchema;
 
@@ -34,7 +34,7 @@ impl OptdPlanContext<'_> {
         } in subqueries.iter()
         {
             let subquery_root = self.conv_into_optd_plan_node(subquery, Some(input_schema))?;
-            let dep_join = RawDependentJoin::new(
+            let dep_join = DependentJoin::new(
                 node,
                 subquery_root,
                 ConstantPred::bool(true).into_pred_node(),

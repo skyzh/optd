@@ -175,9 +175,7 @@ impl LogicalPropertyBuilder<DfNodeType> for SchemaPropertyBuilder {
             DfNodeType::Projection => Self::derive_for_predicate(predicates[0].clone()),
             DfNodeType::Filter | DfNodeType::Limit | DfNodeType::Sort => children[0].clone(),
             DfNodeType::PhysicalSort => children[0].clone(), // TODO: fix this after revisiting memo table
-            DfNodeType::RawDepJoin(join_type)
-            | DfNodeType::Join(join_type)
-            | DfNodeType::DepJoin(join_type) => {
+            DfNodeType::Join(join_type) | DfNodeType::DepJoin(join_type) => {
                 use crate::plan_nodes::JoinType::*;
                 match join_type {
                     Inner | LeftOuter | RightOuter | FullOuter => {

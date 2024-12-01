@@ -3,6 +3,7 @@
 // Use of this source code is governed by an MIT-style license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
+use itertools::Itertools;
 use optd_core::nodes::{PlanNodeOrGroup, PredNode};
 // TODO: No push past join
 // TODO: Sideways information passing??
@@ -10,10 +11,9 @@ use optd_core::optimizer::Optimizer;
 use optd_core::rules::{Rule, RuleMatcher};
 
 use crate::plan_nodes::{
-    ArcDfPlanNode, ArcDfPredNode, BinOpPred, BinOpType, ColumnRefPred, ConstantPred, DependentJoin,
-    DfNodeType, DfPredType, DfReprPlanNode, DfReprPredNode, ExternColumnRefPred, JoinType,
-    ListPred, LogOpPred, LogOpType, LogicalAgg, LogicalFilter, LogicalJoin, LogicalProjection,
-    PredExt, RawDependentJoin,
+    ArcDfPlanNode, ArcDfPredNode, ColumnRefPred, ConstantPred, DependentJoin, DfNodeType,
+    DfPredType, DfReprPlanNode, DfReprPredNode, ExternColumnRefPred, JoinType, ListPred,
+    LogicalAgg, LogicalFilter, LogicalJoin, LogicalProjection, PredExt,
 };
 use crate::rules::macros::define_rule;
 use crate::OptimizerExt;
@@ -47,115 +47,6 @@ fn rewrite_extern_column_refs(
         }
         .into(),
     )
-}
-
-define_rule!(
-    DepInitialDistinct,
-    apply_dep_initial_distinct,
-    (RawDepJoin(JoinType::Inner), left, right)
-);
-
-/// Initial rule to generate a join above this dependent join, and push the dependent
-/// join further into the right side.
-/// This is valuable because the left side of the dependent join will be a set, with only distinct
-/// values. This makes later transformations valid, and has to happen first.
-/// More information can be found in the "Unnesting Arbitrary Queries" paper.
-fn apply_dep_initial_distinct(
-    optimizer: &impl Optimizer<DfNodeType>,
-    binding: ArcDfPlanNode,
-) -> Vec<PlanNodeOrGroup<DfNodeType>> {
-    let join = RawDependentJoin::from_plan_node(binding).unwrap();
-    let left = join.left();
-    let right = join.right();
-    let cond = join.cond();
-    let extern_cols = join.extern_cols();
-
-    assert!(cond == ConstantPred::bool(true).into_pred_node());
-
-    let left_schema_size = optimizer.get_schema_of(left.clone()).len();
-    let right_schema_size = optimizer.get_schema_of(right.clone()).len();
-
-    let correlated_col_indices = extern_cols
-        .to_vec()
-        .into_iter()
-        .map(|x| ExternColumnRefPred::from_pred_node(x).unwrap().index())
-        .collect::<Vec<usize>>();
-
-    // If we have no correlated columns, just emit a Inner join instead
-    if correlated_col_indices.is_empty() {
-        let new_join = LogicalJoin::new_unchecked(
-            left,
-            right,
-            ConstantPred::bool(true).into_pred_node(),
-            JoinType::Inner,
-        );
-
-        return vec![new_join.into_plan_node().into()];
-    }
-
-    // An aggregate node that groups by all correlated columns allows us to
-    // effectively get the domain
-    let distinct_agg_node = LogicalAgg::new_unchecked(
-        left.clone(),
-        ListPred::new(vec![]),
-        ListPred::new(
-            correlated_col_indices
-                .iter()
-                .map(|x| ColumnRefPred::new(*x).into_pred_node())
-                .collect(),
-        ),
-    );
-
-    let new_dep_join = DependentJoin::new_unchecked(
-        distinct_agg_node.into_plan_node(),
-        right,
-        cond,
-        extern_cols,
-        JoinType::Inner,
-    );
-
-    // Our join condition is going to make sure that all of the correlated columns
-    // in the right side are equal to their equivalent columns in the left side.
-    // (they will have the same index, just shifted over)
-    let join_cond = LogOpPred::new(
-        LogOpType::And,
-        (0..correlated_col_indices.len())
-            .map(|i| {
-                assert!(i + left_schema_size < left_schema_size + right_schema_size);
-                BinOpPred::new(
-                    ColumnRefPred::new(i).into_pred_node(),
-                    ColumnRefPred::new(i + left_schema_size).into_pred_node(),
-                    BinOpType::Eq,
-                )
-                .into_pred_node()
-            })
-            .collect(),
-    );
-
-    let new_join = LogicalJoin::new_unchecked(
-        left,
-        new_dep_join.into_plan_node(),
-        join_cond.into_pred_node(),
-        JoinType::Inner,
-    );
-
-    // Ensure that the schema above the new_join is the same as it was before
-    // for correctness (Project the left side of the new join,
-    // plus the *right side of the right side*)
-    let new_proj = LogicalProjection::new(
-        new_join.into_plan_node(),
-        ListPred::new(
-            (0..left_schema_size)
-                .chain(
-                    (left_schema_size + correlated_col_indices.len())
-                        ..(left_schema_size + correlated_col_indices.len() + right_schema_size),
-                )
-                .map(|x| ColumnRefPred::new(x).into_pred_node())
-                .collect(),
-        ),
-    );
-
-    vec![new_proj.into_plan_node().into()]
 }
 
 define_rule!(
@@ -283,7 +174,7 @@ define_rule!(
 /// TODO: the outer join is not implemented yet, so some edge cases won't work.
 ///       Run SQList tests to catch these, I guess.
 fn apply_dep_join_past_agg(
-    _optimizer: &impl Optimizer<DfNodeType>,
+    optimizer: &impl Optimizer<DfNodeType>,
     binding: ArcDfPlanNode,
 ) -> Vec<PlanNodeOrGroup<DfNodeType>> {
     let join = DependentJoin::from_plan_node(binding).unwrap();
@@ -295,34 +186,27 @@ fn apply_dep_join_past_agg(
     let exprs = agg.exprs();
     let groups = agg.groups();
     let right = agg.child();
+    let left_schema = optimizer.get_schema_of(left.clone());
 
     // Inner join should always have true cond
     assert!(cond == ConstantPred::bool(true).into_pred_node());
 
-    // TODO: OUTER JOIN TRANSFORMATION
-
-    let correlated_col_indices = extern_cols
-        .to_vec()
+    let left_col_indices = left_schema
+        .fields
         .into_iter()
-        .map(|x| {
-            ColumnRefPred::new(ExternColumnRefPred::from_pred_node(x).unwrap().index())
-                .into_pred_node()
-        })
+        .enumerate()
+        .map(|(idx, _)| ColumnRefPred::new(idx).into_pred_node())
         .collect::<Vec<_>>();
 
     let new_groups = ListPred::new(
-        groups
-            .to_vec()
+        left_col_indices
+            .clone()
             .into_iter()
-            .map(|x| {
-                x.rewrite_column_refs(|col| Some(col + correlated_col_indices.len()))
-                    .unwrap()
-            })
-            .chain(correlated_col_indices.iter().map(|x| {
-                x.rewrite_column_refs(|col| Some(col + correlated_col_indices.len()))
+            .chain(groups.to_vec().into_iter().map(|x| {
+                x.rewrite_column_refs(|col| Some(col + left_col_indices.len()))
                     .unwrap()
             }))
-            .collect(),
+            .collect_vec(),
     );
 
     let new_exprs = ListPred::new(
@@ -330,11 +214,14 @@ fn apply_dep_join_past_agg(
             .to_vec()
             .into_iter()
             .map(|x| {
-                x.rewrite_column_refs(|col| Some(col + correlated_col_indices.len()))
+                x.rewrite_column_refs(|col| Some(col + left_col_indices.len()))
                     .unwrap()
             })
             .collect(),
     );
+
+    // TODO: agg expr needs to be rewritten to ensure null is handled correctly
+    // TODO: we should use a primary key from the left side
 
     let new_dep_join =
         DependentJoin::new_unchecked(left, right, cond, extern_cols, JoinType::Inner);
@@ -399,6 +286,7 @@ fn apply_dep_join_eliminate_at_scan(
             ConstantPred::bool(true).into_pred_node(),
             JoinType::Inner,
         );
+
         vec![new_join.into_plan_node().into()]
     } else {
         vec![]

@@ -66,10 +66,9 @@ LogicalProjection { exprs: [ #0, #1, #2, #3 ] }
     └── LogicalJoin { join_type: Inner, cond: true }
         ├── LogicalScan { table: t1 }
         └── LogicalScan { table: t2 }
-PhysicalProjection { exprs: [ #2, #3, #0, #1 ] }
-└── PhysicalHashJoin { join_type: Inner, left_keys: [ #0, #1 ], right_keys: [ #0, #0 ] }
-    ├── PhysicalScan { table: t2 }
-    └── PhysicalScan { table: t1 }
+PhysicalHashJoin { join_type: Inner, left_keys: [ #0, #0 ], right_keys: [ #0, #1 ] }
+├── PhysicalScan { table: t1 }
+└── PhysicalScan { table: t2 }
 */
 
 -- Test SimplifyFilterRule (skip true filter for and)
@@ -157,10 +156,9 @@ LogicalProjection { exprs: [ #0, #1, #2, #3 ] }
     └── LogicalJoin { join_type: Inner, cond: true }
         ├── LogicalScan { table: t1 }
         └── LogicalScan { table: t2 }
-PhysicalProjection { exprs: [ #2, #3, #0, #1 ] }
-└── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
-    ├── PhysicalScan { table: t2 }
-    └── PhysicalScan { table: t1 }
+PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
+├── PhysicalScan { table: t1 }
+└── PhysicalScan { table: t2 }
 0 0 0 200
 1 1 1 201
 2 2 2 202

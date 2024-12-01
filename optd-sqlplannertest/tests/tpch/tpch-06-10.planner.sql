@@ -274,50 +274,38 @@ PhysicalStreamAgg
         │       └── Sub
         │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
         │           └── #13
-        └── PhysicalFilter
+        └── PhysicalNestedLoopJoin
+            ├── join_type: Inner
             ├── cond:And
-            │   ├── Eq
-            │   │   ├── #0
-            │   │   └── #9
-            │   ├── Eq
-            │   │   ├── #23
-            │   │   └── #7
-            │   ├── Eq
-            │   │   ├── #32
-            │   │   └── #24
-            │   ├── Eq
-            │   │   ├── #3
-            │   │   └── #40
             │   ├── Eq
             │   │   ├── #35
             │   │   └── #44
-            │   ├── Or
-            │   │   ├── And
-            │   │   │   ├── Eq
-            │   │   │   │   ├── #41
-            │   │   │   │   └── "FRANCE"
-            │   │   │   └── Eq
-            │   │   │       ├── #45
-            │   │   │       └── "GERMANY"
-            │   │   └── And
-            │   │       ├── Eq
-            │   │       │   ├── #41
-            │   │       │   └── "GERMANY"
-            │   │       └── Eq
-            │   │           ├── #45
-            │   │           └── "FRANCE"
-            │   └── Between { child: #17, lower: Cast { cast_to: Date32, child: "1995-01-01" }, upper: Cast { cast_to: Date32, child: "1996-12-31" } }
-            └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                │   │   ├── PhysicalScan { table: supplier }
-                │   │   └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                │   │       ├── PhysicalScan { table: lineitem }
-                │   │       └── PhysicalScan { table: orders }
-                │   └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                │       ├── PhysicalScan { table: customer }
-                │       └── PhysicalScan { table: nation }
-                └── PhysicalScan { table: nation }
+            │   └── Or
+            │       ├── And
+            │       │   ├── Eq
+            │       │   │   ├── #41
+            │       │   │   └── "FRANCE"
+            │       │   └── Eq
+            │       │       ├── #45
+            │       │       └── "GERMANY"
+            │       └── And
+            │           ├── Eq
+            │           │   ├── #41
+            │           │   └── "GERMANY"
+            │           └── Eq
+            │               ├── #45
+            │               └── "FRANCE"
+            ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #3 ], right_keys: [ #0 ] }
+            │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #24 ], right_keys: [ #0 ] }
+            │   │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #7 ], right_keys: [ #0 ] }
+            │   │   │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #2 ] }
+            │   │   │   │   ├── PhysicalScan { table: supplier }
+            │   │   │   │   └── PhysicalFilter { cond: Between { child: #10, lower: Cast { cast_to: Date32, child: "1995-01-01" }, upper: Cast { cast_to: Date32, child: "1996-12-31" } } }
+            │   │   │   │       └── PhysicalScan { table: lineitem }
+            │   │   │   └── PhysicalScan { table: orders }
+            │   │   └── PhysicalScan { table: customer }
+            │   └── PhysicalScan { table: nation }
+            └── PhysicalScan { table: nation }
 */
 
 -- TPC-H Q8 without top-most limit node
@@ -469,50 +457,29 @@ PhysicalSort
             │   │       ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
             │   │       └── #22
             │   └── #54
-            └── PhysicalFilter
-                ├── cond:And
-                │   ├── Eq
-                │   │   ├── #0
-                │   │   └── #17
-                │   ├── Eq
-                │   │   ├── #9
-                │   │   └── #18
-                │   ├── Eq
-                │   │   ├── #16
-                │   │   └── #32
-                │   ├── Eq
-                │   │   ├── #33
-                │   │   └── #41
-                │   ├── Eq
-                │   │   ├── #44
-                │   │   └── #49
-                │   ├── Eq
-                │   │   ├── #51
-                │   │   └── #57
-                │   ├── Eq
-                │   │   ├── #58
-                │   │   └── "AMERICA"
-                │   ├── Eq
-                │   │   ├── #12
-                │   │   └── #53
-                │   ├── Between { child: #36, lower: Cast { cast_to: Date32, child: "1995-01-01" }, upper: Cast { cast_to: Date32, child: "1996-12-31" } }
-                │   └── Eq
-                │       ├── #4
-                │       └── "ECONOMY ANODIZED STEEL"
-                └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                    ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                    │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                    │   │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                    │   │   │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                    │   │   │   │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                    │   │   │   │   │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                    │   │   │   │   │   │   ├── PhysicalScan { table: part }
-                    │   │   │   │   │   │   └── PhysicalScan { table: supplier }
-                    │   │   │   │   │   └── PhysicalScan { table: lineitem }
-                    │   │   │   │   └── PhysicalScan { table: orders }
-                    │   │   │   └── PhysicalScan { table: customer }
-                    │   │   └── PhysicalScan { table: nation }
-                    │   └── PhysicalScan { table: nation }
+            └── PhysicalHashJoin { join_type: Inner, left_keys: [ #51 ], right_keys: [ #0 ] }
+                ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #12 ], right_keys: [ #0 ] }
+                │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #44 ], right_keys: [ #0 ] }
+                │   │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #33 ], right_keys: [ #0 ] }
+                │   │   │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #16 ], right_keys: [ #0 ] }
+                │   │   │   │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #0, #9 ], right_keys: [ #1, #2 ] }
+                │   │   │   │   │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                │   │   │   │   │   │   ├── PhysicalFilter
+                │   │   │   │   │   │   │   ├── cond:Eq
+                │   │   │   │   │   │   │   │   ├── #4
+                │   │   │   │   │   │   │   │   └── "ECONOMY ANODIZED STEEL"
+                │   │   │   │   │   │   │   └── PhysicalScan { table: part }
+                │   │   │   │   │   │   └── PhysicalScan { table: supplier }
+                │   │   │   │   │   └── PhysicalScan { table: lineitem }
+                │   │   │   │   └── PhysicalFilter { cond: Between { child: #4, lower: Cast { cast_to: Date32, child: "1995-01-01" }, upper: Cast { cast_to: Date32, child: "1996-12-31" } } }
+                │   │   │   │       └── PhysicalScan { table: orders }
+                │   │   │   └── PhysicalScan { table: customer }
+                │   │   └── PhysicalScan { table: nation }
+                │   └── PhysicalScan { table: nation }
+                └── PhysicalFilter
+                    ├── cond:Eq
+                    │   ├── #1
+                    │   └── "AMERICA"
                     └── PhysicalScan { table: region }
 */
 
@@ -632,38 +599,18 @@ PhysicalStreamAgg
         │       └── Mul
         │           ├── #35
         │           └── #20
-        └── PhysicalFilter
-            ├── cond:And
-            │   ├── Eq
-            │   │   ├── #9
-            │   │   └── #18
-            │   ├── Eq
-            │   │   ├── #33
-            │   │   └── #18
-            │   ├── Eq
-            │   │   ├── #32
-            │   │   └── #17
-            │   ├── Eq
-            │   │   ├── #0
-            │   │   └── #17
-            │   ├── Eq
-            │   │   ├── #37
-            │   │   └── #16
-            │   ├── Eq
-            │   │   ├── #12
-            │   │   └── #46
-            │   └── Like { expr: #1, pattern: "%green%", negated: false, case_insensitive: false }
-            └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                │   │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                │   │   │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                │   │   │   │   ├── PhysicalScan { table: part }
-                │   │   │   │   └── PhysicalScan { table: supplier }
-                │   │   │   └── PhysicalScan { table: lineitem }
-                │   │   └── PhysicalScan { table: partsupp }
-                │   └── PhysicalScan { table: orders }
-                └── PhysicalScan { table: nation }
+        └── PhysicalHashJoin { join_type: Inner, left_keys: [ #12 ], right_keys: [ #0 ] }
+            ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #16 ], right_keys: [ #0 ] }
+            │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #18, #17 ], right_keys: [ #1, #0 ] }
+            │   │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #9, #0 ], right_keys: [ #2, #1 ] }
+            │   │   │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+            │   │   │   │   ├── PhysicalFilter { cond: Like { expr: #1, pattern: "%green%", negated: false, case_insensitive: false } }
+            │   │   │   │   │   └── PhysicalScan { table: part }
+            │   │   │   │   └── PhysicalScan { table: supplier }
+            │   │   │   └── PhysicalScan { table: lineitem }
+            │   │   └── PhysicalScan { table: partsupp }
+            │   └── PhysicalScan { table: orders }
+            └── PhysicalScan { table: nation }
 */
 
 -- TPC-H Q9
@@ -782,38 +729,18 @@ PhysicalStreamAgg
         │       └── Mul
         │           ├── #35
         │           └── #20
-        └── PhysicalFilter
-            ├── cond:And
-            │   ├── Eq
-            │   │   ├── #9
-            │   │   └── #18
-            │   ├── Eq
-            │   │   ├── #33
-            │   │   └── #18
-            │   ├── Eq
-            │   │   ├── #32
-            │   │   └── #17
-            │   ├── Eq
-            │   │   ├── #0
-            │   │   └── #17
-            │   ├── Eq
-            │   │   ├── #37
-            │   │   └── #16
-            │   ├── Eq
-            │   │   ├── #12
-            │   │   └── #46
-            │   └── Like { expr: #1, pattern: "%green%", negated: false, case_insensitive: false }
-            └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                │   │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                │   │   │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                │   │   │   │   ├── PhysicalScan { table: part }
-                │   │   │   │   └── PhysicalScan { table: supplier }
-                │   │   │   └── PhysicalScan { table: lineitem }
-                │   │   └── PhysicalScan { table: partsupp }
-                │   └── PhysicalScan { table: orders }
-                └── PhysicalScan { table: nation }
+        └── PhysicalHashJoin { join_type: Inner, left_keys: [ #12 ], right_keys: [ #0 ] }
+            ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #16 ], right_keys: [ #0 ] }
+            │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #18, #17 ], right_keys: [ #1, #0 ] }
+            │   │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #9, #0 ], right_keys: [ #2, #1 ] }
+            │   │   │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+            │   │   │   │   ├── PhysicalFilter { cond: Like { expr: #1, pattern: "%green%", negated: false, case_insensitive: false } }
+            │   │   │   │   │   └── PhysicalScan { table: part }
+            │   │   │   │   └── PhysicalScan { table: supplier }
+            │   │   │   └── PhysicalScan { table: lineitem }
+            │   │   └── PhysicalScan { table: partsupp }
+            │   └── PhysicalScan { table: orders }
+            └── PhysicalScan { table: nation }
 */
 
 -- TPC-H Q10
@@ -906,34 +833,26 @@ PhysicalLimit { skip: 0(u64), fetch: 20(u64) }
             │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
             │           └── #23
             ├── groups: [ #0, #1, #5, #4, #34, #2, #7 ]
-            └── PhysicalFilter
-                ├── cond:And
-                │   ├── Eq
-                │   │   ├── #0
-                │   │   └── #9
-                │   ├── Eq
-                │   │   ├── #17
-                │   │   └── #8
-                │   ├── Geq
-                │   │   ├── #12
-                │   │   └── Cast { cast_to: Date32, child: "1993-07-01" }
-                │   ├── Lt
-                │   │   ├── #12
-                │   │   └── Add
-                │   │       ├── Cast { cast_to: Date32, child: "1993-07-01" }
-                │   │       └── INTERVAL_MONTH_DAY_NANO (3, 0, 0)
-                │   ├── Eq
-                │   │   ├── #25
-                │   │   └── "R"
-                │   └── Eq
-                │       ├── #3
-                │       └── #33
-                └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                    ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                    │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                    │   │   ├── PhysicalScan { table: customer }
-                    │   │   └── PhysicalScan { table: orders }
-                    │   └── PhysicalScan { table: lineitem }
-                    └── PhysicalScan { table: nation }
+            └── PhysicalHashJoin { join_type: Inner, left_keys: [ #3 ], right_keys: [ #0 ] }
+                ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #8 ], right_keys: [ #0 ] }
+                │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #1 ] }
+                │   │   ├── PhysicalScan { table: customer }
+                │   │   └── PhysicalFilter
+                │   │       ├── cond:And
+                │   │       │   ├── Geq
+                │   │       │   │   ├── #4
+                │   │       │   │   └── Cast { cast_to: Date32, child: "1993-07-01" }
+                │   │       │   └── Lt
+                │   │       │       ├── #4
+                │   │       │       └── Add
+                │   │       │           ├── Cast { cast_to: Date32, child: "1993-07-01" }
+                │   │       │           └── INTERVAL_MONTH_DAY_NANO (3, 0, 0)
+                │   │       └── PhysicalScan { table: orders }
+                │   └── PhysicalFilter
+                │       ├── cond:Eq
+                │       │   ├── #8
+                │       │   └── "R"
+                │       └── PhysicalScan { table: lineitem }
+                └── PhysicalScan { table: nation }
 */
 

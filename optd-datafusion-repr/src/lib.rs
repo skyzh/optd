@@ -86,11 +86,10 @@ impl DatafusionOptimizer {
             Arc::new(rules::EliminateLimitRule::new()),
             Arc::new(rules::EliminateDuplicatedSortExprRule::new()),
             Arc::new(rules::EliminateDuplicatedAggExprRule::new()),
-            Arc::new(rules::DepJoinEliminate::new()),
-            Arc::new(rules::DepInitialDistinct::new()),
             Arc::new(rules::DepJoinPastProj::new()),
             Arc::new(rules::DepJoinPastFilter::new()),
             Arc::new(rules::DepJoinPastAgg::new()),
+            Arc::new(rules::DepJoinEliminate::new()),
             Arc::new(rules::ProjectMergeRule::new()),
             Arc::new(rules::FilterMergeRule::new()),
         ]
@@ -108,8 +107,8 @@ impl DatafusionOptimizer {
         rule_wrappers.push(Arc::new(rules::FilterSortTransposeRule::new()));
         rule_wrappers.push(Arc::new(rules::FilterAggTransposeRule::new()));
         rule_wrappers.push(Arc::new(rules::HashJoinRule::new()));
-        rule_wrappers.push(Arc::new(rules::JoinCommuteRule::new()));
-        rule_wrappers.push(Arc::new(rules::JoinAssocRule::new()));
+        // rule_wrappers.push(Arc::new(rules::JoinCommuteRule::new()));
+        // rule_wrappers.push(Arc::new(rules::JoinAssocRule::new()));
         rule_wrappers.push(Arc::new(rules::ProjectionPullUpJoin::new()));
         rule_wrappers.push(Arc::new(rules::EliminateProjectRule::new()));
         rule_wrappers.push(Arc::new(rules::ProjectMergeRule::new()));

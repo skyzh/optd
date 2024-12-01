@@ -20,6 +20,4 @@ pub use filter_pushdown::*;
 pub use joins::*;
 pub use physical::PhysicalConversionRule;
 pub use project_transpose::*;
-pub use subquery::{
-    DepInitialDistinct, DepJoinEliminate, DepJoinPastAgg, DepJoinPastFilter, DepJoinPastProj,
-};
+pub use subquery::*;

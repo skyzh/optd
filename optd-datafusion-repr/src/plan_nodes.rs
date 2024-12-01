@@ -39,7 +39,7 @@ use pretty_xmlish::{Pretty, PrettyConfig};
 pub use projection::{LogicalProjection, PhysicalProjection};
 pub use scan::{LogicalScan, PhysicalScan};
 pub use sort::{LogicalSort, PhysicalSort};
-pub use subquery::{DependentJoin, RawDependentJoin}; // Add missing import
+pub use subquery::DependentJoin; // Add missing import
 
 use crate::explain::{explain_plan_node, explain_pred_node};
 
@@ -77,7 +77,6 @@ pub enum DfNodeType {
     Filter,
     Scan,
     Join(JoinType),
-    RawDepJoin(JoinType),
     DepJoin(JoinType),
     Sort,
     Agg,

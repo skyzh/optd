@@ -13,7 +13,7 @@ use crate::plan_nodes::{
     LogicalEmptyRelation, LogicalFilter, LogicalJoin, LogicalLimit, LogicalProjection, LogicalScan,
     LogicalSort, PhysicalEmptyRelation, PhysicalFilter, PhysicalHashAgg, PhysicalHashJoin,
     PhysicalLimit, PhysicalNestedLoopJoin, PhysicalProjection, PhysicalScan, PhysicalSort,
-    PhysicalStreamAgg, RawDependentJoin, SortOrderPred, UnOpPred,
+    PhysicalStreamAgg, SortOrderPred, UnOpPred,
 };
 
 pub trait Insertable<'a> {
@@ -72,9 +72,6 @@ pub fn explain_plan_node(
 ) -> Pretty<'static> {
     match node.typ {
         DfNodeType::Join(_) => LogicalJoin::from_plan_node(node).unwrap().explain(meta_map),
-        DfNodeType::RawDepJoin(_) => RawDependentJoin::from_plan_node(node)
-            .unwrap()
-            .explain(meta_map),
         DfNodeType::DepJoin(_) => DependentJoin::from_plan_node(node)
             .unwrap()
             .explain(meta_map),

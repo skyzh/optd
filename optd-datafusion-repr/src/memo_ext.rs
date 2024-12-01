@@ -50,7 +50,7 @@ fn enumerate_join_order_expr_inner<M: Memo<DfNodeType> + ?Sized>(
                 .as_str();
             vec![LogicalJoinOrder::Table(table)]
         }
-        DfNodeType::Join(_) | DfNodeType::DepJoin(_) | DfNodeType::RawDepJoin(_) => {
+        DfNodeType::Join(_) | DfNodeType::DepJoin(_) => {
             // Assume child 0 == left, child 1 == right
             let left = expr.children[0];
             let right = expr.children[1];

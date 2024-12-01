@@ -451,9 +451,7 @@ impl LogicalPropertyBuilder<DfNodeType> for ColumnRefPropertyBuilder {
                 GroupColumnRefs::new(column_refs, child.output_correlation.clone())
             }
             // Should account for all physical join types.
-            DfNodeType::Join(join_type)
-            | DfNodeType::RawDepJoin(join_type)
-            | DfNodeType::DepJoin(join_type) => {
+            DfNodeType::Join(join_type) | DfNodeType::DepJoin(join_type) => {
                 // Concatenate left and right children column refs.
                 let column_refs = Self::concat_children_col_refs(&children[0..2]);
                 // Merge the equal columns of two children as input correlation.

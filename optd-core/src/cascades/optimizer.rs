@@ -164,6 +164,13 @@ impl<T: NodeType> CascadesOptimizer<T, NaiveMemo<T>> {
     /// Clear the winner so that the optimizer can continue to explore the group.
     pub fn step_clear_winner(&mut self) {
         self.memo.clear_winner();
+        self.explored_group.clear();
+        self.explored_expr.clear();
+    }
+
+    /// Clear the explored groups so that the optimizer can continue to apply the rules.
+    pub fn step_next_stage(&mut self) {
+        self.explored_group.clear();
         self.explored_expr.clear();
     }
 }

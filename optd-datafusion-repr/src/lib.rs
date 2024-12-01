@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use cost::{AdaptiveCostModel, RuntimeAdaptionStorage};
+use itertools::Itertools;
 pub use memo_ext::{LogicalJoinOrder, MemoExt};
 use optd_core::cascades::{CascadesOptimizer, GroupId, NaiveMemo, OptimizerProperties};
 use optd_core::cost::CostModel;
@@ -18,7 +19,7 @@ use optd_core::logical_property::LogicalPropertyBuilderAny;
 use optd_core::nodes::PlanNodeMetaMap;
 pub use optd_core::nodes::Value;
 use optd_core::optimizer::Optimizer;
-use optd_core::physical_property::PhysicalPropertyBuilderAny;
+use optd_core::physical_property::{PhysicalProperty, PhysicalPropertyBuilderAny};
 use optd_core::rules::Rule;
 pub use optimizer_ext::OptimizerExt;
 use plan_nodes::{ArcDfPlanNode, DfNodeType};
@@ -95,8 +96,7 @@ impl DatafusionOptimizer {
         ]
     }
 
-    pub fn default_cascades_rules() -> Vec<Arc<dyn Rule<DfNodeType, CascadesOptimizer<DfNodeType>>>>
-    {
+    pub fn all_cascades_rules() -> Vec<Arc<dyn Rule<DfNodeType, CascadesOptimizer<DfNodeType>>>> {
         let rules = rules::PhysicalConversionRule::all_conversions();
         let mut rule_wrappers = vec![];
         for rule in rules {
@@ -107,8 +107,6 @@ impl DatafusionOptimizer {
         rule_wrappers.push(Arc::new(rules::FilterSortTransposeRule::new()));
         rule_wrappers.push(Arc::new(rules::FilterAggTransposeRule::new()));
         rule_wrappers.push(Arc::new(rules::HashJoinRule::new()));
-        // rule_wrappers.push(Arc::new(rules::JoinCommuteRule::new()));
-        // rule_wrappers.push(Arc::new(rules::JoinAssocRule::new()));
         rule_wrappers.push(Arc::new(rules::ProjectionPullUpJoin::new()));
         rule_wrappers.push(Arc::new(rules::EliminateProjectRule::new()));
         rule_wrappers.push(Arc::new(rules::ProjectMergeRule::new()));
@@ -116,7 +114,16 @@ impl DatafusionOptimizer {
         rule_wrappers.push(Arc::new(rules::EliminateJoinRule::new()));
         rule_wrappers.push(Arc::new(rules::EliminateFilterRule::new()));
         rule_wrappers.push(Arc::new(rules::ProjectFilterTransposeRule::new()));
+        rule_wrappers.push(Arc::new(rules::JoinCommuteRule::new()));
+        rule_wrappers.push(Arc::new(rules::JoinAssocRule::new()));
         rule_wrappers
+    }
+
+    pub fn stage2_cascades_rules() -> Vec<&'static str> {
+        let mut rules = Vec::<Arc<dyn Rule<DfNodeType, CascadesOptimizer<DfNodeType>>>>::new();
+        rules.push(Arc::new(rules::JoinCommuteRule::new()));
+        rules.push(Arc::new(rules::JoinAssocRule::new()));
+        rules.iter().map(|x| x.name()).collect_vec()
     }
 
     /// Create an optimizer with partial explore (otherwise it's too slow).
@@ -132,7 +139,7 @@ impl DatafusionOptimizer {
         cost_model: impl CostModel<DfNodeType, NaiveMemo<DfNodeType>>,
         runtime_map: RuntimeAdaptionStorage,
     ) -> Self {
-        let cascades_rules = Self::default_cascades_rules();
+        let cascades_rules = Self::all_cascades_rules();
         let heuristic_rules = Self::default_heuristic_rules();
         let logical_property_builders: Arc<[Box<dyn LogicalPropertyBuilderAny<DfNodeType>>]> =
             Arc::new([
@@ -231,9 +238,32 @@ impl DatafusionOptimizer {
             self.cascades_optimizer.step_clear();
         }
 
+        let required_props = &[&SortProp::any_order() as &dyn PhysicalProperty];
+
+        for disable_rule in Self::stage2_cascades_rules() {
+            for (idx, current_rule) in self.cascades_optimizer.rules().iter().enumerate() {
+                if current_rule.name() == disable_rule {
+                    self.cascades_optimizer.disable_rule(idx);
+                }
+            }
+        }
+
+        self.cascades_optimizer
+            .step_optimize_rel(root_rel.clone(), required_props)?;
+
+        for disable_rule in Self::stage2_cascades_rules() {
+            for (idx, current_rule) in self.cascades_optimizer.rules().iter().enumerate() {
+                if current_rule.name() == disable_rule {
+                    self.cascades_optimizer.enable_rule(idx);
+                }
+            }
+        }
+
+        self.cascades_optimizer.step_next_stage();
+
         let (group_id, subgoal_id) = self
             .cascades_optimizer
-            .step_optimize_rel(root_rel, &[&SortProp::any_order()])?;
+            .step_optimize_rel(root_rel, required_props)?;
 
         let mut meta = Some(HashMap::new());
         let optimized_rel = self

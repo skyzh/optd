@@ -72,15 +72,9 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
         }
         self.optimizer.mark_group_explored(group_id, subgoal_id);
 
-        let winner = self.optimizer.get_group_winner(group_id, subgoal_id);
-        if winner.has_full_winner() {
-            trace!(
-                event = "task_finish",
-                task = "optimize_group",
-                outcome = "winner decided"
-            );
-            return;
-        }
+        // The Columbia optimizer will stop if we have a full winner, but given that we implement
+        // 2-stage optimization, we will continue to optimize the group even if we have a full winner.
+
         let exprs = self.optimizer.get_all_exprs_in_group(group_id);
         // First, optimize all physical expressions
         for &expr_id in &exprs {
@@ -291,8 +285,7 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
         }
 
         if self.optimizer.is_rule_disabled(rule_id) {
-            self.optimizer.mark_rule_fired(expr_id, rule_id);
-            trace!(event = "task_begin", task = "apply_rule", expr_id = %expr_id, subgoal_id = %subgoal_id, exploring = %exploring, outcome = "rule disabled");
+            trace!(event = "task_end", task = "apply_rule", expr_id = %expr_id, subgoal_id = %subgoal_id, exploring = %exploring, outcome = "rule disabled");
             return;
         }
 

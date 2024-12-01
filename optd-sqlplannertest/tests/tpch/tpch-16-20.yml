@@ -106,7 +106,7 @@
         );
   desc: TPC-H Q17
   tasks:
-    - explain[use_df_logical]:logical_optd,physical_optd
+    - explain:logical_optd,physical_optd
 - sql: |
     SELECT
         sum(l_extendedprice* (1 - l_discount)) as revenue

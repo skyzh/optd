@@ -122,127 +122,100 @@ LogicalSort
 ├── exprs:SortOrder { order: Desc }
 │   └── #1
 └── LogicalProjection { exprs: [ #0, #1 ] }
-    └── LogicalJoin
-        ├── join_type: Inner
+    └── LogicalFilter
         ├── cond:Gt
         │   ├── Cast { cast_to: Decimal128(38, 15), child: #1 }
         │   └── #2
-        ├── LogicalAgg
-        │   ├── exprs:Agg(Sum)
-        │   │   └── Mul
-        │   │       ├── #2
-        │   │       └── Cast { cast_to: Decimal128(10, 0), child: #1 }
-        │   ├── groups: [ #0 ]
-        │   └── LogicalProjection { exprs: [ #0, #1, #2 ] }
-        │       └── LogicalJoin
-        │           ├── join_type: Inner
-        │           ├── cond:Eq
-        │           │   ├── #3
-        │           │   └── #4
-        │           ├── LogicalProjection { exprs: [ #0, #2, #3, #5 ] }
-        │           │   └── LogicalJoin
-        │           │       ├── join_type: Inner
-        │           │       ├── cond:Eq
-        │           │       │   ├── #1
-        │           │       │   └── #4
-        │           │       ├── LogicalProjection { exprs: [ #0, #1, #2, #3 ] }
-        │           │       │   └── LogicalScan { table: partsupp }
-        │           │       └── LogicalProjection { exprs: [ #0, #3 ] }
-        │           │           └── LogicalScan { table: supplier }
-        │           └── LogicalProjection { exprs: [ #0 ] }
-        │               └── LogicalFilter
-        │                   ├── cond:Eq
-        │                   │   ├── #1
-        │                   │   └── "CHINA"
-        │                   └── LogicalProjection { exprs: [ #0, #1 ] }
-        │                       └── LogicalScan { table: nation }
-        └── LogicalProjection
-            ├── exprs:Cast
-            │   ├── cast_to: Decimal128(38, 15)
-            │   ├── child:Mul
-            │   │   ├── Cast { cast_to: Float64, child: #0 }
-            │   │   └── 0.0001(float)
+        └── DependentJoin { join_type: Inner, cond: true, extern_cols: [] }
+            ├── LogicalAgg
+            │   ├── exprs:Agg(Sum)
+            │   │   └── Mul
+            │   │       ├── #3
+            │   │       └── Cast { cast_to: Decimal128(10, 0), child: #2 }
+            │   ├── groups: [ #0 ]
+            │   └── LogicalFilter
+            │       ├── cond:And
+            │       │   ├── Eq
+            │       │   │   ├── #1
+            │       │   │   └── #5
+            │       │   ├── Eq
+            │       │   │   ├── #8
+            │       │   │   └── #12
+            │       │   └── Eq
+            │       │       ├── #13
+            │       │       └── "CHINA"
+            │       └── LogicalJoin { join_type: Inner, cond: true }
+            │           ├── LogicalJoin { join_type: Inner, cond: true }
+            │           │   ├── LogicalScan { table: partsupp }
+            │           │   └── LogicalScan { table: supplier }
+            │           └── LogicalScan { table: nation }
+            └── LogicalProjection
+                ├── exprs:Cast
+                │   ├── cast_to: Decimal128(38, 15)
+                │   ├── child:Mul
+                │   │   ├── Cast { cast_to: Float64, child: #0 }
+                │   │   └── 0.0001(float)
 
-            └── LogicalAgg
-                ├── exprs:Agg(Sum)
-                │   └── Mul
-                │       ├── #1
-                │       └── Cast { cast_to: Decimal128(10, 0), child: #0 }
-                ├── groups: []
-                └── LogicalProjection { exprs: [ #0, #1 ] }
-                    └── LogicalJoin
-                        ├── join_type: Inner
-                        ├── cond:Eq
-                        │   ├── #2
-                        │   └── #3
-                        ├── LogicalProjection { exprs: [ #1, #2, #4 ] }
-                        │   └── LogicalJoin
-                        │       ├── join_type: Inner
-                        │       ├── cond:Eq
-                        │       │   ├── #0
-                        │       │   └── #3
-                        │       ├── LogicalProjection { exprs: [ #1, #2, #3 ] }
-                        │       │   └── LogicalScan { table: partsupp }
-                        │       └── LogicalProjection { exprs: [ #0, #3 ] }
-                        │           └── LogicalScan { table: supplier }
-                        └── LogicalProjection { exprs: [ #0 ] }
-                            └── LogicalFilter
-                                ├── cond:Eq
-                                │   ├── #1
-                                │   └── "CHINA"
-                                └── LogicalProjection { exprs: [ #0, #1 ] }
-                                    └── LogicalScan { table: nation }
+                └── LogicalAgg
+                    ├── exprs:Agg(Sum)
+                    │   └── Mul
+                    │       ├── #3
+                    │       └── Cast { cast_to: Decimal128(10, 0), child: #2 }
+                    ├── groups: []
+                    └── LogicalFilter
+                        ├── cond:And
+                        │   ├── Eq
+                        │   │   ├── #1
+                        │   │   └── #5
+                        │   ├── Eq
+                        │   │   ├── #8
+                        │   │   └── #12
+                        │   └── Eq
+                        │       ├── #13
+                        │       └── "CHINA"
+                        └── LogicalJoin { join_type: Inner, cond: true }
+                            ├── LogicalJoin { join_type: Inner, cond: true }
+                            │   ├── LogicalScan { table: partsupp }
+                            │   └── LogicalScan { table: supplier }
+                            └── LogicalScan { table: nation }
 PhysicalSort
 ├── exprs:SortOrder { order: Desc }
 │   └── #1
-└── PhysicalNestedLoopJoin
-    ├── join_type: Inner
+└── PhysicalFilter
     ├── cond:Gt
     │   ├── Cast { cast_to: Decimal128(38, 15), child: #1 }
     │   └── #2
-    ├── PhysicalHashAgg
-    │   ├── aggrs:Agg(Sum)
-    │   │   └── Mul
-    │   │       ├── #2
-    │   │       └── Cast { cast_to: Decimal128(10, 0), child: #1 }
-    │   ├── groups: [ #0 ]
-    │   └── PhysicalProjection { exprs: [ #0, #2, #3 ] }
-    │       └── PhysicalHashJoin { join_type: Inner, left_keys: [ #6 ], right_keys: [ #0 ] }
-    │           ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ] }
-    │           │   ├── PhysicalScan { table: partsupp }
-    │           │   └── PhysicalProjection { exprs: [ #0, #3 ] }
-    │           │       └── PhysicalScan { table: supplier }
-    │           └── PhysicalProjection { exprs: [ #0 ] }
-    │               └── PhysicalFilter
-    │                   ├── cond:Eq
-    │                   │   ├── #1
-    │                   │   └── "CHINA"
-    │                   └── PhysicalScan { table: nation }
-    └── PhysicalProjection
-        ├── exprs:Cast
-        │   ├── cast_to: Decimal128(38, 15)
-        │   ├── child:Mul
-        │   │   ├── Cast { cast_to: Float64, child: #0 }
-        │   │   └── 0.0001(float)
-
-        └── PhysicalStreamAgg
-            ├── aggrs:Agg(Sum)
-            │   └── Mul
-            │       ├── #1
-            │       └── Cast { cast_to: Decimal128(10, 0), child: #0 }
-            ├── groups: []
-            └── PhysicalProjection { exprs: [ #2, #3 ] }
-                └── PhysicalHashJoin { join_type: Inner, left_keys: [ #6 ], right_keys: [ #0 ] }
-                    ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ] }
-                    │   ├── PhysicalScan { table: partsupp }
-                    │   └── PhysicalProjection { exprs: [ #0, #3 ] }
-                    │       └── PhysicalScan { table: supplier }
-                    └── PhysicalProjection { exprs: [ #0 ] }
-                        └── PhysicalFilter
-                            ├── cond:Eq
-                            │   ├── #1
-                            │   └── "CHINA"
-                            └── PhysicalScan { table: nation }
+    └── PhysicalHashAgg
+        ├── aggrs:Agg(Sum)
+        │   └── Mul
+        │       ├── #5
+        │       └── Cast { cast_to: Decimal128(10, 0), child: #4 }
+        ├── groups: [ #0, #1 ]
+        └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+            ├── PhysicalHashAgg
+            │   ├── aggrs:Agg(Sum)
+            │   │   └── Mul
+            │   │       ├── #3
+            │   │       └── Cast { cast_to: Decimal128(10, 0), child: #2 }
+            │   ├── groups: [ #0 ]
+            │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #8 ], right_keys: [ #0 ] }
+            │       ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ] }
+            │       │   ├── PhysicalScan { table: partsupp }
+            │       │   └── PhysicalScan { table: supplier }
+            │       └── PhysicalFilter
+            │           ├── cond:Eq
+            │           │   ├── #1
+            │           │   └── "CHINA"
+            │           └── PhysicalScan { table: nation }
+            └── PhysicalHashJoin { join_type: Inner, left_keys: [ #8 ], right_keys: [ #0 ] }
+                ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ] }
+                │   ├── PhysicalScan { table: partsupp }
+                │   └── PhysicalScan { table: supplier }
+                └── PhysicalFilter
+                    ├── cond:Eq
+                    │   ├── #1
+                    │   └── "CHINA"
+                    └── PhysicalScan { table: nation }
 */
 
 -- TPC-H Q12
@@ -506,111 +479,121 @@ ORDER BY
 LogicalSort
 ├── exprs:SortOrder { order: Asc }
 │   └── #0
-└── LogicalProjection { exprs: [ #0, #1, #2, #3, #4 ] }
-    └── LogicalJoin
-        ├── join_type: Inner
-        ├── cond:Eq
-        │   ├── #4
-        │   └── #5
-        ├── LogicalProjection { exprs: [ #0, #1, #2, #3, #5 ] }
-        │   └── LogicalJoin
-        │       ├── join_type: Inner
-        │       ├── cond:Eq
-        │       │   ├── #0
-        │       │   └── #4
-        │       ├── LogicalProjection { exprs: [ #0, #1, #2, #4 ] }
-        │       │   └── LogicalScan { table: supplier }
-        │       └── LogicalProjection { exprs: [ #0, #1 ] }
-        │           └── LogicalAgg
-        │               ├── exprs:Agg(Sum)
-        │               │   └── Mul
-        │               │       ├── #1
-        │               │       └── Sub
-        │               │           ├── 1(float)
-        │               │           └── #2
-        │               ├── groups: [ #0 ]
-        │               └── LogicalProjection { exprs: [ #0, #1, #2 ] }
-        │                   └── LogicalFilter
-        │                       ├── cond:And
-        │                       │   ├── Geq
-        │                       │   │   ├── #3
-        │                       │   │   └── 8401(i64)
-        │                       │   └── Lt
-        │                       │       ├── #3
-        │                       │       └── 8491(i64)
-        │                       └── LogicalProjection { exprs: [ #2, #5, #6, #10 ] }
-        │                           └── LogicalScan { table: lineitem }
-        └── LogicalAgg
-            ├── exprs:Agg(Max)
-            │   └── [ #0 ]
-            ├── groups: []
-            └── LogicalProjection { exprs: [ #1 ] }
+└── LogicalProjection { exprs: [ #0, #1, #2, #4, #8 ] }
+    └── LogicalFilter
+        ├── cond:And
+        │   ├── Eq
+        │   │   ├── #0
+        │   │   └── #7
+        │   └── Eq
+        │       ├── #8
+        │       └── #9
+        └── DependentJoin { join_type: Inner, cond: true, extern_cols: [] }
+            ├── LogicalJoin { join_type: Inner, cond: true }
+            │   ├── LogicalScan { table: supplier }
+            │   └── LogicalProjection { exprs: [ #0, #1 ] }
+            │       └── LogicalProjection { exprs: [ #0, #1 ] }
+            │           └── LogicalAgg
+            │               ├── exprs:Agg(Sum)
+            │               │   └── Mul
+            │               │       ├── #5
+            │               │       └── Sub
+            │               │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
+            │               │           └── #6
+            │               ├── groups: [ #2 ]
+            │               └── LogicalFilter
+            │                   ├── cond:And
+            │                   │   ├── Geq
+            │                   │   │   ├── #10
+            │                   │   │   └── Cast { cast_to: Date32, child: "1993-01-01" }
+            │                   │   └── Lt
+            │                   │       ├── #10
+            │                   │       └── Add
+            │                   │           ├── Cast { cast_to: Date32, child: "1993-01-01" }
+            │                   │           └── INTERVAL_MONTH_DAY_NANO (3, 0, 0)
+            │                   └── LogicalScan { table: lineitem }
+            └── LogicalProjection { exprs: [ #0 ] }
                 └── LogicalAgg
-                    ├── exprs:Agg(Sum)
-                    │   └── Mul
-                    │       ├── #1
-                    │       └── Sub
-                    │           ├── 1(float)
-                    │           └── #2
-                    ├── groups: [ #0 ]
-                    └── LogicalProjection { exprs: [ #0, #1, #2 ] }
-                        └── LogicalFilter
-                            ├── cond:And
-                            │   ├── Geq
-                            │   │   ├── #3
-                            │   │   └── 8401(i64)
-                            │   └── Lt
-                            │       ├── #3
-                            │       └── 8491(i64)
-                            └── LogicalProjection { exprs: [ #2, #5, #6, #10 ] }
-                                └── LogicalScan { table: lineitem }
+                    ├── exprs:Agg(Max)
+                    │   └── [ #1 ]
+                    ├── groups: []
+                    └── LogicalProjection { exprs: [ #0, #1 ] }
+                        └── LogicalProjection { exprs: [ #0, #1 ] }
+                            └── LogicalAgg
+                                ├── exprs:Agg(Sum)
+                                │   └── Mul
+                                │       ├── #5
+                                │       └── Sub
+                                │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
+                                │           └── #6
+                                ├── groups: [ #2 ]
+                                └── LogicalFilter
+                                    ├── cond:And
+                                    │   ├── Geq
+                                    │   │   ├── #10
+                                    │   │   └── Cast { cast_to: Date32, child: "1993-01-01" }
+                                    │   └── Lt
+                                    │       ├── #10
+                                    │       └── Add
+                                    │           ├── Cast { cast_to: Date32, child: "1993-01-01" }
+                                    │           └── INTERVAL_MONTH_DAY_NANO (3, 0, 0)
+                                    └── LogicalScan { table: lineitem }
 PhysicalSort
 ├── exprs:SortOrder { order: Asc }
 │   └── #0
 └── PhysicalProjection { exprs: [ #0, #1, #2, #4, #8 ] }
-    └── PhysicalHashJoin { join_type: Inner, left_keys: [ #8 ], right_keys: [ #0 ] }
-        ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
-        │   ├── PhysicalScan { table: supplier }
-        │   └── PhysicalHashAgg
-        │       ├── aggrs:Agg(Sum)
-        │       │   └── Mul
-        │       │       ├── #1
-        │       │       └── Sub
-        │       │           ├── 1(float)
-        │       │           └── #2
-        │       ├── groups: [ #0 ]
-        │       └── PhysicalProjection { exprs: [ #2, #5, #6 ] }
-        │           └── PhysicalFilter
-        │               ├── cond:And
-        │               │   ├── Geq
-        │               │   │   ├── #10
-        │               │   │   └── 8401(i64)
-        │               │   └── Lt
-        │               │       ├── #10
-        │               │       └── 8491(i64)
-        │               └── PhysicalScan { table: lineitem }
-        └── PhysicalStreamAgg
+    └── PhysicalFilter
+        ├── cond:And
+        │   ├── Eq
+        │   │   ├── #0
+        │   │   └── #7
+        │   └── Eq
+        │       ├── #8
+        │       └── #9
+        └── PhysicalHashAgg
             ├── aggrs:Agg(Max)
-            │   └── [ #0 ]
-            ├── groups: []
-            └── PhysicalProjection { exprs: [ #1 ] }
-                └── PhysicalHashAgg
-                    ├── aggrs:Agg(Sum)
-                    │   └── Mul
-                    │       ├── #1
-                    │       └── Sub
-                    │           ├── 1(float)
-                    │           └── #2
-                    ├── groups: [ #0 ]
-                    └── PhysicalProjection { exprs: [ #2, #5, #6 ] }
-                        └── PhysicalFilter
-                            ├── cond:And
-                            │   ├── Geq
-                            │   │   ├── #10
-                            │   │   └── 8401(i64)
-                            │   └── Lt
-                            │       ├── #10
-                            │       └── 8491(i64)
-                            └── PhysicalScan { table: lineitem }
+            │   └── [ #10 ]
+            ├── groups: [ #0, #1, #2, #3, #4, #5, #6, #7, #8 ]
+            └── PhysicalHashAgg
+                ├── aggrs:Agg(Sum)
+                │   └── Mul
+                │       ├── #14
+                │       └── Sub
+                │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
+                │           └── #15
+                ├── groups: [ #0, #1, #2, #3, #4, #5, #6, #7, #8, #11 ]
+                └── PhysicalFilter
+                    ├── cond:And
+                    │   ├── Geq
+                    │   │   ├── #19
+                    │   │   └── Cast { cast_to: Date32, child: "1993-01-01" }
+                    │   └── Lt
+                    │       ├── #19
+                    │       └── Add
+                    │           ├── Cast { cast_to: Date32, child: "1993-01-01" }
+                    │           └── INTERVAL_MONTH_DAY_NANO (3, 0, 0)
+                    └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                        ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                        │   ├── PhysicalScan { table: supplier }
+                        │   └── PhysicalHashAgg
+                        │       ├── aggrs:Agg(Sum)
+                        │       │   └── Mul
+                        │       │       ├── #5
+                        │       │       └── Sub
+                        │       │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
+                        │       │           └── #6
+                        │       ├── groups: [ #2 ]
+                        │       └── PhysicalFilter
+                        │           ├── cond:And
+                        │           │   ├── Geq
+                        │           │   │   ├── #10
+                        │           │   │   └── Cast { cast_to: Date32, child: "1993-01-01" }
+                        │           │   └── Lt
+                        │           │       ├── #10
+                        │           │       └── Add
+                        │           │           ├── Cast { cast_to: Date32, child: "1993-01-01" }
+                        │           │           └── INTERVAL_MONTH_DAY_NANO (3, 0, 0)
+                        │           └── PhysicalScan { table: lineitem }
+                        └── PhysicalScan { table: lineitem }
 */
 

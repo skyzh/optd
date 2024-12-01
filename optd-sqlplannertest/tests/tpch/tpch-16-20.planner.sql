@@ -117,51 +117,41 @@ LogicalProjection
 │       └── 16(i64)
 └── LogicalAgg
     ├── exprs:Agg(Sum)
-    │   └── [ #0 ]
+    │   └── [ #5 ]
     ├── groups: []
-    └── LogicalProjection { exprs: [ #1 ] }
-        └── LogicalJoin
-            ├── join_type: Inner
-            ├── cond:And
-            │   ├── Eq
-            │   │   ├── #2
-            │   │   └── #4
-            │   └── Lt
-            │       ├── Cast { cast_to: Decimal128(30, 15), child: #0 }
-            │       └── #3
-            ├── LogicalProjection { exprs: [ #1, #2, #3 ] }
-            │   └── LogicalJoin
-            │       ├── join_type: Inner
-            │       ├── cond:Eq
-            │       │   ├── #0
-            │       │   └── #3
-            │       ├── LogicalProjection { exprs: [ #1, #4, #5 ] }
-            │       │   └── LogicalScan { table: lineitem }
-            │       └── LogicalProjection { exprs: [ #0 ] }
-            │           └── LogicalFilter
-            │               ├── cond:And
-            │               │   ├── Eq
-            │               │   │   ├── #1
-            │               │   │   └── "Brand#13"
-            │               │   └── Eq
-            │               │       ├── #2
-            │               │       └── "JUMBO PKG"
-            │               └── LogicalProjection { exprs: [ #0, #3, #6 ] }
-            │                   └── LogicalScan { table: part }
+    └── LogicalFilter
+        ├── cond:And
+        │   ├── Eq
+        │   │   ├── #16
+        │   │   └── #1
+        │   ├── Eq
+        │   │   ├── #19
+        │   │   └── "Brand#13"
+        │   ├── Eq
+        │   │   ├── #22
+        │   │   └── "JUMBO PKG"
+        │   └── Lt
+        │       ├── Cast { cast_to: Decimal128(30, 15), child: #4 }
+        │       └── #25
+        └── DependentJoin { join_type: Inner, cond: true, extern_cols: [ Extern(#16) ] }
+            ├── LogicalJoin { join_type: Inner, cond: true }
+            │   ├── LogicalScan { table: lineitem }
+            │   └── LogicalScan { table: part }
             └── LogicalProjection
-                ├── exprs:
-                │   ┌── Cast
-                │   │   ├── cast_to: Decimal128(30, 15)
-                │   │   ├── child:Mul
-                │   │   │   ├── 0.2(float)
-                │   │   │   └── Cast { cast_to: Float64, child: #1 }
+                ├── exprs:Cast
+                │   ├── cast_to: Decimal128(30, 15)
+                │   ├── child:Mul
+                │   │   ├── 0.2(float)
+                │   │   └── Cast { cast_to: Float64, child: #0 }
 
-                │   └── #0
                 └── LogicalAgg
                     ├── exprs:Agg(Avg)
-                    │   └── [ #1 ]
-                    ├── groups: [ #0 ]
-                    └── LogicalProjection { exprs: [ #1, #4 ] }
+                    │   └── [ #4 ]
+                    ├── groups: []
+                    └── LogicalFilter
+                        ├── cond:Eq
+                        │   ├── #1
+                        │   └── Extern(#16)
                         └── LogicalScan { table: lineitem }
 PhysicalProjection
 ├── exprs:Scalar(Round)
@@ -172,45 +162,30 @@ PhysicalProjection
 │       └── 16(i64)
 └── PhysicalStreamAgg
     ├── aggrs:Agg(Sum)
-    │   └── [ #0 ]
+    │   └── [ #5 ]
     ├── groups: []
-    └── PhysicalProjection { exprs: [ #5 ] }
-        └── PhysicalNestedLoopJoin
-            ├── join_type: Inner
-            ├── cond:And
-            │   ├── Eq
-            │   │   ├── #16
-            │   │   └── #18
-            │   └── Lt
-            │       ├── Cast { cast_to: Decimal128(30, 15), child: #4 }
-            │       └── #17
-            ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ] }
-            │   ├── PhysicalScan { table: lineitem }
-            │   └── PhysicalProjection { exprs: [ #0 ] }
-            │       └── PhysicalFilter
-            │           ├── cond:And
-            │           │   ├── Eq
-            │           │   │   ├── #3
-            │           │   │   └── "Brand#13"
-            │           │   └── Eq
-            │           │       ├── #6
-            │           │       └── "JUMBO PKG"
-            │           └── PhysicalScan { table: part }
-            └── PhysicalProjection
-                ├── exprs:
-                │   ┌── Cast
-                │   │   ├── cast_to: Decimal128(30, 15)
-                │   │   ├── child:Mul
-                │   │   │   ├── 0.2(float)
-                │   │   │   └── Cast { cast_to: Float64, child: #1 }
-
-                │   └── #0
-                └── PhysicalHashAgg
-                    ├── aggrs:Agg(Avg)
-                    │   └── [ #1 ]
-                    ├── groups: [ #0 ]
-                    └── PhysicalProjection { exprs: [ #1, #4 ] }
-                        └── PhysicalScan { table: lineitem }
+    └── PhysicalFilter
+        ├── cond:And
+        │   └── Lt
+        │       ├── Cast { cast_to: Decimal128(30, 15), child: #4 }
+        │       └── #25
+        └── PhysicalHashAgg
+            ├── aggrs:Agg(Avg)
+            │   └── [ #29 ]
+            ├── groups: [ #0, #1, #2, #3, #4, #5, #6, #7, #8, #9, #10, #11, #12, #13, #14, #15, #16, #17, #18, #19, #20, #21, #22, #23, #24 ]
+            └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #1 ] }
+                ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ] }
+                │   ├── PhysicalScan { table: lineitem }
+                │   └── PhysicalFilter
+                │       ├── cond:And
+                │       │   ├── Eq
+                │       │   │   ├── #3
+                │       │   │   └── "Brand#13"
+                │       │   └── Eq
+                │       │       ├── #6
+                │       │       └── "JUMBO PKG"
+                │       └── PhysicalScan { table: part }
+                └── PhysicalScan { table: lineitem }
 */
 
 -- TPC-H Q19

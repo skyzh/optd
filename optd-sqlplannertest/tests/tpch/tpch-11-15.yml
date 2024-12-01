@@ -116,7 +116,7 @@
         value desc;
   desc: TPC-H Q11
   tasks:
-    - explain[use_df_logical]:logical_optd,physical_optd
+    - explain:logical_optd,physical_optd
 - sql: |
     SELECT
         l_shipmode,
@@ -194,4 +194,4 @@
         s_suppkey;
   desc: TPC-H Q15
   tasks:
-    - explain[use_df_logical]:logical_optd,physical_optd
+    - explain:logical_optd,physical_optd

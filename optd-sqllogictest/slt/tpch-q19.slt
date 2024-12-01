@@ -1,0 +1,36 @@
+include _tpch_tables.slt.part
+
+query
+SELECT
+    sum(l_extendedprice* (1 - l_discount)) as revenue
+FROM
+    lineitem,
+    part
+WHERE
+    (
+        p_partkey = l_partkey
+        AND p_brand = 'Brand#12'
+        AND p_container IN ('LG CASE')
+        AND l_quantity >= 1 AND l_quantity <= 11
+        AND p_size BETWEEN 1 AND 5
+        AND l_shipmode IN ('AIR', 'REG AIR', 'SHIP')
+        AND l_shipinstruct = 'DELIVER IN PERSON'
+    ) OR (
+        p_partkey = l_partkey
+        AND p_brand = 'Brand#23'
+        AND p_container IN ('LG BOX')
+        AND l_quantity >= 10 AND l_quantity <= 20
+        AND p_size BETWEEN 1 AND 10
+        AND l_shipmode IN ('AIR', 'REG AIR', 'SHIP')
+        AND l_shipinstruct = 'DELIVER IN PERSON'
+    ) OR (
+        p_partkey = l_partkey
+        AND p_brand = 'Brand#34'
+        AND p_container IN ('SM PKG')
+        AND l_quantity >= 20 AND l_quantity <= 30
+        AND p_size BETWEEN 1 AND 15
+        AND l_shipmode IN ('AIR', 'REG AIR', 'SHIP')
+        AND l_shipinstruct = 'DELIVER IN PERSON'
+    )
+----
+25299.7344

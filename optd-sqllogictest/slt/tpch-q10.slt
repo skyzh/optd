@@ -1,0 +1,56 @@
+include _tpch_tables.slt.part
+
+query
+SELECT
+    c_custkey,
+    c_name,
+    sum(l_extendedprice * (1 - l_discount)) as revenue,
+    c_acctbal,
+    n_name,
+    c_address,
+    c_phone,
+    c_comment
+FROM
+    customer,
+    orders,
+    lineitem,
+    nation
+WHERE
+    c_custkey = o_custkey
+    AND l_orderkey = o_orderkey
+    AND o_orderdate >= DATE '1993-07-01'
+    AND o_orderdate < DATE '1993-07-01' + INTERVAL '3' MONTH
+    AND l_returnflag = 'R'
+    AND c_nationkey = n_nationkey
+GROUP BY
+    c_custkey,
+    c_name,
+    c_acctbal,
+    c_phone,
+    n_name,
+    c_address,
+    c_comment
+ORDER BY
+    revenue DESC
+LIMIT 20;
+----
+13 Customer#000000013 243842.4906 3857.34 CANADA nsXQu0oVjD7PM659uC3SRSp 13-761-547-5974 ounts sleep carefully after the close frays. carefully bold notornis use ironic requests. blithely
+133 Customer#000000133 219295.3794 2314.67 PERU IMCuXdpIvdkYO92kgDGuyHgojcUs88p 27-408-997-8430 t packages. express pinto beans are blithely along the unusual, even theodolites. silent packages use fu
+97 Customer#000000097 207680.0516 2164.48 PERU OApyejbhJG,0Iw3j rd1M 27-588-919-5638 haggle slyly. bold, special ideas are blithely above the thinly bold theo
+61 Customer#000000061 131278.0031 1536.24 PERU 9kndve4EAJxhg3veF BfXr7AqOsT39o gtqjaYE 27-626-559-8599 egular packages shall have to impress along the 
+115 Customer#000000115 117130.5324 7508.92 INDIA 0WFt1IXENmUT2BgbsB0ShVKJZt0HCBCbFl0aHc 18-971-699-1843 sits haggle above the carefully ironic theodolite
+124 Customer#000000124 116740.4706 1842.49 CHINA aTbyVAW5tCd,v09O 28-183-750-7809 le fluffily even dependencies. quietly s
+79 Customer#000000079 112530.7860 5121.28 MOROCCO n5hH2ftkVRwW8idtD,BmM2 25-147-850-4166 es. packages haggle furiously. regular, special requests poach after the quickly express ideas. blithely pending re
+142 Customer#000000142 100021.1324 2209.81 INDONESIA AnJ5lxtLjioClr2khl9pb8NLxG2, 19-407-425-2584 . even, express theodolites upo
+104 Customer#000000104 97904.9922 -588.38 IRAN 9mcCK L7rt0SwiYtrbO88DiZS7U d7M 20-966-284-8065 rate carefully slyly special pla
+143 Customer#000000143 95577.1406 2186.50 MOZAMBIQUE 681r22uL452zqk 8By7I9o9enQfx0 26-314-406-7725 across the blithely unusual requests haggle theodo
+118 Customer#000000118 72098.2548 3582.37 CHINA OVnFuHygK9wx3xpg8 28-639-943-7051 uick packages alongside of the furiously final deposits haggle above the fluffily even foxes. blithely dogged dep
+44 Customer#000000044 59324.8016 7315.94 MOZAMBIQUE Oi,dOSPwDu4jo4x,,P85E0dmhZGvNtBwi 26-190-260-5375 r requests around the unusual, bold a
+52 Customer#000000052 59064.8616 5630.28 IRAQ 7 QOqGqqSy9jfV51BC71jcHJSD0 21-186-284-5998 ic platelets use evenly even accounts. stealthy theodolites cajole furiou
+64 Customer#000000064 54263.8334 -646.64 CANADA MbCeGY20kaKK3oalJD,OT 13-558-731-7204 structions after the quietly ironic theodolites cajole be
+4 Customer#000000004 49524.5828 2866.83 EGYPT XxVSJsLAGtn 14-128-190-5944  requests. final, regular ideas sleep final accou
+92 Customer#000000092 46227.6940 1182.91 BRAZIL obP PULk2LH LqNF,K9hcbNqnLAkJVsl5xqSrY, 12-446-416-8471 . pinto beans hang slyly final deposits. ac
+41 Customer#000000041 45017.6805 270.95 IRAN IM9mzmyoxeBmvNw8lA7G3Ydska2nkZF 20-917-711-4011 ly regular accounts hang bold, silent packages. unusual foxes haggle slyly above the special, final depo
+101 Customer#000000101 40493.1930 7470.96 BRAZIL sMmL2rNeHDltovSm Y 12-514-298-3699  sleep. pending packages detect slyly ironic pack
+82 Customer#000000082 39053.5166 9468.34 CHINA zhG3EZbap4c992Gj3bK,3Ne,Xn 28-159-442-5305 s wake. bravely regular accounts are furiously. regula
+109 Customer#000000109 29111.5950 -716.10 MOZAMBIQUE OOOkYBgCMzgMQXUmkocoLb56rfrdWp2NE2c 26-992-422-8153 es. fluffily final dependencies sleep along the blithely even pinto beans. final deposits haggle furiously furiou

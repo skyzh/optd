@@ -20,7 +20,6 @@ pub trait CostModel<T: NodeType, M: Memo<T>>: 'static + Send + Sync {
     /// optional in the future when we implement physical property enforcers.
     /// If we have not decided the winner for a child group yet, the statistics
     /// for that group will be `None`.
-    #[allow(clippy::too_many_arguments)]
     fn compute_operation_cost(
         &self,
         node: &T,
@@ -29,6 +28,19 @@ pub trait CostModel<T: NodeType, M: Memo<T>>: 'static + Send + Sync {
         context: RelNodeContext,
         optimizer: &CascadesOptimizer<T, M>,
     ) -> Cost;
+
+    /// Compute the lower bound cost of a single operation.
+    fn compute_lower_bound_cost(
+        &self,
+        context: RelNodeContext,
+        stats: &Statistics,
+        optimizer: &CascadesOptimizer<T, M>,
+    ) -> Cost {
+        let _ = context;
+        let _ = optimizer;
+        let _ = stats;
+        self.zero()
+    }
 
     /// Derive the statistics of a single operation. `RelNodeContext` might be
     /// optional in the future when we implement physical property enforcers.

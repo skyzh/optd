@@ -16,8 +16,15 @@ use crate::nodes::{ArcPredNode, PlanNode, PlanNodeOrGroup};
 use crate::physical_property::PhysicalProperty;
 use crate::{nodes::NodeType, rules::RuleMatcher};
 
+struct SearchContext {
+    group_id: GroupId,
+    subgoal_id: SubGoalId,
+    upper_bound: Option<f64>,
+}
+
 pub struct TaskContext<'a, T: NodeType, M: Memo<T>> {
     optimizer: &'a mut CascadesOptimizer<T, M>,
+    steps: usize,
 }
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -28,11 +35,29 @@ pub enum TaskDesc {
 
 impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
     pub fn new(optimizer: &'a mut CascadesOptimizer<T, M>) -> Self {
-        Self { optimizer }
+        Self {
+            optimizer,
+            steps: 0,
+        }
+    }
+
+    pub async fn fire_optimize(&mut self, group_id: GroupId, subgoal_id: SubGoalId) {
+        self.optimize_group(SearchContext {
+            group_id,
+            subgoal_id,
+            upper_bound: None,
+        })
+        .await;
     }
 
     #[async_recursion]
-    pub async fn optimize_group(&mut self, group_id: GroupId, subgoal_id: SubGoalId) {
+    async fn optimize_group(&mut self, ctx: SearchContext) {
+        self.steps += 1;
+        let SearchContext {
+            group_id,
+            subgoal_id,
+            ..
+        } = ctx;
         trace!(event = "task_begin", task = "optimize_group", group_id = %group_id, subgoal_id = %subgoal_id);
 
         if self.optimizer.is_group_explored(group_id, subgoal_id) {
@@ -61,28 +86,44 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
         for &expr_id in &exprs {
             let expr = self.optimizer.get_expr_memoed(expr_id);
             if !expr.typ.is_logical() {
-                self.optimize_input(group_id, expr_id, subgoal_id).await;
+                self.optimize_input(
+                    SearchContext {
+                        group_id,
+                        subgoal_id,
+                        upper_bound: ctx.upper_bound,
+                    },
+                    expr_id,
+                )
+                .await;
             }
         }
         // Then, optimize all logical expressions
         for &expr_id in &exprs {
             let typ = self.optimizer.get_expr_memoed(expr_id).typ.clone();
             if typ.is_logical() {
-                self.optimize_expr(expr_id, subgoal_id, group_id, false)
-                    .await
+                self.optimize_expr(
+                    SearchContext {
+                        group_id,
+                        subgoal_id,
+                        upper_bound: ctx.upper_bound,
+                    },
+                    expr_id,
+                    false,
+                )
+                .await
             }
         }
         trace!(event = "task_finish", task = "optimize_group", group_id = %group_id, subgoal_id=%subgoal_id);
     }
 
     #[async_recursion]
-    async fn optimize_expr(
-        &mut self,
-        expr_id: ExprId,
-        subgoal_id: SubGoalId,
-        group_id: GroupId,
-        exploring: bool,
-    ) {
+    async fn optimize_expr(&mut self, ctx: SearchContext, expr_id: ExprId, exploring: bool) {
+        self.steps += 1;
+        let SearchContext {
+            group_id,
+            subgoal_id,
+            ..
+        } = ctx;
         let desc = TaskDesc::OptimizeExpr(expr_id, subgoal_id, group_id);
         if self.optimizer.has_task_started(&desc) {
             trace!(event = "task_skip", task = "optimize_expr", expr_id = %expr_id, subgoal_id = %subgoal_id);
@@ -124,10 +165,24 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
                             .default_many()
                             .into(),
                     );
-                    self.explore_group(input_group_id, child_subgoal_id).await;
-                }
-                self.apply_rule(rule_id, expr_id, group_id, subgoal_id, exploring)
+                    self.explore_group(SearchContext {
+                        group_id: input_group_id,
+                        subgoal_id: child_subgoal_id,
+                        upper_bound: ctx.upper_bound,
+                    })
                     .await;
+                }
+                self.apply_rule(
+                    SearchContext {
+                        group_id,
+                        subgoal_id,
+                        upper_bound: ctx.upper_bound,
+                    },
+                    rule_id,
+                    expr_id,
+                    exploring,
+                )
+                .await;
             }
         }
 
@@ -156,7 +211,12 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
                 .optimizer
                 .create_or_get_subgroup(child_group_id, new_goal.into());
             trace!(event = "new_goal", task = "optimize_expr", expr_id = %expr_id, subgoal_id = %subgoal_id, expr = %expr, child_group_id = %child_group_id, new_goal_id = %new_goal_id);
-            self.optimize_group(child_group_id, new_goal_id).await;
+            self.optimize_group(SearchContext {
+                group_id: child_group_id,
+                subgoal_id: new_goal_id,
+                upper_bound: ctx.upper_bound,
+            })
+            .await;
             if let Some(winner) = self
                 .optimizer
                 .get_group_winner(child_group_id, new_goal_id)
@@ -177,13 +237,28 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
     }
 
     #[async_recursion]
-    async fn explore_group(&mut self, group_id: GroupId, subgoal_id: SubGoalId) {
+    async fn explore_group(&mut self, ctx: SearchContext) {
+        self.steps += 1;
+        let SearchContext {
+            group_id,
+            subgoal_id,
+            ..
+        } = ctx;
         trace!(event = "task_begin", task = "explore_group", group_id = %group_id, subgoal_id = %subgoal_id);
         let exprs = self.optimizer.get_all_exprs_in_group(group_id);
         for expr in exprs {
             let typ = self.optimizer.get_expr_memoed(expr).typ.clone();
             if typ.is_logical() {
-                self.optimize_expr(expr, subgoal_id, group_id, true).await;
+                self.optimize_expr(
+                    SearchContext {
+                        group_id,
+                        subgoal_id,
+                        upper_bound: ctx.upper_bound,
+                    },
+                    expr,
+                    true,
+                )
+                .await;
             }
         }
         trace!(
@@ -198,12 +273,17 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
     #[async_recursion]
     async fn apply_rule(
         &mut self,
+        ctx: SearchContext,
         rule_id: RuleId,
         expr_id: ExprId,
-        group_id: GroupId,
-        subgoal_id: SubGoalId,
         exploring: bool,
     ) {
+        self.steps += 1;
+        let SearchContext {
+            group_id,
+            subgoal_id,
+            ..
+        } = ctx;
         trace!(event = "task_begin", task = "apply_rule", expr_id = %expr_id, subgoal_id = %subgoal_id, exploring = %exploring);
         if self.optimizer.is_rule_fired(expr_id, rule_id) {
             trace!(event = "task_end", task = "apply_rule", expr_id = %expr_id, subgoal_id = %subgoal_id, exploring = %exploring, outcome = "rule already fired");
@@ -221,36 +301,78 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
         let rule = self.optimizer.rules()[rule_id].clone();
 
         let binding_exprs = match_and_pick_expr(rule.matcher(), expr_id, self.optimizer);
+        if binding_exprs.len() >= 100 {
+            tracing::warn!(
+                event = "rule_application",
+                task = "apply_rule",
+                expr_id = %expr_id,
+                rule_id = %rule_id,
+                outcome = "too_many_bindings",
+                num_bindings = %binding_exprs.len()
+            );
+        }
         for binding in binding_exprs {
+            if !self.optimizer.ctx.budget_used {
+                let plan_space = self.optimizer.memo().estimated_plan_space();
+                let step = self.steps;
+                if let Some(partial_explore_space) = self.optimizer.prop.partial_explore_space {
+                    if plan_space > partial_explore_space {
+                        println!(
+                            "plan space size budget used, not applying logical rules any more. current plan space: {}",
+                            plan_space
+                        );
+                        self.optimizer.ctx.budget_used = true;
+                        if self.optimizer.prop.panic_on_budget {
+                            panic!("plan space size budget used");
+                        }
+                    }
+                }
+                if let Some(partial_explore_iter) = self.optimizer.prop.partial_explore_iter {
+                    if step > partial_explore_iter {
+                        println!(
+                            "iter budget used, not applying logical rules any more. current iter: {}",
+                            step
+                        );
+                        self.optimizer.ctx.budget_used = true;
+                        if self.optimizer.prop.panic_on_budget {
+                            panic!("plan space size budget used");
+                        }
+                    }
+                }
+            }
+
+            if self.optimizer.ctx.budget_used && !rule.is_impl_rule() {
+                continue;
+            }
+
             trace!(event = "before_apply_rule", task = "apply_rule", input_binding=%binding);
             let applied = rule.apply(self.optimizer, binding);
             for expr in applied {
                 trace!(event = "after_apply_rule", task = "apply_rule", output_binding=%expr);
-
-                if !self.optimizer.ctx.budget_used {
-                    let plan_space = self.optimizer.memo().estimated_plan_space();
-                    if let Some(partial_explore_space) = self.optimizer.prop.partial_explore_space {
-                        if plan_space > partial_explore_space {
-                            println!(
-                                "plan space size budget used, not applying logical rules any more. current plan space: {}",
-                                plan_space
-                            );
-                            self.optimizer.ctx.budget_used = true;
-                            if self.optimizer.prop.panic_on_budget {
-                                panic!("plan space size budget used");
-                            }
-                        }
-                    }
-                }
-
                 // TODO: remove clone in the below line
                 if let Some(expr_id) = self.optimizer.add_expr_to_group(expr.clone(), group_id) {
                     let typ = expr.unwrap_typ();
                     if typ.is_logical() {
-                        self.optimize_expr(expr_id, subgoal_id, group_id, exploring)
-                            .await;
+                        self.optimize_expr(
+                            SearchContext {
+                                group_id,
+                                subgoal_id,
+                                upper_bound: ctx.upper_bound,
+                            },
+                            expr_id,
+                            exploring,
+                        )
+                        .await;
                     } else {
-                        self.optimize_input(group_id, expr_id, subgoal_id).await;
+                        self.optimize_input(
+                            SearchContext {
+                                group_id,
+                                subgoal_id,
+                                upper_bound: ctx.upper_bound,
+                            },
+                            expr_id,
+                        )
+                        .await;
                     }
                     trace!(event = "apply_rule", expr_id = %expr_id, rule_id = %rule_id, new_expr_id = %expr_id);
                 } else {
@@ -319,13 +441,20 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
                 .optimizer
                 .get_group_winner(expr.children[idx], children_subgoal_ids[idx])
                 .as_full_winner();
-            input_stats.push(winner.map(|x| x.statistics.clone()));
+            let stats = winner.map(|x| x.statistics.clone());
+            input_stats.push(stats.clone());
             input_props.push(winner.map(|x| x.derived_physical_properties.clone()));
-            input_cost.push(
-                winner
-                    .map(|x| x.total_cost.clone())
-                    .unwrap_or_else(|| cost.zero()),
-            );
+            input_cost.push(winner.map(|x| x.total_cost.clone()).unwrap_or_else(|| {
+                // TODO: cache the result so that we don't need to compute each time
+                match stats {
+                    Some(stats) => cost.compute_lower_bound_cost(
+                        context.clone(),
+                        stats.as_ref(),
+                        self.optimizer,
+                    ),
+                    None => cost.zero(),
+                }
+            }));
         }
         let input_stats_ref = input_stats
             .iter()
@@ -343,7 +472,13 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
     }
 
     #[async_recursion]
-    async fn optimize_input(&mut self, group_id: GroupId, expr_id: ExprId, subgoal_id: SubGoalId) {
+    async fn optimize_input(&mut self, ctx: SearchContext, expr_id: ExprId) {
+        self.steps += 1;
+        let SearchContext {
+            group_id,
+            subgoal_id,
+            ..
+        } = ctx;
         let desc = TaskDesc::OptimizeInput(expr_id, subgoal_id, group_id);
         if self.optimizer.has_task_started(&desc) {
             trace!(event = "task_skip", task = "optimize_input", subgoal_id = %subgoal_id, expr_id = %expr_id);
@@ -369,6 +504,26 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
             .memo()
             .get_subgroup_goal(group_id, subgoal_id);
 
+        // The upper bound of the search is the minimum of cost of the current best plan AND the
+        // upper bound of the context.
+        let winner_upper_bound = if let Some(winner) = self
+            .optimizer
+            .memo()
+            .get_group_winner(group_id, subgoal_id)
+            .as_full_winner()
+        {
+            Some(winner.total_weighted_cost)
+        } else {
+            None
+        };
+
+        let upper_bound = match (ctx.upper_bound, winner_upper_bound) {
+            (Some(ub), Some(wub)) => Some(ub.min(wub)),
+            (Some(ub), None) => Some(ub),
+            (None, Some(wub)) => Some(wub),
+            (None, None) => None,
+        };
+
         if !self
             .optimizer
             .memo()
@@ -389,7 +544,15 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
                 let new_goal_id = self
                     .optimizer
                     .create_or_get_subgroup(group_id, new_goal.into());
-                self.optimize_input(group_id, expr_id, new_goal_id).await;
+                self.optimize_input(
+                    SearchContext {
+                        group_id,
+                        subgoal_id: new_goal_id,
+                        upper_bound,
+                    },
+                    expr_id,
+                )
+                .await;
                 if let Some(child_winner) = self
                     .optimizer
                     .get_group_winner(group_id, new_goal_id)
@@ -483,31 +646,31 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
                 &children_subgoal_ids,
                 &predicates,
             );
-            if !self.optimizer.prop.disable_pruning {
-                let winner = self.optimizer.get_group_winner(group_id, subgoal_id);
-                fn trace_fmt(winner: &Winner) -> String {
-                    match winner {
-                        Winner::Full(winner) => winner.total_weighted_cost.to_string(),
-                        Winner::Unknown => "unknown".to_string(),
-                    }
-                }
+
+            let child_upper_bound = if !self.optimizer.prop.disable_pruning {
+                let cost_so_far = cost.weighted_cost(&total_cost);
+                // TODO: also adds up lower-bound cost
                 trace!(
                     event = "compute_cost",
                     task = "optimize_inputs",
                     expr_id = %expr_id,
-                    weighted_cost_so_far = cost.weighted_cost(&total_cost),
-                    winner_weighted_cost = %trace_fmt(winner),
+                    weighted_cost_so_far = cost_so_far,
+                    upper_bound = ?upper_bound,
                     current_processing = %input_group_idx,
                     total_child_groups = %expr.children.len());
-                if let Some(winner) = winner.as_full_winner() {
-                    let cost_so_far = cost.weighted_cost(&total_cost);
-                    if winner.total_weighted_cost <= cost_so_far {
+                if let Some(upper_bound) = upper_bound {
+                    if upper_bound <= cost_so_far {
                         trace!(event = "task_finish", task = "optimize_inputs", expr_id = %expr_id, result = "pruned");
                         self.optimizer.mark_task_end(&desc);
                         return;
                     }
+                    Some(upper_bound - cost_so_far)
+                } else {
+                    None
                 }
-            }
+            } else {
+                None
+            };
 
             let child_subgoal_id = children_subgoal_ids[input_group_idx];
             let child_group_id = expr.children[input_group_idx];
@@ -515,7 +678,12 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
                 .optimizer
                 .get_group_winner(child_group_id, child_subgoal_id);
             if !child_group_winner.has_full_winner() {
-                self.optimize_group(child_group_id, child_subgoal_id).await;
+                self.optimize_group(SearchContext {
+                    group_id: child_group_id,
+                    subgoal_id: child_subgoal_id,
+                    upper_bound: child_upper_bound,
+                })
+                .await;
                 if let Winner::Unknown = self
                     .optimizer
                     .get_group_winner(child_group_id, child_subgoal_id)

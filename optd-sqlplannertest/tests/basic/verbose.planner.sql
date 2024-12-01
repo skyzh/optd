@@ -28,7 +28,7 @@ PhysicalStreamAgg
 ├── aggrs:Agg(Count)
 │   └── [ 1(u8) ]
 ├── groups: []
-├── cost: {compute=5000,io=1000}
+├── cost: {compute=5100,io=1000}
 ├── stat: {row_cnt=1000}
 └── PhysicalScan { table: t1, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
 */

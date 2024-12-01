@@ -154,7 +154,7 @@ impl DatafusionOptimizer {
                 OptimizerProperties {
                     panic_on_budget: false,
                     partial_explore_iter: Some(1 << 20),
-                    partial_explore_space: Some(1 << 10),
+                    partial_explore_space: Some(1 << 14),
                     disable_pruning: false,
                 },
             ),

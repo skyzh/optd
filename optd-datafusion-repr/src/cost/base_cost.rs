@@ -62,6 +62,8 @@ impl DfCostModel {
     }
 }
 
+pub const COPY_COST: f64 = 0.1;
+
 impl CostModel<DfNodeType, NaiveMemo<DfNodeType>> for DfCostModel {
     fn explain_cost(&self, cost: &Cost) -> String {
         format!(
@@ -130,6 +132,16 @@ impl CostModel<DfNodeType, NaiveMemo<DfNodeType>> for DfCostModel {
         }
     }
 
+    fn compute_lower_bound_cost(
+        &self,
+        _context: RelNodeContext,
+        stats: &Statistics,
+        _optimizer: &CascadesOptimizer<DfNodeType>,
+    ) -> Cost {
+        let row_cnt = Self::row_cnt(stats);
+        Self::cost(row_cnt * COPY_COST, 0.0)
+    }
+
     fn compute_operation_cost(
         &self,
         node: &DfNodeType,
@@ -142,7 +154,7 @@ impl CostModel<DfNodeType, NaiveMemo<DfNodeType>> for DfCostModel {
             .iter()
             .map(|child| child.map(Self::row_cnt).unwrap_or(0 as f64))
             .collect_vec();
-        match node {
+        let mut cost = match node {
             DfNodeType::PhysicalScan => {
                 let row_cnt = self.get_row_cnt(predicates);
                 Self::cost(0.0, row_cnt)
@@ -193,7 +205,9 @@ impl CostModel<DfNodeType, NaiveMemo<DfNodeType>> for DfCostModel {
                 Self::cost(row_cnt * (compute_cost_1 + compute_cost_2), 0.0)
             }
             x => unimplemented!("cannot compute cost for {}", x),
-        }
+        };
+        cost.0[COMPUTE_COST] += COPY_COST * row_cnts.iter().sum::<f64>();
+        cost
     }
 
     fn weighted_cost(&self, cost: &Cost) -> f64 {

@@ -36,8 +36,8 @@ PhysicalStreamAgg
 2 202
 3 201
 group_id=!2
-  subgoal_id=.23 winner=(Enforcer)28 weighted_cost=7908.754779315221 | (PhysicalSort !2 P3) goal=.26
-    cost={compute=6908.754779315221,io=1000}
+  subgoal_id=.23 winner=(Enforcer)28 weighted_cost=8008.754779315221 | (PhysicalSort !2 P3) goal=.26
+    cost={compute=7008.754779315221,io=1000}
     stat={row_cnt=1000}
     (required) sort=[Asc#0]
     (derived) sort=[Asc#0]
@@ -52,18 +52,18 @@ group_id=!2
   expr_id=25 | (PhysicalScan P0)
   P0=(Constant(Utf8String) "t1")
 group_id=!5
-  subgoal_id=.22 winner=!2.23 weighted_cost=7908.754779315221 | !2.23
-    cost={compute=6908.754779315221,io=1000}
+  subgoal_id=.22 winner=!2.23 weighted_cost=8008.754779315221 | !2.23
+    cost={compute=7008.754779315221,io=1000}
     stat={row_cnt=1000}
     (required) sort=<any>
     (derived) sort=[Asc#0]
-  subgoal_id=.36 winner=28 weighted_cost=7908.754779315221 | (PhysicalSort !2 P3)
-    cost={compute=6908.754779315221,io=1000}
+  subgoal_id=.36 winner=28 weighted_cost=8008.754779315221 | (PhysicalSort !2 P3)
+    cost={compute=7008.754779315221,io=1000}
     stat={row_cnt=1000}
     (required) sort=[AnySorted#0]
     (derived) sort=[Asc#0]
-  subgoal_id=.42 winner=!2.23 weighted_cost=7908.754779315221 | !2.23
-    cost={compute=6908.754779315221,io=1000}
+  subgoal_id=.42 winner=!2.23 weighted_cost=8008.754779315221 | !2.23
+    cost={compute=7008.754779315221,io=1000}
     stat={row_cnt=1000}
     (required) sort=[Asc#0]
     (derived) sort=[Asc#0]
@@ -73,18 +73,18 @@ group_id=!5
   expr_id=28 | (PhysicalSort !2 P3)
   P3=(List (SortOrder(Asc) (ColumnRef 0(u64))))
 group_id=!9
-  subgoal_id=.17 winner=35 weighted_cost=15908.75477931522 | (PhysicalStreamAgg !5 P6 P7)
-    cost={compute=14908.75477931522,io=1000}
+  subgoal_id=.17 winner=35 weighted_cost=16108.75477931522 | (PhysicalStreamAgg !5 P6 P7)
+    cost={compute=15108.75477931522,io=1000}
     stat={row_cnt=1000}
     (required) sort=<any>
     (derived) sort=[Asc#0]
-  subgoal_id=.18 winner=35 weighted_cost=15908.75477931522 | (PhysicalStreamAgg !5 P6 P7)
-    cost={compute=14908.75477931522,io=1000}
+  subgoal_id=.18 winner=35 weighted_cost=16108.75477931522 | (PhysicalStreamAgg !5 P6 P7)
+    cost={compute=15108.75477931522,io=1000}
     stat={row_cnt=1000}
     (required) sort=<any>
     (derived) sort=[Asc#0]
-  subgoal_id=.40 winner=35 weighted_cost=15908.75477931522 | (PhysicalStreamAgg !5 P6 P7)
-    cost={compute=14908.75477931522,io=1000}
+  subgoal_id=.40 winner=35 weighted_cost=16108.75477931522 | (PhysicalStreamAgg !5 P6 P7)
+    cost={compute=15108.75477931522,io=1000}
     stat={row_cnt=1000}
     (required) sort=[Asc#0]
     (derived) sort=[Asc#0]
@@ -99,8 +99,8 @@ group_id=!9
   P7=(List (ColumnRef 0(u64)))
   P10=(List (ColumnRef 0(u64)) (ColumnRef 1(u64)))
 group_id=!15
-  subgoal_id=.16 winner=!12.40 weighted_cost=15908.75477931522 | !12.40
-    cost={compute=14908.75477931522,io=1000}
+  subgoal_id=.16 winner=!12.40 weighted_cost=16108.75477931522 | !12.40
+    cost={compute=15108.75477931522,io=1000}
     stat={row_cnt=1000}
     (required) sort=<any>
     (derived) sort=[Asc#0]

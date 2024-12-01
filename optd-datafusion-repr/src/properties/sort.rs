@@ -220,6 +220,7 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
                 );
                 match prop {
                     Some(prop) if SortProp::satisfies(&prop, required) => Some(prop),
+                    Some(prop) if SortProp::satisfies(required, &prop) => Some(required.clone()),
                     _ => None,
                 }
             }

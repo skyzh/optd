@@ -183,10 +183,7 @@ PhysicalSort
 │   │   └── #0
 │   └── SortOrder { order: Asc }
 │       └── #1
-└── PhysicalSort
-    ├── exprs:SortOrder { order: Asc }
-    │   └── #0
-    └── PhysicalScan { table: t1 }
+└── PhysicalScan { table: t1 }
 0 200
 2 202
 3 201

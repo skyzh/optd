@@ -120,9 +120,10 @@ impl DatafusionOptimizer {
     }
 
     pub fn stage2_cascades_rules() -> Vec<&'static str> {
-        let mut rules = Vec::<Arc<dyn Rule<DfNodeType, CascadesOptimizer<DfNodeType>>>>::new();
-        rules.push(Arc::new(rules::JoinCommuteRule::new()));
-        rules.push(Arc::new(rules::JoinAssocRule::new()));
+        let rules: Vec<Arc<dyn Rule<DfNodeType, CascadesOptimizer<DfNodeType>>>> = vec![
+            Arc::new(rules::JoinCommuteRule::new()),
+            Arc::new(rules::JoinAssocRule::new()),
+        ];
         rules.iter().map(|x| x.name()).collect_vec()
     }
 

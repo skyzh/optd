@@ -499,16 +499,12 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
 
         // The upper bound of the search is the minimum of cost of the current best plan AND the
         // upper bound of the context.
-        let winner_upper_bound = if let Some(winner) = self
+        let winner_upper_bound = self
             .optimizer
             .memo()
             .get_group_winner(group_id, subgoal_id)
             .as_full_winner()
-        {
-            Some(winner.total_weighted_cost)
-        } else {
-            None
-        };
+            .map(|winner| winner.total_weighted_cost);
 
         let upper_bound = match (ctx.upper_bound, winner_upper_bound) {
             (Some(ub), Some(wub)) => Some(ub.min(wub)),

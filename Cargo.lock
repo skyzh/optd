@@ -4205,8 +4205,7 @@ dependencies = [
 [[package]]
 name = "sqlplannertest"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40df613c24d7066362c37ef5047373532700efb87856088212a47f7b273c7424"
+source = "git+https://github.com/risinglightdb/sqlplannertest-rs?branch=skyzh/include#970418fdba3d98f92ac9da7bf9db86493a82cc83"
 dependencies = [
  "anyhow",
  "async-trait",

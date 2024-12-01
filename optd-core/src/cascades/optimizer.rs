@@ -339,6 +339,7 @@ impl<T: NodeType, M: Memo<T>> CascadesOptimizer<T, M> {
                         info.statistics.clone(),
                         self.cost.explain_cost(&info.total_cost),
                         self.cost.explain_statistics(&info.statistics),
+                        info.derived_physical_properties.clone(),
                     );
                     meta.insert(node, node_meta);
                 }

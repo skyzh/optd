@@ -30,6 +30,7 @@ use optd_datafusion_repr::plan_nodes::{
     SortOrderType,
 };
 use optd_datafusion_repr::properties::schema::Schema as OptdSchema;
+use optd_datafusion_repr::properties::sort::{SortProp, SortPropType};
 
 use crate::physical_collector::CollectorExec;
 use crate::OptdPlanContext;
@@ -412,6 +413,8 @@ impl OptdPlanContext<'_> {
         let agg_num = agg_exprs.len();
         let schema = input_exec.schema().clone();
 
+        // We want to have stream agg in optd, but datafusion does not expose the API to forcefully do a stream agg
+
         let agg = Arc::new(
             datafusion::physical_plan::aggregates::AggregateExec::try_new(
                 AggregateMode::Single,
@@ -424,6 +427,13 @@ impl OptdPlanContext<'_> {
             )?,
         ) as Arc<dyn ExecutionPlan + 'static>;
 
+        let derived_sort_prop = meta
+            .get(&(node.clone().into_plan_node().as_ref() as *const _ as usize))
+            .unwrap()
+            .derived_phys_props[0]
+            .as_any()
+            .downcast_ref::<SortProp>()
+            .unwrap();
         let physical_exprs = node
             .groups()
             .to_vec()
@@ -434,7 +444,11 @@ impl OptdPlanContext<'_> {
                     "<expr>", idx,
                 )),
                 options: datafusion::arrow::compute::SortOptions {
-                    descending: false,
+                    descending: match derived_sort_prop.0[idx].0 {
+                        SortPropType::Asc => false,
+                        SortPropType::Desc => true,
+                        SortPropType::AnySorted => unreachable!(),
+                    },
                     nulls_first: true,
                 },
             })

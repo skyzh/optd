@@ -18,6 +18,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::cascades::{GroupId, SubGoalId};
 use crate::cost::{Cost, Statistics};
+use crate::physical_property::PhysicalProperty;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SerializableOrderedF64(pub OrderedFloat<f64>);
@@ -379,6 +380,8 @@ pub struct PlanNodeMeta {
     /// Statistics in display string
     /// TODO: this should be lazily processed and generated
     pub stat_display: String,
+    /// Derived physical properties
+    pub derived_phys_props: Arc<[Box<dyn PhysicalProperty>]>,
 }
 
 impl PlanNodeMeta {
@@ -390,6 +393,7 @@ impl PlanNodeMeta {
         stat: Arc<Statistics>,
         cost_display: String,
         stat_display: String,
+        derived_phys_props: Arc<[Box<dyn PhysicalProperty>]>,
     ) -> Self {
         Self {
             group_id,
@@ -399,6 +403,7 @@ impl PlanNodeMeta {
             stat,
             cost_display,
             stat_display,
+            derived_phys_props,
         }
     }
 }

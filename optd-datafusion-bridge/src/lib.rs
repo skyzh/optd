@@ -339,6 +339,7 @@ pub async fn create_df_context(
 
     if !use_df_logical {
         session_config.options_mut().optimizer.max_passes = 0;
+        session_config.options_mut().optimizer.prefer_existing_sort = false;
     }
 
     let rn_config = if let Some(rn_config) = rn_config {
@@ -355,10 +356,10 @@ pub async fn create_df_context(
     };
 
     let mut builder = SessionStateBuilder::new()
+        .with_default_features()
         .with_config(session_config)
         .with_runtime_env(runtime_env)
-        .with_catalog_list(catalog.clone())
-        .with_default_features();
+        .with_catalog_list(catalog.clone());
 
     let optimizer = if with_advanced_cost {
         new_physical_adv_cost(

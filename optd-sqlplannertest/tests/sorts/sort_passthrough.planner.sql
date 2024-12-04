@@ -7,121 +7,248 @@ insert into t1 values (0, 200), (3, 201), (2, 202);
 */
 
 -- test order by passthrough
-select * from (select * from (select * from (select * from t1 order by t1v1) order by t1v1) order by t1v1) order by t1v1;
+select * from (select * from (select * from (select * from t1 order by t1v1 limit 1) order by t1v1 limit 1) order by t1v1 limit 1) order by t1v1 limit 1;
 
 /*
-LogicalSort
-├── exprs:SortOrder { order: Asc }
-│   └── #0
-└── LogicalProjection { exprs: [ #0, #1 ] }
+LogicalLimit { skip: 0(i64), fetch: 1(i64) }
+└── LogicalSort
+    ├── exprs:SortOrder { order: Asc }
+    │   └── #0
     └── LogicalProjection { exprs: [ #0, #1 ] }
-        └── LogicalProjection { exprs: [ #0, #1 ] }
-            └── LogicalProjection { exprs: [ #0, #1 ] }
-                └── LogicalScan { table: t1 }
-PhysicalSort
-├── exprs:SortOrder { order: Asc }
-│   └── #0
-└── PhysicalScan { table: t1 }
+        └── LogicalLimit { skip: 0(i64), fetch: 1(i64) }
+            └── LogicalSort
+                ├── exprs:SortOrder { order: Asc }
+                │   └── #0
+                └── LogicalProjection { exprs: [ #0, #1 ] }
+                    └── LogicalLimit { skip: 0(i64), fetch: 1(i64) }
+                        └── LogicalSort
+                            ├── exprs:SortOrder { order: Asc }
+                            │   └── #0
+                            └── LogicalProjection { exprs: [ #0, #1 ] }
+                                └── LogicalLimit { skip: 0(i64), fetch: 1(i64) }
+                                    └── LogicalSort
+                                        ├── exprs:SortOrder { order: Asc }
+                                        │   └── #0
+                                        └── LogicalProjection { exprs: [ #0, #1 ] }
+                                            └── LogicalScan { table: t1 }
+PhysicalLimit { skip: 0(i64), fetch: 1(i64) }
+└── PhysicalLimit { skip: 0(i64), fetch: 1(i64) }
+    └── PhysicalLimit { skip: 0(i64), fetch: 1(i64) }
+        └── PhysicalLimit { skip: 0(i64), fetch: 1(i64) }
+            └── PhysicalSort
+                ├── exprs:SortOrder { order: Asc }
+                │   └── #0
+                └── PhysicalScan { table: t1 }
 0 200
-2 202
-3 201
 group_id=!2
-  subgoal_id=.10 winner=16 weighted_cost=1000 | (PhysicalScan P0)
+  subgoal_id=.39 winner=(Enforcer)44 weighted_cost=8008.754779315221 | (PhysicalSort !2 P3) goal=.42
+    cost={compute=7008.754779315221,io=1000}
+    stat={row_cnt=1000}
+    (required) sort=[Asc#0]
+    (derived) sort=[Asc#0]
+  subgoal_id=.42 winner=41 weighted_cost=1000 | (PhysicalScan P0)
     cost={compute=0,io=1000}
     stat={row_cnt=1000}
     (required) sort=<any>
     (derived) sort=<any>
-  subgoal_id=.11 winner=16 weighted_cost=1000 | (PhysicalScan P0)
-    cost={compute=0,io=1000}
+  schema=[t1v1:Int32, t1v2:Int32]
+  column_ref=[t1.0, t1.1]
+  expr_id=1 | (Scan P0)
+  expr_id=41 | (PhysicalScan P0)
+  P0=(Constant(Utf8String) "t1")
+group_id=!5
+  subgoal_id=.38 winner=!2.39 weighted_cost=8008.754779315221 | !2.39
+    cost={compute=7008.754779315221,io=1000}
     stat={row_cnt=1000}
     (required) sort=<any>
-    (derived) sort=<any>
-  subgoal_id=.19 winner=(Enforcer)14 weighted_cost=8008.754779315221 | (PhysicalSort !2 P6) goal=.11
+    (derived) sort=[Asc#0]
+  subgoal_id=.49 winner=!2.39 weighted_cost=8008.754779315221 | !2.39
     cost={compute=7008.754779315221,io=1000}
     stat={row_cnt=1000}
     (required) sort=[Asc#0]
     (derived) sort=[Asc#0]
   schema=[t1v1:Int32, t1v2:Int32]
   column_ref=[t1.0, t1.1]
-  expr_id=1 | (Scan P0)
-  expr_id=4 | (Projection !2 P3)
-  expr_id=16 | (PhysicalScan P0)
-  expr_id=18 | (PhysicalProjection !2 P3)
-  P0=(Constant(Utf8String) "t1")
-  P3=(List (ColumnRef 0(u64)) (ColumnRef 1(u64)))
-group_id=!8
-  subgoal_id=.9 winner=14 weighted_cost=8008.754779315221 | (PhysicalSort !2 P6)
-    cost={compute=7008.754779315221,io=1000}
-    stat={row_cnt=1000}
+  expr_id=4 | (Sort !2 P3)
+  expr_id=44 | (PhysicalSort !2 P3)
+  P3=(List (SortOrder(Asc) (ColumnRef 0(u64))))
+group_id=!9
+  subgoal_id=.37 winner=48 weighted_cost=9108.75477931522 | (PhysicalLimit !5 P6 P7)
+    cost={compute=8108.754779315221,io=1000}
+    stat={row_cnt=1}
+    (required) sort=[Asc#0]
+    (derived) sort=[Asc#0]
+  subgoal_id=.55 winner=<unknown>
+    (required) sort=<any>
+  schema=[t1v1:Int32, t1v2:Int32]
+  column_ref=[t1.0, t1.1]
+  expr_id=8 | (Limit !5 P6 P7)
+  expr_id=48 | (PhysicalLimit !5 P6 P7)
+  P6=(Constant(Int64) 0(i64))
+  P7=(Constant(Int64) 1(i64))
+group_id=!12
+  subgoal_id=.36 winner=!9.37 weighted_cost=9108.75477931522 | !9.37
+    cost={compute=8108.754779315221,io=1000}
+    stat={row_cnt=1}
     (required) sort=<any>
     (derived) sort=[Asc#0]
-  schema=[unnamed:UInt64, unnamed:UInt64]
+  subgoal_id=.54 winner=!9.37 weighted_cost=9108.75477931522 | !9.37
+    cost={compute=8108.754779315221,io=1000}
+    stat={row_cnt=1}
+    (required) sort=[Asc#0]
+    (derived) sort=[Asc#0]
+  schema=[t1v1:Int32, t1v2:Int32]
   column_ref=[t1.0, t1.1]
-  expr_id=7 | (Sort !2 P6)
-  expr_id=14 | (PhysicalSort !2 P6)
-  P6=(List (SortOrder(Asc) (ColumnRef 0(u64))))
+  expr_id=11 | (Sort !9 P3)
+  expr_id=57 | (PhysicalSort !9 P3)
+  P3=(List (SortOrder(Asc) (ColumnRef 0(u64))))
+group_id=!16
+  subgoal_id=.35 winner=53 weighted_cost=9109.854779315221 | (PhysicalLimit !12 P6 P7)
+    cost={compute=8109.854779315221,io=1000}
+    stat={row_cnt=1}
+    (required) sort=[Asc#0]
+    (derived) sort=[Asc#0]
+  subgoal_id=.62 winner=<unknown>
+    (required) sort=<any>
+  schema=[t1v1:Int32, t1v2:Int32]
+  column_ref=[t1.0, t1.1]
+  expr_id=15 | (Limit !12 P6 P7)
+  expr_id=53 | (PhysicalLimit !12 P6 P7)
+  P6=(Constant(Int64) 0(i64))
+  P7=(Constant(Int64) 1(i64))
+group_id=!19
+  subgoal_id=.34 winner=!16.35 weighted_cost=9109.854779315221 | !16.35
+    cost={compute=8109.854779315221,io=1000}
+    stat={row_cnt=1}
+    (required) sort=<any>
+    (derived) sort=[Asc#0]
+  subgoal_id=.61 winner=!16.35 weighted_cost=9109.854779315221 | !16.35
+    cost={compute=8109.854779315221,io=1000}
+    stat={row_cnt=1}
+    (required) sort=[Asc#0]
+    (derived) sort=[Asc#0]
+  schema=[t1v1:Int32, t1v2:Int32]
+  column_ref=[t1.0, t1.1]
+  expr_id=18 | (Sort !16 P3)
+  expr_id=64 | (PhysicalSort !16 P3)
+  P3=(List (SortOrder(Asc) (ColumnRef 0(u64))))
+group_id=!23
+  subgoal_id=.33 winner=60 weighted_cost=9110.954779315221 | (PhysicalLimit !19 P6 P7)
+    cost={compute=8110.9547793152215,io=1000}
+    stat={row_cnt=1}
+    (required) sort=[Asc#0]
+    (derived) sort=[Asc#0]
+  schema=[t1v1:Int32, t1v2:Int32]
+  column_ref=[t1.0, t1.1]
+  expr_id=22 | (Limit !19 P6 P7)
+  expr_id=60 | (PhysicalLimit !19 P6 P7)
+  P6=(Constant(Int64) 0(i64))
+  P7=(Constant(Int64) 1(i64))
+group_id=!26
+  subgoal_id=.32 winner=!23.33 weighted_cost=9110.954779315221 | !23.33
+    cost={compute=8110.9547793152215,io=1000}
+    stat={row_cnt=1}
+    (required) sort=<any>
+    (derived) sort=[Asc#0]
+  schema=[t1v1:Int32, t1v2:Int32]
+  column_ref=[t1.0, t1.1]
+  expr_id=25 | (Sort !23 P3)
+  P3=(List (SortOrder(Asc) (ColumnRef 0(u64))))
+group_id=!30
+  subgoal_id=.31 winner=67 weighted_cost=9112.054779315222 | (PhysicalLimit !26 P6 P7)
+    cost={compute=8112.054779315222,io=1000}
+    stat={row_cnt=1}
+    (required) sort=<any>
+    (derived) sort=[Asc#0]
+  schema=[t1v1:Int32, t1v2:Int32]
+  column_ref=[t1.0, t1.1]
+  expr_id=29 | (Limit !26 P6 P7)
+  expr_id=67 | (PhysicalLimit !26 P6 P7)
+  P6=(Constant(Int64) 0(i64))
+  P7=(Constant(Int64) 1(i64))
 */
 
 -- test order by passthrough
-select * from (select * from t1 order by t1v1) order by t1v1;
+select * from (select * from t1 order by t1v1 limit 1) order by t1v1 limit 1;
 
 /*
-LogicalSort
-├── exprs:SortOrder { order: Asc }
-│   └── #0
-└── LogicalProjection { exprs: [ #0, #1 ] }
+LogicalLimit { skip: 0(i64), fetch: 1(i64) }
+└── LogicalSort
+    ├── exprs:SortOrder { order: Asc }
+    │   └── #0
     └── LogicalProjection { exprs: [ #0, #1 ] }
-        └── LogicalScan { table: t1 }
-PhysicalSort
-├── exprs:SortOrder { order: Asc }
-│   └── #0
-└── PhysicalScan { table: t1 }
+        └── LogicalLimit { skip: 0(i64), fetch: 1(i64) }
+            └── LogicalSort
+                ├── exprs:SortOrder { order: Asc }
+                │   └── #0
+                └── LogicalProjection { exprs: [ #0, #1 ] }
+                    └── LogicalScan { table: t1 }
+PhysicalLimit { skip: 0(i64), fetch: 1(i64) }
+└── PhysicalLimit { skip: 0(i64), fetch: 1(i64) }
+    └── PhysicalSort
+        ├── exprs:SortOrder { order: Asc }
+        │   └── #0
+        └── PhysicalScan { table: t1 }
 0 200
-2 202
-3 201
 */
 
 -- test order by passthrough
-select * from (select * from t1 order by t1v1, t1v2) order by t1v1;
+select * from (select * from t1 order by t1v1, t1v2 limit 1) order by t1v1 limit 1;
 
 /*
-LogicalSort
-├── exprs:SortOrder { order: Asc }
-│   └── #0
-└── LogicalProjection { exprs: [ #0, #1 ] }
+LogicalLimit { skip: 0(i64), fetch: 1(i64) }
+└── LogicalSort
+    ├── exprs:SortOrder { order: Asc }
+    │   └── #0
     └── LogicalProjection { exprs: [ #0, #1 ] }
-        └── LogicalScan { table: t1 }
-PhysicalSort
-├── exprs:SortOrder { order: Asc }
-│   └── #0
-└── PhysicalScan { table: t1 }
+        └── LogicalLimit { skip: 0(i64), fetch: 1(i64) }
+            └── LogicalSort
+                ├── exprs:
+                │   ┌── SortOrder { order: Asc }
+                │   │   └── #0
+                │   └── SortOrder { order: Asc }
+                │       └── #1
+                └── LogicalProjection { exprs: [ #0, #1 ] }
+                    └── LogicalScan { table: t1 }
+PhysicalLimit { skip: 0(i64), fetch: 1(i64) }
+└── PhysicalLimit { skip: 0(i64), fetch: 1(i64) }
+    └── PhysicalSort
+        ├── exprs:
+        │   ┌── SortOrder { order: Asc }
+        │   │   └── #0
+        │   └── SortOrder { order: Asc }
+        │       └── #1
+        └── PhysicalScan { table: t1 }
 0 200
-2 202
-3 201
 */
 
 -- test order by passthrough
-select * from (select * from t1 order by t1v1) order by t1v1, t1v2;
+select * from (select * from t1 order by t1v1 limit 1) order by t1v1, t1v2 limit 1;
 
 /*
-LogicalSort
-├── exprs:
-│   ┌── SortOrder { order: Asc }
-│   │   └── #0
-│   └── SortOrder { order: Asc }
-│       └── #1
-└── LogicalProjection { exprs: [ #0, #1 ] }
+LogicalLimit { skip: 0(i64), fetch: 1(i64) }
+└── LogicalSort
+    ├── exprs:
+    │   ┌── SortOrder { order: Asc }
+    │   │   └── #0
+    │   └── SortOrder { order: Asc }
+    │       └── #1
     └── LogicalProjection { exprs: [ #0, #1 ] }
-        └── LogicalScan { table: t1 }
-PhysicalSort
-├── exprs:
-│   ┌── SortOrder { order: Asc }
-│   │   └── #0
-│   └── SortOrder { order: Asc }
-│       └── #1
-└── PhysicalScan { table: t1 }
+        └── LogicalLimit { skip: 0(i64), fetch: 1(i64) }
+            └── LogicalSort
+                ├── exprs:SortOrder { order: Asc }
+                │   └── #0
+                └── LogicalProjection { exprs: [ #0, #1 ] }
+                    └── LogicalScan { table: t1 }
+PhysicalLimit { skip: 0(i64), fetch: 1(i64) }
+└── PhysicalLimit { skip: 0(i64), fetch: 1(i64) }
+    └── PhysicalSort
+        ├── exprs:
+        │   ┌── SortOrder { order: Asc }
+        │   │   └── #0
+        │   └── SortOrder { order: Asc }
+        │       └── #1
+        └── PhysicalScan { table: t1 }
 0 200
-2 202
-3 201
 */
 

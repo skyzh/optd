@@ -153,7 +153,7 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
                 }
                 SortProp(sorts)
             }
-            DfNodeType::PhysicalFilter => children[0].borrow().clone(),
+            DfNodeType::PhysicalFilter | DfNodeType::PhysicalLimit => children[0].borrow().clone(),
             DfNodeType::PhysicalHashJoin(_) => SortProp::any_order(),
             DfNodeType::PhysicalProjection => SortProp::any_order(),
             _ if typ.is_logical() => unreachable!("logical node should not be called"),
@@ -168,8 +168,8 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
         required: &Self::Prop,
     ) -> Vec<Self::Prop> {
         match typ {
-            DfNodeType::PhysicalFilter => vec![required.clone()],
-            DfNodeType::PhysicalHashAgg | DfNodeType::PhysicalLimit => vec![SortProp::any_order()],
+            DfNodeType::PhysicalFilter | DfNodeType::PhysicalLimit => vec![required.clone()],
+            DfNodeType::PhysicalHashAgg => vec![SortProp::any_order()],
             DfNodeType::PhysicalHashJoin(_) | DfNodeType::PhysicalNestedLoopJoin(_) => {
                 vec![SortProp::any_order(), SortProp::any_order()]
             }

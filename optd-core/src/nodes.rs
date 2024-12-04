@@ -385,6 +385,7 @@ pub struct PlanNodeMeta {
 }
 
 impl PlanNodeMeta {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         group_id: GroupId,
         subgoal_id: SubGoalId,

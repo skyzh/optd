@@ -126,13 +126,13 @@ PhysicalNestedLoopJoin { join_type: Inner, cond: true }
 ├── PhysicalScan { table: t1 }
 └── PhysicalScan { table: t2 }
 0 0 0 200
-0 0 1 201
-0 0 2 202
 1 1 0 200
-1 1 1 201
-1 1 2 202
 2 2 0 200
+0 0 1 201
+1 1 1 201
 2 2 1 201
+0 0 2 202
+1 1 2 202
 2 2 2 202
 */
 
@@ -258,13 +258,13 @@ PhysicalNestedLoopJoin { join_type: Inner, cond: true }
 ├── PhysicalScan { table: t1 }
 └── PhysicalScan { table: t2 }
 0 0 0 200
-0 0 1 201
-0 0 2 202
 1 1 0 200
-1 1 1 201
-1 1 2 202
 2 2 0 200
+0 0 1 201
+1 1 1 201
 2 2 1 201
+0 0 2 202
+1 1 2 202
 2 2 2 202
 */
 

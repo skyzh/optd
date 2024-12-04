@@ -27,7 +27,6 @@ PhysicalProjection
 65
 65
 65
-65
 */
 
 -- Test whether the optimizer eliminates join to empty relation

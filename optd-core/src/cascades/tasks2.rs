@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use async_recursion::async_recursion;
 use itertools::Itertools;
 use tracing::trace;
 
@@ -50,8 +49,33 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
         .await;
     }
 
-    #[async_recursion]
     async fn optimize_group(&mut self, ctx: SearchContext) {
+        Box::pin(self.optimize_group_inner(ctx)).await;
+    }
+
+    async fn optimize_expr(&mut self, ctx: SearchContext, expr_id: ExprId, exploring: bool) {
+        Box::pin(self.optimize_expr_inner(ctx, expr_id, exploring)).await;
+    }
+
+    async fn explore_group(&mut self, ctx: SearchContext) {
+        Box::pin(self.explore_group_inner(ctx)).await;
+    }
+
+    async fn apply_rule(
+        &mut self,
+        ctx: SearchContext,
+        rule_id: RuleId,
+        expr_id: ExprId,
+        exploring: bool,
+    ) {
+        Box::pin(self.apply_rule_inner(ctx, rule_id, expr_id, exploring)).await;
+    }
+
+    async fn optimize_input(&mut self, ctx: SearchContext, expr_id: ExprId) {
+        Box::pin(self.optimize_input_inner(ctx, expr_id)).await;
+    }
+
+    async fn optimize_group_inner(&mut self, ctx: SearchContext) {
         self.steps += 1;
         let SearchContext {
             group_id,
@@ -110,8 +134,7 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
         trace!(event = "task_finish", task = "optimize_group", group_id = %group_id, subgoal_id=%subgoal_id);
     }
 
-    #[async_recursion]
-    async fn optimize_expr(&mut self, ctx: SearchContext, expr_id: ExprId, exploring: bool) {
+    async fn optimize_expr_inner(&mut self, ctx: SearchContext, expr_id: ExprId, exploring: bool) {
         self.steps += 1;
         let SearchContext {
             group_id,
@@ -230,8 +253,7 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
         trace!(event = "task_end", task = "optimize_expr", expr_id = %expr_id, subgoal_id = %subgoal_id, expr = %expr);
     }
 
-    #[async_recursion]
-    async fn explore_group(&mut self, ctx: SearchContext) {
+    async fn explore_group_inner(&mut self, ctx: SearchContext) {
         self.steps += 1;
         let SearchContext {
             group_id,
@@ -264,8 +286,7 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
         );
     }
 
-    #[async_recursion]
-    async fn apply_rule(
+    async fn apply_rule_inner(
         &mut self,
         ctx: SearchContext,
         rule_id: RuleId,
@@ -464,8 +485,7 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
         (input_stats, total_cost, operation_cost, input_props)
     }
 
-    #[async_recursion]
-    async fn optimize_input(&mut self, ctx: SearchContext, expr_id: ExprId) {
+    async fn optimize_input_inner(&mut self, ctx: SearchContext, expr_id: ExprId) {
         self.steps += 1;
         let SearchContext {
             group_id,

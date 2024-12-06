@@ -80,36 +80,52 @@ LogicalSort
 PhysicalSort
 ├── exprs:SortOrder { order: Desc }
 │   └── #1
-└── PhysicalHashAgg
-    ├── aggrs:Agg(Sum)
-    │   └── Mul
-    │       ├── #22
-    │       └── Sub
-    │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
-    │           └── #23
-    ├── groups: [ #41 ]
-    └── PhysicalHashJoin { join_type: Inner, left_keys: [ #42 ], right_keys: [ #0 ] }
-        ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #36 ], right_keys: [ #0 ] }
-        │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #19, #3 ], right_keys: [ #0, #3 ] }
-        │   │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #8 ], right_keys: [ #0 ] }
-        │   │   │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #1 ] }
-        │   │   │   │   ├── PhysicalScan { table: customer }
-        │   │   │   │   └── PhysicalFilter
-        │   │   │   │       ├── cond:And
-        │   │   │   │       │   ├── Geq
-        │   │   │   │       │   │   ├── #4
-        │   │   │   │       │   │   └── Cast { cast_to: Date32, child: "2023-01-01" }
-        │   │   │   │       │   └── Lt
-        │   │   │   │       │       ├── #4
-        │   │   │   │       │       └── Cast { cast_to: Date32, child: "2024-01-01" }
-        │   │   │   │       └── PhysicalScan { table: orders }
-        │   │   │   └── PhysicalScan { table: lineitem }
-        │   │   └── PhysicalScan { table: supplier }
-        │   └── PhysicalScan { table: nation }
-        └── PhysicalFilter
-            ├── cond:Eq
-            │   ├── #1
-            │   └── "Asia"
-            └── PhysicalScan { table: region }
+└── PhysicalGather
+    └── PhysicalHashAgg
+        ├── aggrs:Agg(Sum)
+        │   └── Mul
+        │       ├── #22
+        │       └── Sub
+        │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
+        │           └── #23
+        ├── groups: [ #41 ]
+        └── PhysicalHashShuffle { columns: [ #41 ] }
+            └── PhysicalNestedLoopJoin
+                ├── join_type: Inner
+                ├── cond:Eq
+                │   ├── #42
+                │   └── #44
+                ├── PhysicalGather
+                │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #36 ], right_keys: [ #0 ] }
+                │       ├── PhysicalHashShuffle { columns: [ #36 ] }
+                │       │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #19, #3 ], right_keys: [ #0, #3 ] }
+                │       │       ├── PhysicalHashShuffle { columns: [ #19, #3 ] }
+                │       │       │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #8 ], right_keys: [ #0 ] }
+                │       │       │       ├── PhysicalHashShuffle { columns: [ #8 ] }
+                │       │       │       │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #1 ] }
+                │       │       │       │       ├── PhysicalHashShuffle { columns: [ #0 ] }
+                │       │       │       │       │   └── PhysicalScan { table: customer }
+                │       │       │       │       └── PhysicalFilter
+                │       │       │       │           ├── cond:And
+                │       │       │       │           │   ├── Geq
+                │       │       │       │           │   │   ├── #4
+                │       │       │       │           │   │   └── Cast { cast_to: Date32, child: "2023-01-01" }
+                │       │       │       │           │   └── Lt
+                │       │       │       │           │       ├── #4
+                │       │       │       │           │       └── Cast { cast_to: Date32, child: "2024-01-01" }
+                │       │       │       │           └── PhysicalHashShuffle { columns: [ #1 ] }
+                │       │       │       │               └── PhysicalScan { table: orders }
+                │       │       │       └── PhysicalHashShuffle { columns: [ #0 ] }
+                │       │       │           └── PhysicalScan { table: lineitem }
+                │       │       └── PhysicalHashShuffle { columns: [ #0, #3 ] }
+                │       │           └── PhysicalScan { table: supplier }
+                │       └── PhysicalHashShuffle { columns: [ #0 ] }
+                │           └── PhysicalScan { table: nation }
+                └── PhysicalFilter
+                    ├── cond:Eq
+                    │   ├── #1
+                    │   └── "Asia"
+                    └── PhysicalGather
+                        └── PhysicalScan { table: region }
 */
 

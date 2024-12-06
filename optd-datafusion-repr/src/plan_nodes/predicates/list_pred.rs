@@ -9,6 +9,8 @@ use pretty_xmlish::Pretty;
 
 use crate::plan_nodes::{ArcDfPredNode, DfPredNode, DfPredType, DfReprPredNode};
 
+use super::ColumnRefPred;
+
 #[derive(Clone, Debug)]
 pub struct ListPred(pub ArcDfPredNode);
 
@@ -60,5 +62,23 @@ impl DfReprPredNode for ListPred {
                 .map(|x| self.child(x).explain(meta_map))
                 .collect_vec(),
         )
+    }
+}
+
+impl ListPred {
+    pub fn from_column_indexes(columns: &[usize]) -> ListPred {
+        ListPred::new(
+            columns
+                .iter()
+                .map(|x| ColumnRefPred::new(*x).into_pred_node())
+                .collect_vec(),
+        )
+    }
+
+    pub fn to_column_indexes(&self) -> Vec<usize> {
+        self.to_vec()
+            .iter()
+            .map(|x| ColumnRefPred::from_pred_node(x.clone()).unwrap().index())
+            .collect_vec()
     }
 }

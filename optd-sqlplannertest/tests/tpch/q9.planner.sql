@@ -90,41 +90,53 @@ LogicalSort
                     │   │   └── LogicalScan { table: partsupp }
                     │   └── LogicalScan { table: orders }
                     └── LogicalScan { table: nation }
-PhysicalStreamAgg
-├── aggrs:Agg(Sum)
-│   └── [ #2 ]
-├── groups: [ #0, #1 ]
-└── PhysicalSort
-    ├── exprs:
-    │   ┌── SortOrder { order: Asc }
-    │   │   └── #0
-    │   └── SortOrder { order: Desc }
-    │       └── #1
-    └── PhysicalProjection
+PhysicalGather
+└── PhysicalStreamAgg
+    ├── aggrs:Agg(Sum)
+    │   └── [ #2 ]
+    ├── groups: [ #0, #1 ]
+    └── PhysicalSort
         ├── exprs:
-        │   ┌── #47
-        │   ├── Scalar(DatePart)
-        │   │   └── [ "YEAR", #41 ]
-        │   └── Sub
-        │       ├── Mul
-        │       │   ├── #21
-        │       │   └── Sub
-        │       │       ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
-        │       │       └── #22
-        │       └── Mul
-        │           ├── #35
-        │           └── #20
-        └── PhysicalHashJoin { join_type: Inner, left_keys: [ #12 ], right_keys: [ #0 ] }
-            ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #16 ], right_keys: [ #0 ] }
-            │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #18, #17 ], right_keys: [ #1, #0 ] }
-            │   │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #9, #0 ], right_keys: [ #2, #1 ] }
-            │   │   │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-            │   │   │   │   ├── PhysicalFilter { cond: Like { expr: #1, pattern: "%green%", negated: false, case_insensitive: false } }
-            │   │   │   │   │   └── PhysicalScan { table: part }
-            │   │   │   │   └── PhysicalScan { table: supplier }
-            │   │   │   └── PhysicalScan { table: lineitem }
-            │   │   └── PhysicalScan { table: partsupp }
-            │   └── PhysicalScan { table: orders }
-            └── PhysicalScan { table: nation }
+        │   ┌── SortOrder { order: Asc }
+        │   │   └── #0
+        │   └── SortOrder { order: Desc }
+        │       └── #1
+        └── PhysicalHashShuffle { columns: [ #0, #1 ] }
+            └── PhysicalProjection
+                ├── exprs:
+                │   ┌── #47
+                │   ├── Scalar(DatePart)
+                │   │   └── [ "YEAR", #41 ]
+                │   └── Sub
+                │       ├── Mul
+                │       │   ├── #21
+                │       │   └── Sub
+                │       │       ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
+                │       │       └── #22
+                │       └── Mul
+                │           ├── #35
+                │           └── #20
+                └── PhysicalHashJoin { join_type: Inner, left_keys: [ #12 ], right_keys: [ #0 ] }
+                    ├── PhysicalHashShuffle { columns: [ #12 ] }
+                    │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #16 ], right_keys: [ #0 ] }
+                    │       ├── PhysicalHashShuffle { columns: [ #16 ] }
+                    │       │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #18, #17 ], right_keys: [ #1, #0 ] }
+                    │       │       ├── PhysicalHashShuffle { columns: [ #18, #17 ] }
+                    │       │       │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #9, #0 ], right_keys: [ #2, #1 ] }
+                    │       │       │       ├── PhysicalHashShuffle { columns: [ #9, #0 ] }
+                    │       │       │       │   └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                    │       │       │       │       ├── PhysicalFilter { cond: Like { expr: #1, pattern: "%green%", negated: false, case_insensitive: false } }
+                    │       │       │       │       │   └── PhysicalGather
+                    │       │       │       │       │       └── PhysicalScan { table: part }
+                    │       │       │       │       └── PhysicalGather
+                    │       │       │       │           └── PhysicalScan { table: supplier }
+                    │       │       │       └── PhysicalHashShuffle { columns: [ #2, #1 ] }
+                    │       │       │           └── PhysicalScan { table: lineitem }
+                    │       │       └── PhysicalHashShuffle { columns: [ #1, #0 ] }
+                    │       │           └── PhysicalScan { table: partsupp }
+                    │       └── PhysicalHashShuffle { columns: [ #0 ] }
+                    │           └── PhysicalScan { table: orders }
+                    └── PhysicalHashShuffle { columns: [ #0 ] }
+                        └── PhysicalScan { table: nation }
 */
 

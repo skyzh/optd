@@ -95,36 +95,49 @@ PhysicalSort
     ├── cond:Gt
     │   ├── Cast { cast_to: Decimal128(38, 15), child: #1 }
     │   └── #2
-    └── PhysicalHashAgg
-        ├── aggrs:Agg(Sum)
-        │   └── Mul
-        │       ├── #5
-        │       └── Cast { cast_to: Decimal128(10, 0), child: #4 }
-        ├── groups: [ #0, #1 ]
-        └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-            ├── PhysicalHashAgg
-            │   ├── aggrs:Agg(Sum)
-            │   │   └── Mul
-            │   │       ├── #3
-            │   │       └── Cast { cast_to: Decimal128(10, 0), child: #2 }
-            │   ├── groups: [ #0 ]
-            │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #8 ], right_keys: [ #0 ] }
-            │       ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ] }
-            │       │   ├── PhysicalScan { table: partsupp }
-            │       │   └── PhysicalScan { table: supplier }
-            │       └── PhysicalFilter
-            │           ├── cond:Eq
-            │           │   ├── #1
-            │           │   └── "CHINA"
-            │           └── PhysicalScan { table: nation }
-            └── PhysicalHashJoin { join_type: Inner, left_keys: [ #8 ], right_keys: [ #0 ] }
-                ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ] }
-                │   ├── PhysicalScan { table: partsupp }
-                │   └── PhysicalScan { table: supplier }
-                └── PhysicalFilter
-                    ├── cond:Eq
-                    │   ├── #1
-                    │   └── "CHINA"
-                    └── PhysicalScan { table: nation }
+    └── PhysicalGather
+        └── PhysicalHashAgg
+            ├── aggrs:Agg(Sum)
+            │   └── Mul
+            │       ├── #5
+            │       └── Cast { cast_to: Decimal128(10, 0), child: #4 }
+            ├── groups: [ #0, #1 ]
+            └── PhysicalHashShuffle { columns: [ #0, #1 ] }
+                └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                    ├── PhysicalGather
+                    │   └── PhysicalHashAgg
+                    │       ├── aggrs:Agg(Sum)
+                    │       │   └── Mul
+                    │       │       ├── #3
+                    │       │       └── Cast { cast_to: Decimal128(10, 0), child: #2 }
+                    │       ├── groups: [ #0 ]
+                    │       └── PhysicalHashShuffle { columns: [ #0 ] }
+                    │           └── PhysicalHashJoin { join_type: Inner, left_keys: [ #8 ], right_keys: [ #0 ] }
+                    │               ├── PhysicalHashShuffle { columns: [ #8 ] }
+                    │               │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ] }
+                    │               │       ├── PhysicalHashShuffle { columns: [ #1 ] }
+                    │               │       │   └── PhysicalScan { table: partsupp }
+                    │               │       └── PhysicalHashShuffle { columns: [ #0 ] }
+                    │               │           └── PhysicalScan { table: supplier }
+                    │               └── PhysicalFilter
+                    │                   ├── cond:Eq
+                    │                   │   ├── #1
+                    │                   │   └── "CHINA"
+                    │                   └── PhysicalHashShuffle { columns: [ #0 ] }
+                    │                       └── PhysicalScan { table: nation }
+                    └── PhysicalGather
+                        └── PhysicalHashJoin { join_type: Inner, left_keys: [ #8 ], right_keys: [ #0 ] }
+                            ├── PhysicalHashShuffle { columns: [ #8 ] }
+                            │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ] }
+                            │       ├── PhysicalHashShuffle { columns: [ #1 ] }
+                            │       │   └── PhysicalScan { table: partsupp }
+                            │       └── PhysicalHashShuffle { columns: [ #0 ] }
+                            │           └── PhysicalScan { table: supplier }
+                            └── PhysicalFilter
+                                ├── cond:Eq
+                                │   ├── #1
+                                │   └── "CHINA"
+                                └── PhysicalHashShuffle { columns: [ #0 ] }
+                                    └── PhysicalScan { table: nation }
 */
 

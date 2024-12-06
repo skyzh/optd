@@ -26,11 +26,16 @@ LogicalProjection { exprs: [ #0, #1, #2, #3, #4, #5 ] }
         │   ├── LogicalScan { table: t1 }
         │   └── LogicalScan { table: t2 }
         └── LogicalScan { table: t3 }
-PhysicalHashJoin { join_type: Inner, left_keys: [ #3 ], right_keys: [ #0 ] }
-├── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
-│   ├── PhysicalScan { table: t1 }
-│   └── PhysicalScan { table: t2 }
-└── PhysicalScan { table: t3 }
+PhysicalGather
+└── PhysicalHashJoin { join_type: Inner, left_keys: [ #3 ], right_keys: [ #0 ] }
+    ├── PhysicalHashShuffle { columns: [ #3 ] }
+    │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
+    │       ├── PhysicalHashShuffle { columns: [ #0 ] }
+    │       │   └── PhysicalScan { table: t1 }
+    │       └── PhysicalHashShuffle { columns: [ #0 ] }
+    │           └── PhysicalScan { table: t2 }
+    └── PhysicalHashShuffle { columns: [ #0 ] }
+        └── PhysicalScan { table: t3 }
 */
 
 -- test 3-way join
@@ -51,11 +56,16 @@ LogicalProjection { exprs: [ #0, #1, #2, #3, #4, #5 ] }
         │   ├── LogicalScan { table: t1 }
         │   └── LogicalScan { table: t2 }
         └── LogicalScan { table: t3 }
-PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ] }
-├── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
-│   ├── PhysicalScan { table: t1 }
-│   └── PhysicalScan { table: t2 }
-└── PhysicalScan { table: t3 }
+PhysicalGather
+└── PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ] }
+    ├── PhysicalHashShuffle { columns: [ #1 ] }
+    │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
+    │       ├── PhysicalHashShuffle { columns: [ #0 ] }
+    │       │   └── PhysicalScan { table: t1 }
+    │       └── PhysicalHashShuffle { columns: [ #0 ] }
+    │           └── PhysicalScan { table: t2 }
+    └── PhysicalHashShuffle { columns: [ #0 ] }
+        └── PhysicalScan { table: t3 }
 */
 
 -- test 4-way join
@@ -81,12 +91,19 @@ LogicalProjection { exprs: [ #0, #1, #2, #3, #4, #5, #6, #7 ] }
         │   │   └── LogicalScan { table: t2 }
         │   └── LogicalScan { table: t3 }
         └── LogicalScan { table: t4 }
-PhysicalHashJoin { join_type: Inner, left_keys: [ #5 ], right_keys: [ #0 ] }
-├── PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ] }
-│   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
-│   │   ├── PhysicalScan { table: t1 }
-│   │   └── PhysicalScan { table: t2 }
-│   └── PhysicalScan { table: t3 }
-└── PhysicalScan { table: t4 }
+PhysicalGather
+└── PhysicalHashJoin { join_type: Inner, left_keys: [ #5 ], right_keys: [ #0 ] }
+    ├── PhysicalHashShuffle { columns: [ #5 ] }
+    │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ] }
+    │       ├── PhysicalHashShuffle { columns: [ #1 ] }
+    │       │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
+    │       │       ├── PhysicalHashShuffle { columns: [ #0 ] }
+    │       │       │   └── PhysicalScan { table: t1 }
+    │       │       └── PhysicalHashShuffle { columns: [ #0 ] }
+    │       │           └── PhysicalScan { table: t2 }
+    │       └── PhysicalHashShuffle { columns: [ #0 ] }
+    │           └── PhysicalScan { table: t3 }
+    └── PhysicalHashShuffle { columns: [ #0 ] }
+        └── PhysicalScan { table: t4 }
 */
 

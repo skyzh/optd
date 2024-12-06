@@ -45,22 +45,25 @@ LogicalProjection { exprs: [ #0, #1 ] }
                 └── LogicalJoin { join_type: Inner, cond: true }
                     ├── LogicalScan { table: t1 }
                     └── LogicalScan { table: t2 }
-PhysicalProjection { exprs: [ #0, #1 ], cost: {compute=15493.1,io=2000}, stat: {row_cnt=1} }
+PhysicalProjection { exprs: [ #0, #1 ], cost: {compute=15813.1,io=2030}, stat: {row_cnt=1} }
 └── PhysicalFilter
     ├── cond:Gt
     │   ├── #2
     │   └── 100(i64)
-    ├── cost: {compute=15490,io=2000}
+    ├── cost: {compute=15810,io=2030}
     ├── stat: {row_cnt=1}
-    └── PhysicalHashAgg
-        ├── aggrs:Agg(Sum)
-        │   └── [ Cast { cast_to: Int64, child: #3 } ]
-        ├── groups: [ #0, #1 ]
-        ├── cost: {compute=12390,io=2000}
-        ├── stat: {row_cnt=1000}
-        └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ], cost: {compute=3200,io=2000}, stat: {row_cnt=1000} }
-            ├── PhysicalScan { table: t1, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
-            └── PhysicalScan { table: t2, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
+    └── PhysicalGather { cost: {compute=12710,io=2030}, stat: {row_cnt=1000} }
+        └── PhysicalHashAgg
+            ├── aggrs:Agg(Sum)
+            │   └── [ Cast { cast_to: Int64, child: #3 } ]
+            ├── groups: [ #0, #1 ]
+            ├── cost: {compute=12610,io=2020}
+            ├── stat: {row_cnt=1000}
+            └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ], cost: {compute=3420,io=2020}, stat: {row_cnt=1000} }
+                ├── PhysicalHashShuffle { columns: [ #0 ], cost: {compute=110,io=1010}, stat: {row_cnt=1000} }
+                │   └── PhysicalScan { table: t1, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
+                └── PhysicalHashShuffle { columns: [ #0 ], cost: {compute=110,io=1010}, stat: {row_cnt=1000} }
+                    └── PhysicalScan { table: t2, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
 */
 
 -- Test whether the optimizer can unnest correlated subqueries with (scalar op group agg)
@@ -111,28 +114,32 @@ LogicalProjection { exprs: [ #0, #1 ] }
                         └── LogicalJoin { join_type: Inner, cond: true }
                             ├── LogicalScan { table: t1 }
                             └── LogicalScan { table: t2 }
-PhysicalProjection { exprs: [ #0, #1 ], cost: {compute=23673.1,io=2000}, stat: {row_cnt=1} }
+PhysicalProjection { exprs: [ #0, #1 ], cost: {compute=24103.1,io=2040}, stat: {row_cnt=1} }
 └── PhysicalFilter
     ├── cond:Gt
     │   ├── #2
     │   └── 100(i64)
-    ├── cost: {compute=23670,io=2000}
+    ├── cost: {compute=24100,io=2040}
     ├── stat: {row_cnt=1}
-    └── PhysicalHashAgg
-        ├── aggrs:Agg(Sum)
-        │   └── [ #3 ]
-        ├── groups: [ #0, #1 ]
-        ├── cost: {compute=20570,io=2000}
-        ├── stat: {row_cnt=1000}
+    └── PhysicalGather { cost: {compute=21000,io=2040}, stat: {row_cnt=1000} }
         └── PhysicalHashAgg
             ├── aggrs:Agg(Sum)
-            │   └── [ Cast { cast_to: Int64, child: #3 } ]
-            ├── groups: [ #0, #1, #2 ]
-            ├── cost: {compute=13400,io=2000}
+            │   └── [ #3 ]
+            ├── groups: [ #0, #1 ]
+            ├── cost: {compute=20900,io=2030}
             ├── stat: {row_cnt=1000}
-            └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ], cost: {compute=3200,io=2000}, stat: {row_cnt=1000} }
-                ├── PhysicalScan { table: t1, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
-                └── PhysicalScan { table: t2, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
+            └── PhysicalHashShuffle { columns: [ #0, #1 ], cost: {compute=13730,io=2030}, stat: {row_cnt=1000} }
+                └── PhysicalHashAgg
+                    ├── aggrs:Agg(Sum)
+                    │   └── [ Cast { cast_to: Int64, child: #3 } ]
+                    ├── groups: [ #0, #1, #2 ]
+                    ├── cost: {compute=13620,io=2020}
+                    ├── stat: {row_cnt=1000}
+                    └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ], cost: {compute=3420,io=2020}, stat: {row_cnt=1000} }
+                        ├── PhysicalHashShuffle { columns: [ #0 ], cost: {compute=110,io=1010}, stat: {row_cnt=1000} }
+                        │   └── PhysicalScan { table: t1, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
+                        └── PhysicalHashShuffle { columns: [ #0 ], cost: {compute=110,io=1010}, stat: {row_cnt=1000} }
+                            └── PhysicalScan { table: t2, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
 */
 
 -- Test whether the optimizer can unnest correlated subqueries with scalar agg in select list
@@ -165,16 +172,19 @@ LogicalProjection { exprs: [ #0, #2 ] }
             └── LogicalJoin { join_type: Inner, cond: true }
                 ├── LogicalScan { table: t1 }
                 └── LogicalScan { table: t2 }
-PhysicalProjection { exprs: [ #0, #2 ], cost: {compute=15490,io=2000}, stat: {row_cnt=1000} }
-└── PhysicalHashAgg
-    ├── aggrs:Agg(Sum)
-    │   └── [ Cast { cast_to: Int64, child: #3 } ]
-    ├── groups: [ #0, #1 ]
-    ├── cost: {compute=12390,io=2000}
-    ├── stat: {row_cnt=1000}
-    └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ], cost: {compute=3200,io=2000}, stat: {row_cnt=1000} }
-        ├── PhysicalScan { table: t1, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
-        └── PhysicalScan { table: t2, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
+PhysicalProjection { exprs: [ #0, #2 ], cost: {compute=15810,io=2030}, stat: {row_cnt=1000} }
+└── PhysicalGather { cost: {compute=12710,io=2030}, stat: {row_cnt=1000} }
+    └── PhysicalHashAgg
+        ├── aggrs:Agg(Sum)
+        │   └── [ Cast { cast_to: Int64, child: #3 } ]
+        ├── groups: [ #0, #1 ]
+        ├── cost: {compute=12610,io=2020}
+        ├── stat: {row_cnt=1000}
+        └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ], cost: {compute=3420,io=2020}, stat: {row_cnt=1000} }
+            ├── PhysicalHashShuffle { columns: [ #0 ], cost: {compute=110,io=1010}, stat: {row_cnt=1000} }
+            │   └── PhysicalScan { table: t1, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
+            └── PhysicalHashShuffle { columns: [ #0 ], cost: {compute=110,io=1010}, stat: {row_cnt=1000} }
+                └── PhysicalScan { table: t2, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
 */
 
 -- Test whether the optimizer can unnest correlated subqueries.
@@ -229,23 +239,28 @@ LogicalProjection { exprs: [ #0, #1 ] }
                         └── LogicalJoin { join_type: Inner, cond: true }
                             ├── LogicalScan { table: t2 }
                             └── LogicalScan { table: t3 }
-PhysicalProjection { exprs: [ #0, #1 ], cost: {compute=18693.1,io=3000}, stat: {row_cnt=1} }
+PhysicalProjection { exprs: [ #0, #1 ], cost: {compute=19343.1,io=3060}, stat: {row_cnt=1} }
 └── PhysicalFilter
     ├── cond:Gt
     │   ├── #2
     │   └── 100(i64)
-    ├── cost: {compute=18690,io=3000}
+    ├── cost: {compute=19340,io=3060}
     ├── stat: {row_cnt=1}
-    └── PhysicalHashAgg
-        ├── aggrs:Agg(Sum)
-        │   └── [ Cast { cast_to: Int64, child: #3 } ]
-        ├── groups: [ #0, #1 ]
-        ├── cost: {compute=15590,io=3000}
-        ├── stat: {row_cnt=1000}
-        └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ], cost: {compute=6400,io=3000}, stat: {row_cnt=1000} }
-            ├── PhysicalScan { table: t1, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
-            └── PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ], cost: {compute=3200,io=2000}, stat: {row_cnt=1000} }
-                ├── PhysicalScan { table: t2, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
-                └── PhysicalScan { table: t3, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
+    └── PhysicalGather { cost: {compute=16240,io=3060}, stat: {row_cnt=1000} }
+        └── PhysicalHashAgg
+            ├── aggrs:Agg(Sum)
+            │   └── [ Cast { cast_to: Int64, child: #3 } ]
+            ├── groups: [ #0, #1 ]
+            ├── cost: {compute=16140,io=3050}
+            ├── stat: {row_cnt=1000}
+            └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ], cost: {compute=6840,io=3040}, stat: {row_cnt=1000} }
+                ├── PhysicalHashShuffle { columns: [ #0 ], cost: {compute=110,io=1010}, stat: {row_cnt=1000} }
+                │   └── PhysicalScan { table: t1, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
+                └── PhysicalHashShuffle { columns: [ #0 ], cost: {compute=3530,io=2030}, stat: {row_cnt=1000} }
+                    └── PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ], cost: {compute=3420,io=2020}, stat: {row_cnt=1000} }
+                        ├── PhysicalHashShuffle { columns: [ #1 ], cost: {compute=110,io=1010}, stat: {row_cnt=1000} }
+                        │   └── PhysicalScan { table: t2, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
+                        └── PhysicalHashShuffle { columns: [ #0 ], cost: {compute=110,io=1010}, stat: {row_cnt=1000} }
+                            └── PhysicalScan { table: t3, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
 */
 

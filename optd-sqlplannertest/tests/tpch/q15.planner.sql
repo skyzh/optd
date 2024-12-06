@@ -108,50 +108,57 @@ PhysicalSort
         │   └── Eq
         │       ├── #8
         │       └── #9
-        └── PhysicalHashAgg
-            ├── aggrs:Agg(Max)
-            │   └── [ #10 ]
-            ├── groups: [ #0, #1, #2, #3, #4, #5, #6, #7, #8 ]
+        └── PhysicalGather
             └── PhysicalHashAgg
-                ├── aggrs:Agg(Sum)
-                │   └── Mul
-                │       ├── #14
-                │       └── Sub
-                │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
-                │           └── #15
-                ├── groups: [ #0, #1, #2, #3, #4, #5, #6, #7, #8, #11 ]
-                └── PhysicalFilter
-                    ├── cond:And
-                    │   ├── Geq
-                    │   │   ├── #19
-                    │   │   └── Cast { cast_to: Date32, child: "1993-01-01" }
-                    │   └── Lt
-                    │       ├── #19
-                    │       └── Add
-                    │           ├── Cast { cast_to: Date32, child: "1993-01-01" }
-                    │           └── INTERVAL_MONTH_DAY_NANO (3, 0, 0)
-                    └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                        ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                        │   ├── PhysicalScan { table: supplier }
-                        │   └── PhysicalHashAgg
-                        │       ├── aggrs:Agg(Sum)
-                        │       │   └── Mul
-                        │       │       ├── #5
-                        │       │       └── Sub
-                        │       │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
-                        │       │           └── #6
-                        │       ├── groups: [ #2 ]
-                        │       └── PhysicalFilter
-                        │           ├── cond:And
-                        │           │   ├── Geq
-                        │           │   │   ├── #10
-                        │           │   │   └── Cast { cast_to: Date32, child: "1993-01-01" }
-                        │           │   └── Lt
-                        │           │       ├── #10
-                        │           │       └── Add
-                        │           │           ├── Cast { cast_to: Date32, child: "1993-01-01" }
-                        │           │           └── INTERVAL_MONTH_DAY_NANO (3, 0, 0)
-                        │           └── PhysicalScan { table: lineitem }
-                        └── PhysicalScan { table: lineitem }
+                ├── aggrs:Agg(Max)
+                │   └── [ #10 ]
+                ├── groups: [ #0, #1, #2, #3, #4, #5, #6, #7, #8 ]
+                └── PhysicalHashShuffle { columns: [ #0, #1, #2, #3, #4, #5, #6, #7, #8 ] }
+                    └── PhysicalHashAgg
+                        ├── aggrs:Agg(Sum)
+                        │   └── Mul
+                        │       ├── #14
+                        │       └── Sub
+                        │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
+                        │           └── #15
+                        ├── groups: [ #0, #1, #2, #3, #4, #5, #6, #7, #8, #11 ]
+                        └── PhysicalFilter
+                            ├── cond:And
+                            │   ├── Geq
+                            │   │   ├── #19
+                            │   │   └── Cast { cast_to: Date32, child: "1993-01-01" }
+                            │   └── Lt
+                            │       ├── #19
+                            │       └── Add
+                            │           ├── Cast { cast_to: Date32, child: "1993-01-01" }
+                            │           └── INTERVAL_MONTH_DAY_NANO (3, 0, 0)
+                            └── PhysicalHashShuffle { columns: [ #0, #1, #2, #3, #4, #5, #6, #7, #8, #11 ] }
+                                └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                                    ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                                    │   ├── PhysicalGather
+                                    │   │   └── PhysicalScan { table: supplier }
+                                    │   └── PhysicalGather
+                                    │       └── PhysicalHashAgg
+                                    │           ├── aggrs:Agg(Sum)
+                                    │           │   └── Mul
+                                    │           │       ├── #5
+                                    │           │       └── Sub
+                                    │           │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
+                                    │           │           └── #6
+                                    │           ├── groups: [ #2 ]
+                                    │           └── PhysicalFilter
+                                    │               ├── cond:And
+                                    │               │   ├── Geq
+                                    │               │   │   ├── #10
+                                    │               │   │   └── Cast { cast_to: Date32, child: "1993-01-01" }
+                                    │               │   └── Lt
+                                    │               │       ├── #10
+                                    │               │       └── Add
+                                    │               │           ├── Cast { cast_to: Date32, child: "1993-01-01" }
+                                    │               │           └── INTERVAL_MONTH_DAY_NANO (3, 0, 0)
+                                    │               └── PhysicalHashShuffle { columns: [ #2 ] }
+                                    │                   └── PhysicalScan { table: lineitem }
+                                    └── PhysicalGather
+                                        └── PhysicalScan { table: lineitem }
 */
 

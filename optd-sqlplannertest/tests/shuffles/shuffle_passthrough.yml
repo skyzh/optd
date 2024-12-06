@@ -1,0 +1,23 @@
+# Note: datafusion added `optimize_subquery_sort` to eliminate sorts, so all test cases need to have a `limit`.
+- sql: |
+    create table t1(v1 int, v2 int, v3 int);
+    create table t2(v4 int);
+    create table t3(v5 int, v6 int);
+    insert into t1 values (0, 200, 300), (3, 201, 301), (2, 202, 302);
+  tasks:
+    - execute
+- sql: |
+    select v1, sum(v2), sum(sum_v3) from (select v1, v2, sum(v3) as sum_v3 from t1 group by v1, v2) group by v1;
+  desc: test shuffle passthrough, should generate two shuffles
+  tasks:
+    - explain:logical_optd,physical_optd
+- sql: |
+    select v2, sum(v1), sum(sum_v3) from (select v1, v2, sum(v3) as sum_v3 from t1 group by v1, v2) group by v2;
+  desc: test shuffle passthrough, should generate two shuffles
+  tasks:
+    - explain:logical_optd,physical_optd
+- sql: |
+    select * from t1, t2, t3 where v1 = v4 and v1 = v5 and v2 = v6;
+  desc: test shuffle passthrough, should generate one shuffle because shuffle by v1 satisfies shuffle by v1, v2
+  tasks:
+    - explain:logical_optd,physical_optd

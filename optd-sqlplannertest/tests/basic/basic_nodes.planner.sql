@@ -19,7 +19,8 @@ LogicalLimit { skip: 0(i64), fetch: 1(i64) }
 └── LogicalProjection { exprs: [ #0, #1 ] }
     └── LogicalScan { table: t1 }
 PhysicalLimit { skip: 0(i64), fetch: 1(i64) }
-└── PhysicalScan { table: t1 }
+└── PhysicalGather
+    └── PhysicalScan { table: t1 }
 0 0
 0 0
 1 1

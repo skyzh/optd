@@ -78,50 +78,54 @@ LogicalSort
 PhysicalSort
 ├── exprs:SortOrder { order: Asc }
 │   └── #0
-└── PhysicalHashAgg
-    ├── aggrs:
-    │   ┌── Agg(Sum)
-    │   │   └── Case
-    │   │       └── 
-    │   │           ┌── Or
-    │   │           │   ├── Eq
-    │   │           │   │   ├── #5
-    │   │           │   │   └── "1-URGENT"
-    │   │           │   └── Eq
-    │   │           │       ├── #5
-    │   │           │       └── "2-HIGH"
-    │   │           ├── 1(i64)
-    │   │           └── 0(i64)
-    │   └── Agg(Sum)
-    │       └── Case
-    │           └── 
-    │               ┌── And
-    │               │   ├── Neq
-    │               │   │   ├── #5
-    │               │   │   └── "1-URGENT"
-    │               │   └── Neq
-    │               │       ├── #5
-    │               │       └── "2-HIGH"
-    │               ├── 1(i64)
-    │               └── 0(i64)
-    ├── groups: [ #23 ]
-    └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
-        ├── PhysicalScan { table: orders }
-        └── PhysicalFilter
-            ├── cond:And
-            │   ├── InList { expr: #14, list: [ "MAIL", "SHIP" ], negated: false }
-            │   ├── Lt
-            │   │   ├── #11
-            │   │   └── #12
-            │   ├── Lt
-            │   │   ├── #10
-            │   │   └── #11
-            │   ├── Geq
-            │   │   ├── #12
-            │   │   └── Cast { cast_to: Date32, child: "1994-01-01" }
-            │   └── Lt
-            │       ├── #12
-            │       └── Cast { cast_to: Date32, child: "1995-01-01" }
-            └── PhysicalScan { table: lineitem }
+└── PhysicalGather
+    └── PhysicalHashAgg
+        ├── aggrs:
+        │   ┌── Agg(Sum)
+        │   │   └── Case
+        │   │       └── 
+        │   │           ┌── Or
+        │   │           │   ├── Eq
+        │   │           │   │   ├── #5
+        │   │           │   │   └── "1-URGENT"
+        │   │           │   └── Eq
+        │   │           │       ├── #5
+        │   │           │       └── "2-HIGH"
+        │   │           ├── 1(i64)
+        │   │           └── 0(i64)
+        │   └── Agg(Sum)
+        │       └── Case
+        │           └── 
+        │               ┌── And
+        │               │   ├── Neq
+        │               │   │   ├── #5
+        │               │   │   └── "1-URGENT"
+        │               │   └── Neq
+        │               │       ├── #5
+        │               │       └── "2-HIGH"
+        │               ├── 1(i64)
+        │               └── 0(i64)
+        ├── groups: [ #23 ]
+        └── PhysicalHashShuffle { columns: [ #23 ] }
+            └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
+                ├── PhysicalHashShuffle { columns: [ #0 ] }
+                │   └── PhysicalScan { table: orders }
+                └── PhysicalFilter
+                    ├── cond:And
+                    │   ├── InList { expr: #14, list: [ "MAIL", "SHIP" ], negated: false }
+                    │   ├── Lt
+                    │   │   ├── #11
+                    │   │   └── #12
+                    │   ├── Lt
+                    │   │   ├── #10
+                    │   │   └── #11
+                    │   ├── Geq
+                    │   │   ├── #12
+                    │   │   └── Cast { cast_to: Date32, child: "1994-01-01" }
+                    │   └── Lt
+                    │       ├── #12
+                    │       └── Cast { cast_to: Date32, child: "1995-01-01" }
+                    └── PhysicalHashShuffle { columns: [ #0 ] }
+                        └── PhysicalScan { table: lineitem }
 */
 

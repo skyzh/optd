@@ -69,30 +69,43 @@ PhysicalLimit { skip: 0(i64), fetch: 10(i64) }
     │   └── SortOrder { order: Asc }
     │       └── #2
     └── PhysicalProjection { exprs: [ #0, #3, #1, #2 ] }
-        └── PhysicalHashAgg
-            ├── aggrs:Agg(Sum)
-            │   └── Mul
-            │       ├── #22
-            │       └── Sub
-            │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
-            │           └── #23
-            ├── groups: [ #17, #12, #15 ]
-            └── PhysicalHashJoin { join_type: Inner, left_keys: [ #8 ], right_keys: [ #0 ] }
-                ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #1 ] }
-                │   ├── PhysicalFilter
-                │   │   ├── cond:Eq
-                │   │   │   ├── #6
-                │   │   │   └── "FURNITURE"
-                │   │   └── PhysicalScan { table: customer }
-                │   └── PhysicalFilter
-                │       ├── cond:Lt
-                │       │   ├── #4
-                │       │   └── Cast { cast_to: Date32, child: "1995-03-29" }
-                │       └── PhysicalScan { table: orders }
-                └── PhysicalFilter
-                    ├── cond:Gt
-                    │   ├── #10
-                    │   └── Cast { cast_to: Date32, child: "1995-03-29" }
-                    └── PhysicalScan { table: lineitem }
+        └── PhysicalGather
+            └── PhysicalHashAgg
+                ├── aggrs:Agg(Sum)
+                │   └── Mul
+                │       ├── #22
+                │       └── Sub
+                │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
+                │           └── #23
+                ├── groups: [ #17, #12, #15 ]
+                └── PhysicalHashShuffle { columns: [ #12, #15, #17 ] }
+                    └── PhysicalNestedLoopJoin
+                        ├── join_type: Inner
+                        ├── cond:Eq
+                        │   ├── #17
+                        │   └── #8
+                        ├── PhysicalNestedLoopJoin
+                        │   ├── join_type: Inner
+                        │   ├── cond:Eq
+                        │   │   ├── #0
+                        │   │   └── #9
+                        │   ├── PhysicalFilter
+                        │   │   ├── cond:Eq
+                        │   │   │   ├── #6
+                        │   │   │   └── "FURNITURE"
+                        │   │   └── PhysicalGather
+                        │   │       └── PhysicalScan { table: customer }
+                        │   └── PhysicalFilter
+                        │       ├── cond:Lt
+                        │       │   ├── #4
+                        │       │   └── Cast { cast_to: Date32, child: "1995-03-29" }
+                        │       └── PhysicalGather
+                        │           └── PhysicalScan { table: orders }
+                        └── PhysicalFilter
+                            ├── cond:Gt
+                            │   ├── #10
+                            │   └── Cast { cast_to: Date32, child: "1995-03-29" }
+                            └── PhysicalGather
+                                └── PhysicalScan { table: lineitem }
 */
 

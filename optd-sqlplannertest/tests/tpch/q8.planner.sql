@@ -124,52 +124,72 @@ PhysicalSort
     │   └── Div
     │       ├── #1
     │       └── #2
-    └── PhysicalHashAgg
-        ├── aggrs:
-        │   ┌── Agg(Sum)
-        │   │   └── Case
-        │   │       └── 
-        │   │           ┌── Eq
-        │   │           │   ├── #2
-        │   │           │   └── "IRAQ"
-        │   │           ├── #1
-        │   │           └── Cast { cast_to: Decimal128(38, 4), child: 0(i64) }
-        │   └── Agg(Sum)
-        │       └── [ #1 ]
-        ├── groups: [ #0 ]
-        └── PhysicalProjection
-            ├── exprs:
-            │   ┌── Scalar(DatePart)
-            │   │   └── [ "YEAR", #36 ]
-            │   ├── Mul
-            │   │   ├── #21
-            │   │   └── Sub
-            │   │       ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
-            │   │       └── #22
-            │   └── #54
-            └── PhysicalHashJoin { join_type: Inner, left_keys: [ #51 ], right_keys: [ #0 ] }
-                ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #12 ], right_keys: [ #0 ] }
-                │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #44 ], right_keys: [ #0 ] }
-                │   │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #33 ], right_keys: [ #0 ] }
-                │   │   │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #16 ], right_keys: [ #0 ] }
-                │   │   │   │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #0, #9 ], right_keys: [ #1, #2 ] }
-                │   │   │   │   │   ├── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                │   │   │   │   │   │   ├── PhysicalFilter
-                │   │   │   │   │   │   │   ├── cond:Eq
-                │   │   │   │   │   │   │   │   ├── #4
-                │   │   │   │   │   │   │   │   └── "ECONOMY ANODIZED STEEL"
-                │   │   │   │   │   │   │   └── PhysicalScan { table: part }
-                │   │   │   │   │   │   └── PhysicalScan { table: supplier }
-                │   │   │   │   │   └── PhysicalScan { table: lineitem }
-                │   │   │   │   └── PhysicalFilter { cond: Between { child: #4, lower: Cast { cast_to: Date32, child: "1995-01-01" }, upper: Cast { cast_to: Date32, child: "1996-12-31" } } }
-                │   │   │   │       └── PhysicalScan { table: orders }
-                │   │   │   └── PhysicalScan { table: customer }
-                │   │   └── PhysicalScan { table: nation }
-                │   └── PhysicalScan { table: nation }
-                └── PhysicalFilter
-                    ├── cond:Eq
-                    │   ├── #1
-                    │   └── "AMERICA"
-                    └── PhysicalScan { table: region }
+    └── PhysicalGather
+        └── PhysicalHashAgg
+            ├── aggrs:
+            │   ┌── Agg(Sum)
+            │   │   └── Case
+            │   │       └── 
+            │   │           ┌── Eq
+            │   │           │   ├── #2
+            │   │           │   └── "IRAQ"
+            │   │           ├── #1
+            │   │           └── Cast { cast_to: Decimal128(38, 4), child: 0(i64) }
+            │   └── Agg(Sum)
+            │       └── [ #1 ]
+            ├── groups: [ #0 ]
+            └── PhysicalHashShuffle { columns: [ #0 ] }
+                └── PhysicalProjection
+                    ├── exprs:
+                    │   ┌── Scalar(DatePart)
+                    │   │   └── [ "YEAR", #36 ]
+                    │   ├── Mul
+                    │   │   ├── #21
+                    │   │   └── Sub
+                    │   │       ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
+                    │   │       └── #22
+                    │   └── #54
+                    └── PhysicalNestedLoopJoin
+                        ├── join_type: Inner
+                        ├── cond:Eq
+                        │   ├── #51
+                        │   └── #57
+                        ├── PhysicalGather
+                        │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #12 ], right_keys: [ #0 ] }
+                        │       ├── PhysicalHashShuffle { columns: [ #12 ] }
+                        │       │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #44 ], right_keys: [ #0 ] }
+                        │       │       ├── PhysicalHashShuffle { columns: [ #44 ] }
+                        │       │       │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #33 ], right_keys: [ #0 ] }
+                        │       │       │       ├── PhysicalHashShuffle { columns: [ #33 ] }
+                        │       │       │       │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #16 ], right_keys: [ #0 ] }
+                        │       │       │       │       ├── PhysicalHashShuffle { columns: [ #16 ] }
+                        │       │       │       │       │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0, #9 ], right_keys: [ #1, #2 ] }
+                        │       │       │       │       │       ├── PhysicalHashShuffle { columns: [ #0, #9 ] }
+                        │       │       │       │       │       │   └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                        │       │       │       │       │       │       ├── PhysicalFilter
+                        │       │       │       │       │       │       │   ├── cond:Eq
+                        │       │       │       │       │       │       │   │   ├── #4
+                        │       │       │       │       │       │       │   │   └── "ECONOMY ANODIZED STEEL"
+                        │       │       │       │       │       │       │   └── PhysicalGather
+                        │       │       │       │       │       │       │       └── PhysicalScan { table: part }
+                        │       │       │       │       │       │       └── PhysicalGather
+                        │       │       │       │       │       │           └── PhysicalScan { table: supplier }
+                        │       │       │       │       │       └── PhysicalHashShuffle { columns: [ #1, #2 ] }
+                        │       │       │       │       │           └── PhysicalScan { table: lineitem }
+                        │       │       │       │       └── PhysicalFilter { cond: Between { child: #4, lower: Cast { cast_to: Date32, child: "1995-01-01" }, upper: Cast { cast_to: Date32, child: "1996-12-31" } } }
+                        │       │       │       │           └── PhysicalHashShuffle { columns: [ #0 ] }
+                        │       │       │       │               └── PhysicalScan { table: orders }
+                        │       │       │       └── PhysicalHashShuffle { columns: [ #0 ] }
+                        │       │       │           └── PhysicalScan { table: customer }
+                        │       │       └── PhysicalHashShuffle { columns: [ #0 ] }
+                        │       │           └── PhysicalScan { table: nation }
+                        │       └── PhysicalHashShuffle { columns: [ #0 ] }
+                        │           └── PhysicalScan { table: nation }
+                        └── PhysicalFilter
+                            ├── cond:Eq
+                            │   ├── #1
+                            │   └── "AMERICA"
+                            └── PhysicalGather
+                                └── PhysicalScan { table: region }
 */
 

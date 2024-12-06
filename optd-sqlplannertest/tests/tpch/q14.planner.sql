@@ -59,37 +59,41 @@ PhysicalProjection
 │   │   ├── 100(float)
 │   │   └── Cast { cast_to: Float64, child: #0 }
 │   └── Cast { cast_to: Float64, child: #1 }
-└── PhysicalStreamAgg
-    ├── aggrs:
-    │   ┌── Agg(Sum)
-    │   │   └── Case
-    │   │       └── 
-    │   │           ┌── Like { expr: #20, pattern: "PROMO%", negated: false, case_insensitive: false }
-    │   │           ├── Mul
-    │   │           │   ├── #5
-    │   │           │   └── Sub
-    │   │           │       ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
-    │   │           │       └── #6
-    │   │           └── Cast { cast_to: Decimal128(38, 4), child: 0(i64) }
-    │   └── Agg(Sum)
-    │       └── Mul
-    │           ├── #5
-    │           └── Sub
-    │               ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
-    │               └── #6
-    ├── groups: []
-    └── PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ] }
-        ├── PhysicalFilter
-        │   ├── cond:And
-        │   │   ├── Geq
-        │   │   │   ├── #10
-        │   │   │   └── Cast { cast_to: Date32, child: "1995-09-01" }
-        │   │   └── Lt
-        │   │       ├── #10
-        │   │       └── Add
-        │   │           ├── Cast { cast_to: Date32, child: "1995-09-01" }
-        │   │           └── INTERVAL_MONTH_DAY_NANO (1, 0, 0)
-        │   └── PhysicalScan { table: lineitem }
-        └── PhysicalScan { table: part }
+└── PhysicalGather
+    └── PhysicalStreamAgg
+        ├── aggrs:
+        │   ┌── Agg(Sum)
+        │   │   └── Case
+        │   │       └── 
+        │   │           ┌── Like { expr: #20, pattern: "PROMO%", negated: false, case_insensitive: false }
+        │   │           ├── Mul
+        │   │           │   ├── #5
+        │   │           │   └── Sub
+        │   │           │       ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
+        │   │           │       └── #6
+        │   │           └── Cast { cast_to: Decimal128(38, 4), child: 0(i64) }
+        │   └── Agg(Sum)
+        │       └── Mul
+        │           ├── #5
+        │           └── Sub
+        │               ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
+        │               └── #6
+        ├── groups: []
+        └── PhysicalHashShuffle { columns: [] }
+            └── PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ] }
+                ├── PhysicalFilter
+                │   ├── cond:And
+                │   │   ├── Geq
+                │   │   │   ├── #10
+                │   │   │   └── Cast { cast_to: Date32, child: "1995-09-01" }
+                │   │   └── Lt
+                │   │       ├── #10
+                │   │       └── Add
+                │   │           ├── Cast { cast_to: Date32, child: "1995-09-01" }
+                │   │           └── INTERVAL_MONTH_DAY_NANO (1, 0, 0)
+                │   └── PhysicalHashShuffle { columns: [ #1 ] }
+                │       └── PhysicalScan { table: lineitem }
+                └── PhysicalHashShuffle { columns: [ #0 ] }
+                    └── PhysicalScan { table: part }
 */
 

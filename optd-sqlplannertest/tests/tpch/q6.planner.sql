@@ -30,24 +30,26 @@ LogicalProjection { exprs: [ #0 ] }
         │       ├── Cast { cast_to: Decimal128(22, 2), child: #4 }
         │       └── Cast { cast_to: Decimal128(22, 2), child: 24(i64) }
         └── LogicalScan { table: lineitem }
-PhysicalStreamAgg
-├── aggrs:Agg(Sum)
-│   └── Mul
-│       ├── #5
-│       └── #6
-├── groups: []
-└── PhysicalFilter
-    ├── cond:And
-    │   ├── Geq
-    │   │   ├── #10
-    │   │   └── Cast { cast_to: Date32, child: "2023-01-01" }
-    │   ├── Lt
-    │   │   ├── #10
-    │   │   └── Cast { cast_to: Date32, child: "2024-01-01" }
-    │   ├── Between { child: Cast { cast_to: Decimal128(30, 15), child: #6 }, lower: Cast { cast_to: Decimal128(30, 15), child: 0.05(float) }, upper: Cast { cast_to: Decimal128(30, 15), child: 0.07(float) } }
-    │   └── Lt
-    │       ├── Cast { cast_to: Decimal128(22, 2), child: #4 }
-    │       └── Cast { cast_to: Decimal128(22, 2), child: 24(i64) }
-    └── PhysicalScan { table: lineitem }
+PhysicalGather
+└── PhysicalStreamAgg
+    ├── aggrs:Agg(Sum)
+    │   └── Mul
+    │       ├── #5
+    │       └── #6
+    ├── groups: []
+    └── PhysicalFilter
+        ├── cond:And
+        │   ├── Geq
+        │   │   ├── #10
+        │   │   └── Cast { cast_to: Date32, child: "2023-01-01" }
+        │   ├── Lt
+        │   │   ├── #10
+        │   │   └── Cast { cast_to: Date32, child: "2024-01-01" }
+        │   ├── Between { child: Cast { cast_to: Decimal128(30, 15), child: #6 }, lower: Cast { cast_to: Decimal128(30, 15), child: 0.05(float) }, upper: Cast { cast_to: Decimal128(30, 15), child: 0.07(float) } }
+        │   └── Lt
+        │       ├── Cast { cast_to: Decimal128(22, 2), child: #4 }
+        │       └── Cast { cast_to: Decimal128(22, 2), child: 24(i64) }
+        └── PhysicalHashShuffle { columns: [] }
+            └── PhysicalScan { table: lineitem }
 */
 

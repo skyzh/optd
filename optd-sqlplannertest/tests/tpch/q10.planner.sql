@@ -80,34 +80,46 @@ PhysicalLimit { skip: 0(i64), fetch: 20(i64) }
     ├── exprs:SortOrder { order: Desc }
     │   └── #2
     └── PhysicalProjection { exprs: [ #0, #1, #7, #2, #4, #5, #3, #6 ] }
-        └── PhysicalHashAgg
-            ├── aggrs:Agg(Sum)
-            │   └── Mul
-            │       ├── #22
-            │       └── Sub
-            │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
-            │           └── #23
-            ├── groups: [ #0, #1, #5, #4, #34, #2, #7 ]
-            └── PhysicalHashJoin { join_type: Inner, left_keys: [ #3 ], right_keys: [ #0 ] }
-                ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #8 ], right_keys: [ #0 ] }
-                │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #1 ] }
-                │   │   ├── PhysicalScan { table: customer }
-                │   │   └── PhysicalFilter
-                │   │       ├── cond:And
-                │   │       │   ├── Geq
-                │   │       │   │   ├── #4
-                │   │       │   │   └── Cast { cast_to: Date32, child: "1993-07-01" }
-                │   │       │   └── Lt
-                │   │       │       ├── #4
-                │   │       │       └── Add
-                │   │       │           ├── Cast { cast_to: Date32, child: "1993-07-01" }
-                │   │       │           └── INTERVAL_MONTH_DAY_NANO (3, 0, 0)
-                │   │       └── PhysicalScan { table: orders }
-                │   └── PhysicalFilter
-                │       ├── cond:Eq
-                │       │   ├── #8
-                │       │   └── "R"
-                │       └── PhysicalScan { table: lineitem }
-                └── PhysicalScan { table: nation }
+        └── PhysicalGather
+            └── PhysicalHashAgg
+                ├── aggrs:Agg(Sum)
+                │   └── Mul
+                │       ├── #22
+                │       └── Sub
+                │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
+                │           └── #23
+                ├── groups: [ #0, #1, #5, #4, #34, #2, #7 ]
+                └── PhysicalHashShuffle { columns: [ #0, #1, #2, #4, #5, #7, #34 ] }
+                    └── PhysicalHashJoin { join_type: Inner, left_keys: [ #3 ], right_keys: [ #0 ] }
+                        ├── PhysicalHashShuffle { columns: [ #3 ] }
+                        │   └── PhysicalNestedLoopJoin
+                        │       ├── join_type: Inner
+                        │       ├── cond:Eq
+                        │       │   ├── #17
+                        │       │   └── #8
+                        │       ├── PhysicalGather
+                        │       │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #1 ] }
+                        │       │       ├── PhysicalHashShuffle { columns: [ #0 ] }
+                        │       │       │   └── PhysicalScan { table: customer }
+                        │       │       └── PhysicalFilter
+                        │       │           ├── cond:And
+                        │       │           │   ├── Geq
+                        │       │           │   │   ├── #4
+                        │       │           │   │   └── Cast { cast_to: Date32, child: "1993-07-01" }
+                        │       │           │   └── Lt
+                        │       │           │       ├── #4
+                        │       │           │       └── Add
+                        │       │           │           ├── Cast { cast_to: Date32, child: "1993-07-01" }
+                        │       │           │           └── INTERVAL_MONTH_DAY_NANO (3, 0, 0)
+                        │       │           └── PhysicalHashShuffle { columns: [ #1 ] }
+                        │       │               └── PhysicalScan { table: orders }
+                        │       └── PhysicalFilter
+                        │           ├── cond:Eq
+                        │           │   ├── #8
+                        │           │   └── "R"
+                        │           └── PhysicalGather
+                        │               └── PhysicalScan { table: lineitem }
+                        └── PhysicalHashShuffle { columns: [ #0 ] }
+                            └── PhysicalScan { table: nation }
 */
 

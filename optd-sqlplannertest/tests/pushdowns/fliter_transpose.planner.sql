@@ -29,8 +29,10 @@ PhysicalProjection { exprs: [ #0, #1, #3 ] }
     │   ├── #0
     │   └── #2
     └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-        ├── PhysicalScan { table: t1 }
-        └── PhysicalScan { table: t2 }
+        ├── PhysicalGather
+        │   └── PhysicalScan { table: t1 }
+        └── PhysicalGather
+            └── PhysicalScan { table: t2 }
 */
 
 -- Test whether we can transpose filter and projection
@@ -53,8 +55,10 @@ PhysicalProjection { exprs: [ #0, #1, #3 ] }
     │   ├── #0
     │   └── #3
     └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-        ├── PhysicalScan { table: t1 }
-        └── PhysicalScan { table: t2 }
+        ├── PhysicalGather
+        │   └── PhysicalScan { table: t1 }
+        └── PhysicalGather
+            └── PhysicalScan { table: t2 }
 */
 
 -- Test whether we can transpose filter and projection
@@ -78,7 +82,9 @@ PhysicalProjection { exprs: [ #0, #1, #3 ] }
     │   ├── #0
     │   └── #3
     └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-        ├── PhysicalScan { table: t1 }
-        └── PhysicalScan { table: t2 }
+        ├── PhysicalGather
+        │   └── PhysicalScan { table: t1 }
+        └── PhysicalGather
+            └── PhysicalScan { table: t2 }
 */
 

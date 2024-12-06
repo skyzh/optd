@@ -29,9 +29,12 @@ LogicalSort
 PhysicalSort
 ├── exprs:SortOrder { order: Asc }
 │   └── #0
-└── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
-    ├── PhysicalScan { table: t1 }
-    └── PhysicalScan { table: t1 }
+└── PhysicalGather
+    └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
+        ├── PhysicalHashShuffle { columns: [ #0 ] }
+        │   └── PhysicalScan { table: t1 }
+        └── PhysicalHashShuffle { columns: [ #0 ] }
+            └── PhysicalScan { table: t1 }
 0 0 0 0
 1 1 1 1
 2 2 2 2

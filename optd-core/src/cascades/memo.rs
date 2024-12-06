@@ -259,12 +259,10 @@ fn get_best_group_binding_inner<M: Memo<T> + ?Sized, T: NodeType>(
     ) = winner
     {
         let required_phys_prop = this.get_subgroup_goal(group_id, subgoal_id);
-        assert!(
-            this.get_physical_property_builders()
-                .satisfies_many(derived_physical_properties, &required_phys_prop),
-            "derived physical properties do not satisfy the required physical properties"
-        );
-        match expr_id {
+        let satisfies = this
+            .get_physical_property_builders()
+            .satisfies_many(derived_physical_properties, &required_phys_prop);
+        let node = match expr_id {
             WinnerExpr::Expr { expr_id } => {
                 let expr = this.get_expr_memoed(*expr_id);
                 let predicates = expr
@@ -305,8 +303,7 @@ fn get_best_group_binding_inner<M: Memo<T> + ?Sized, T: NodeType>(
                 });
                 // TODO: verify the node satisfies all required phys props
                 post_process(node.clone(), group_id, subgoal_id, info);
-                visited.remove(&(group_id, subgoal_id));
-                return Ok(node);
+                node
             }
             WinnerExpr::Enforcer {
                 expr_id,
@@ -332,8 +329,7 @@ fn get_best_group_binding_inner<M: Memo<T> + ?Sized, T: NodeType>(
                         .collect_vec(),
                 });
                 post_process(node.clone(), group_id, subgoal_id, info);
-                visited.remove(&(group_id, subgoal_id));
-                return Ok(node);
+                node
             }
             WinnerExpr::Propagate {
                 group_id: child_group_id,
@@ -347,10 +343,20 @@ fn get_best_group_binding_inner<M: Memo<T> + ?Sized, T: NodeType>(
                     visited,
                 )?;
                 post_process(node.clone(), group_id, subgoal_id, info);
-                visited.remove(&(group_id, subgoal_id));
-                return Ok(node);
+                node
             }
-        }
+        };
+        assert!(
+            satisfies,
+            "derived physical properties do not satisfy the required physical properties: derived=[{}], required=[{}], when processing group_id={}, subgoal_id={}, node={}",
+            derived_physical_properties.iter().map(|x| x.to_string()).join(", "),
+            required_phys_prop.iter().map(|x| x.to_string()).join(", "),
+            group_id,
+            subgoal_id,
+            node
+        );
+        visited.remove(&(group_id, subgoal_id));
+        return Ok(node);
     }
     bail!("no best group binding for group {}", group_id)
 }

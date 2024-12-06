@@ -108,60 +108,72 @@ LogicalSort
                     │   │   └── LogicalScan { table: customer }
                     │   └── LogicalScan { table: nation }
                     └── LogicalScan { table: nation }
-PhysicalStreamAgg
-├── aggrs:Agg(Sum)
-│   └── [ #3 ]
-├── groups: [ #0, #1, #2 ]
-└── PhysicalSort
-    ├── exprs:
-    │   ┌── SortOrder { order: Asc }
-    │   │   └── #0
-    │   ├── SortOrder { order: Asc }
-    │   │   └── #1
-    │   └── SortOrder { order: Asc }
-    │       └── #2
-    └── PhysicalProjection
+PhysicalGather
+└── PhysicalStreamAgg
+    ├── aggrs:Agg(Sum)
+    │   └── [ #3 ]
+    ├── groups: [ #0, #1, #2 ]
+    └── PhysicalSort
         ├── exprs:
-        │   ┌── #41
-        │   ├── #45
-        │   ├── Scalar(DatePart)
-        │   │   └── [ "YEAR", #17 ]
-        │   └── Mul
-        │       ├── #12
-        │       └── Sub
-        │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
-        │           └── #13
-        └── PhysicalNestedLoopJoin
-            ├── join_type: Inner
-            ├── cond:And
-            │   ├── Eq
-            │   │   ├── #35
-            │   │   └── #44
-            │   └── Or
-            │       ├── And
-            │       │   ├── Eq
-            │       │   │   ├── #41
-            │       │   │   └── "FRANCE"
-            │       │   └── Eq
-            │       │       ├── #45
-            │       │       └── "GERMANY"
-            │       └── And
-            │           ├── Eq
-            │           │   ├── #41
-            │           │   └── "GERMANY"
-            │           └── Eq
-            │               ├── #45
-            │               └── "FRANCE"
-            ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #3 ], right_keys: [ #0 ] }
-            │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #24 ], right_keys: [ #0 ] }
-            │   │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #7 ], right_keys: [ #0 ] }
-            │   │   │   ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #2 ] }
-            │   │   │   │   ├── PhysicalScan { table: supplier }
-            │   │   │   │   └── PhysicalFilter { cond: Between { child: #10, lower: Cast { cast_to: Date32, child: "1995-01-01" }, upper: Cast { cast_to: Date32, child: "1996-12-31" } } }
-            │   │   │   │       └── PhysicalScan { table: lineitem }
-            │   │   │   └── PhysicalScan { table: orders }
-            │   │   └── PhysicalScan { table: customer }
-            │   └── PhysicalScan { table: nation }
-            └── PhysicalScan { table: nation }
+        │   ┌── SortOrder { order: Asc }
+        │   │   └── #0
+        │   ├── SortOrder { order: Asc }
+        │   │   └── #1
+        │   └── SortOrder { order: Asc }
+        │       └── #2
+        └── PhysicalHashShuffle { columns: [ #0, #1, #2 ] }
+            └── PhysicalProjection
+                ├── exprs:
+                │   ┌── #41
+                │   ├── #45
+                │   ├── Scalar(DatePart)
+                │   │   └── [ "YEAR", #17 ]
+                │   └── Mul
+                │       ├── #12
+                │       └── Sub
+                │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
+                │           └── #13
+                └── PhysicalNestedLoopJoin
+                    ├── join_type: Inner
+                    ├── cond:And
+                    │   ├── Eq
+                    │   │   ├── #35
+                    │   │   └── #44
+                    │   └── Or
+                    │       ├── And
+                    │       │   ├── Eq
+                    │       │   │   ├── #41
+                    │       │   │   └── "FRANCE"
+                    │       │   └── Eq
+                    │       │       ├── #45
+                    │       │       └── "GERMANY"
+                    │       └── And
+                    │           ├── Eq
+                    │           │   ├── #41
+                    │           │   └── "GERMANY"
+                    │           └── Eq
+                    │               ├── #45
+                    │               └── "FRANCE"
+                    ├── PhysicalGather
+                    │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #3 ], right_keys: [ #0 ] }
+                    │       ├── PhysicalHashShuffle { columns: [ #3 ] }
+                    │       │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #24 ], right_keys: [ #0 ] }
+                    │       │       ├── PhysicalHashShuffle { columns: [ #24 ] }
+                    │       │       │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #7 ], right_keys: [ #0 ] }
+                    │       │       │       ├── PhysicalHashShuffle { columns: [ #7 ] }
+                    │       │       │       │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #2 ] }
+                    │       │       │       │       ├── PhysicalHashShuffle { columns: [ #0 ] }
+                    │       │       │       │       │   └── PhysicalScan { table: supplier }
+                    │       │       │       │       └── PhysicalFilter { cond: Between { child: #10, lower: Cast { cast_to: Date32, child: "1995-01-01" }, upper: Cast { cast_to: Date32, child: "1996-12-31" } } }
+                    │       │       │       │           └── PhysicalHashShuffle { columns: [ #2 ] }
+                    │       │       │       │               └── PhysicalScan { table: lineitem }
+                    │       │       │       └── PhysicalHashShuffle { columns: [ #0 ] }
+                    │       │       │           └── PhysicalScan { table: orders }
+                    │       │       └── PhysicalHashShuffle { columns: [ #0 ] }
+                    │       │           └── PhysicalScan { table: customer }
+                    │       └── PhysicalHashShuffle { columns: [ #0 ] }
+                    │           └── PhysicalScan { table: nation }
+                    └── PhysicalGather
+                        └── PhysicalScan { table: nation }
 */
 

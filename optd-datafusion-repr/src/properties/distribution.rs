@@ -76,18 +76,25 @@ impl PhysicalProperty for DistributionProp {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
+
     fn to_boxed(&self) -> Box<dyn PhysicalProperty> {
         Box::new(self.clone())
     }
 }
 
 impl DistributionProp {
+    fn key_shard(keys: impl IntoIterator<Item = usize>) -> Self {
+        DistributionProp::KeyShard(keys.into_iter().collect())
+    }
     /// Distribution property for projection mappings. In the future, it should take a ProjectionMapping.
     /// For now, we just assume we do not know how to manipulate the distribution.
     fn on_projection_passthrough(&self, predicates: &[ArcDfPredNode]) -> Self {
         let _ = predicates;
         match self {
-            DistributionProp::HashShard(_) => DistributionProp::SomeShard,
+            // Projections could change the distribution of shard keys, so we cannot passthrough them. TODO: we can generate a projection mapping
+            // and use it to decide whether we can passthrough.
+            DistributionProp::HashShard(_) => DistributionProp::AnyShard,
+            DistributionProp::KeyShard(_) => DistributionProp::AnyShard,
             x => x.clone(),
         }
     }
@@ -96,6 +103,7 @@ impl DistributionProp {
         let _ = predicates;
         match prop {
             DistributionProp::HashShard(_) => DistributionProp::SomeShard,
+            DistributionProp::KeyShard(_) => DistributionProp::SomeShard,
             x => x.clone(),
         }
     }
@@ -132,12 +140,17 @@ impl PhysicalPropertyBuilder<DfNodeType> for DistributionPropertyBuilder {
         children: &[impl Borrow<Self::Prop>],
     ) -> Self::Prop {
         match typ {
-            DfNodeType::PhysicalHashJoin(_) => DistributionProp::Single,
+            DfNodeType::PhysicalHashJoin(_) => {
+                // use the left distribution? or the right? need func dep?
+                let left_distribution = children[0].borrow().clone(); // TODO: ensure it satisfies current join key
+                left_distribution
+            }
+            // TODO: add broadcast?
             DfNodeType::PhysicalNestedLoopJoin(_) => DistributionProp::Single,
             DfNodeType::PhysicalProjection => children[0]
                 .borrow()
                 .on_projection_derive(children[0].borrow(), predicates),
-            DfNodeType::PhysicalScan => DistributionProp::Single,
+            DfNodeType::PhysicalScan => DistributionProp::SomeShard,
             DfNodeType::PhysicalEmptyRelation => DistributionProp::Single,
             DfNodeType::PhysicalGather => DistributionProp::Single,
             // Limit can only be done on a single node
@@ -152,6 +165,7 @@ impl PhysicalPropertyBuilder<DfNodeType> for DistributionPropertyBuilder {
                 DistributionProp::HashShard(columns)
             }
             _ if typ.is_logical() => unreachable!("logical node should not be called"),
+            // Aggregations passthroughs child distribution
             _ if children.len() == 1 => children[0].borrow().clone(),
             other => unimplemented!("derive distribution prop for {other}"),
         }
@@ -166,16 +180,29 @@ impl PhysicalPropertyBuilder<DfNodeType> for DistributionPropertyBuilder {
         match typ {
             // Let's only do single now. We can do distributed later.
             DfNodeType::PhysicalHashJoin(_) => {
-                vec![DistributionProp::Single, DistributionProp::Single]
+                let left_keys = ListPred::from_pred_node(predicates[0].clone()).unwrap();
+                let right_keys = ListPred::from_pred_node(predicates[1].clone()).unwrap();
+                let left_columns = left_keys.to_column_indexes();
+                let right_columns = right_keys.to_column_indexes();
+                // TODO: the executor needs to ensure left/right uses the same hash function (the hashes should be aligned)
+                // We enforce hash shard here instead of key shard, considering self join hash partition alignment.
+                vec![
+                    DistributionProp::HashShard(left_columns),
+                    DistributionProp::HashShard(right_columns),
+                ]
             }
             DfNodeType::PhysicalNestedLoopJoin(_) => {
                 vec![DistributionProp::Single, DistributionProp::Single]
             }
             DfNodeType::PhysicalStreamAgg => {
-                vec![DistributionProp::Single]
+                let group_keys = ListPred::from_pred_node(predicates[1].clone()).unwrap();
+                let group_columns = group_keys.to_column_indexes();
+                vec![DistributionProp::key_shard(group_columns)]
             }
             DfNodeType::PhysicalHashAgg => {
-                vec![DistributionProp::Single]
+                let group_keys = ListPred::from_pred_node(predicates[1].clone()).unwrap();
+                let group_columns = group_keys.to_column_indexes();
+                vec![DistributionProp::key_shard(group_columns)]
             }
             DfNodeType::PhysicalProjection => vec![required.on_projection_passthrough(predicates)],
             DfNodeType::PhysicalScan => vec![],
@@ -217,7 +244,14 @@ impl PhysicalPropertyBuilder<DfNodeType> for DistributionPropertyBuilder {
                 }
                 true
             }
-            (DistributionProp::HashShard(x), DistributionProp::HashShard(y)) => x == y,
+            (DistributionProp::HashShard(x), DistributionProp::HashShard(y)) => {
+                for item in x {
+                    if !y.contains(item) {
+                        return false;
+                    }
+                }
+                true
+            }
             _ => false,
         }
     }

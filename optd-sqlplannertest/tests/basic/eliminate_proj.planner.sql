@@ -21,7 +21,8 @@ LogicalProjection { exprs: [ #1 ] }
 PhysicalProjection { exprs: [ #0 ] }
 └── PhysicalLimit { skip: 0(i64), fetch: 5(i64) }
     └── PhysicalProjection { exprs: [ #0, #1 ] }
-        └── PhysicalScan { table: t1 }
+        └── PhysicalGather
+            └── PhysicalScan { table: t1 }
 */
 
 -- Test EliminateProjectRule with only the rule enabled
@@ -36,7 +37,8 @@ LogicalProjection { exprs: [ #1 ] }
 PhysicalProjection { exprs: [ #1 ] }
 └── PhysicalProjection { exprs: [ #1, #0 ] }
     └── PhysicalLimit { skip: 0(i64), fetch: 5(i64) }
-        └── PhysicalScan { table: t1 }
+        └── PhysicalGather
+            └── PhysicalScan { table: t1 }
 */
 
 -- Test with all rules enabled
@@ -50,7 +52,8 @@ LogicalProjection { exprs: [ #1 ] }
             └── LogicalScan { table: t1 }
 PhysicalProjection { exprs: [ #0 ] }
 └── PhysicalLimit { skip: 0(i64), fetch: 5(i64) }
-    └── PhysicalScan { table: t1 }
+    └── PhysicalGather
+        └── PhysicalScan { table: t1 }
 0
 1
 2
@@ -67,7 +70,8 @@ LogicalProjection { exprs: [ #1 ] }
             └── LogicalScan { table: t1 }
 PhysicalProjection { exprs: [ #0 ] }
 └── PhysicalLimit { skip: 0(i64), fetch: 5(i64) }
-    └── PhysicalScan { table: t1 }
+    └── PhysicalGather
+        └── PhysicalScan { table: t1 }
 0
 1
 2
@@ -80,7 +84,8 @@ select v0, v2, v1, v3 from (select v0 as v0, v2 as v1, v1 as v2, v3 from t2);
 LogicalProjection { exprs: [ #0, #2, #1, #3 ] }
 └── LogicalProjection { exprs: [ #0, #2, #1, #3 ] }
     └── LogicalScan { table: t2 }
-PhysicalScan { table: t2 }
+PhysicalGather
+└── PhysicalScan { table: t2 }
 0 0 0 0
 1 1 1 1
 2 2 2 2

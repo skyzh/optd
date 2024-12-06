@@ -12,7 +12,8 @@ select * from t1;
 /*
 LogicalProjection { exprs: [ #0, #1 ] }
 └── LogicalScan { table: t1 }
-PhysicalScan { table: t1 }
+PhysicalGather
+└── PhysicalScan { table: t1 }
 0 0
 1 1
 5 2
@@ -44,7 +45,8 @@ PhysicalSort
 │   │   └── #0
 │   └── SortOrder { order: Asc }
 │       └── #1
-└── PhysicalScan { table: t1 }
+└── PhysicalGather
+    └── PhysicalScan { table: t1 }
 0 0
 0 2
 1 1
@@ -59,8 +61,10 @@ select * from t1 group by v1, v2, v1;
 LogicalProjection { exprs: [ #0, #1 ] }
 └── LogicalAgg { exprs: [], groups: [ #0, #1, #0 ] }
     └── LogicalScan { table: t1 }
-PhysicalHashAgg { aggrs: [], groups: [ #0, #1 ] }
-└── PhysicalScan { table: t1 }
+PhysicalGather
+└── PhysicalHashAgg { aggrs: [], groups: [ #0, #1 ] }
+    └── PhysicalHashShuffle { columns: [ #0, #1 ] }
+        └── PhysicalScan { table: t1 }
 0 0
 1 1
 5 2
@@ -87,14 +91,16 @@ LogicalSort
 └── LogicalProjection { exprs: [ #0, #1 ] }
     └── LogicalAgg { exprs: [], groups: [ #0, #1, #0, #1, #1 ] }
         └── LogicalScan { table: t1 }
-PhysicalStreamAgg { aggrs: [], groups: [ #0, #1 ] }
-└── PhysicalSort
-    ├── exprs:
-    │   ┌── SortOrder { order: Asc }
-    │   │   └── #0
-    │   └── SortOrder { order: Asc }
-    │       └── #1
-    └── PhysicalScan { table: t1 }
+PhysicalGather
+└── PhysicalStreamAgg { aggrs: [], groups: [ #0, #1 ] }
+    └── PhysicalSort
+        ├── exprs:
+        │   ┌── SortOrder { order: Asc }
+        │   │   └── #0
+        │   └── SortOrder { order: Asc }
+        │       └── #1
+        └── PhysicalHashShuffle { columns: [ #0, #1 ] }
+            └── PhysicalScan { table: t1 }
 0 0
 0 2
 1 1

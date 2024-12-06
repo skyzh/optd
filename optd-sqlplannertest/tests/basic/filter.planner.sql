@@ -26,7 +26,8 @@ select * from t1 where true;
 LogicalProjection { exprs: [ #0, #1 ] }
 └── LogicalFilter { cond: true }
     └── LogicalScan { table: t1 }
-PhysicalScan { table: t1 }
+PhysicalGather
+└── PhysicalScan { table: t1 }
 0 0
 1 1
 2 2
@@ -66,9 +67,12 @@ LogicalProjection { exprs: [ #0, #1, #2, #3 ] }
     └── LogicalJoin { join_type: Inner, cond: true }
         ├── LogicalScan { table: t1 }
         └── LogicalScan { table: t2 }
-PhysicalHashJoin { join_type: Inner, left_keys: [ #0, #0 ], right_keys: [ #0, #1 ] }
-├── PhysicalScan { table: t1 }
-└── PhysicalScan { table: t2 }
+PhysicalGather
+└── PhysicalHashJoin { join_type: Inner, left_keys: [ #0, #0 ], right_keys: [ #0, #1 ] }
+    ├── PhysicalHashShuffle { columns: [ #0, #0 ] }
+    │   └── PhysicalScan { table: t1 }
+    └── PhysicalHashShuffle { columns: [ #0, #1 ] }
+        └── PhysicalScan { table: t2 }
 */
 
 -- Test SimplifyFilterRule (skip true filter for and)
@@ -98,8 +102,10 @@ PhysicalFilter
 │       ├── #0
 │       └── #3
 └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-    ├── PhysicalScan { table: t1 }
-    └── PhysicalScan { table: t2 }
+    ├── PhysicalGather
+    │   └── PhysicalScan { table: t1 }
+    └── PhysicalGather
+        └── PhysicalScan { table: t2 }
 0 0 0 200
 1 1 1 201
 2 2 2 202
@@ -123,8 +129,10 @@ LogicalProjection { exprs: [ #0, #1, #2, #3 ] }
         ├── LogicalScan { table: t1 }
         └── LogicalScan { table: t2 }
 PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-├── PhysicalScan { table: t1 }
-└── PhysicalScan { table: t2 }
+├── PhysicalGather
+│   └── PhysicalScan { table: t1 }
+└── PhysicalGather
+    └── PhysicalScan { table: t2 }
 0 0 0 200
 1 1 0 200
 2 2 0 200
@@ -156,9 +164,12 @@ LogicalProjection { exprs: [ #0, #1, #2, #3 ] }
     └── LogicalJoin { join_type: Inner, cond: true }
         ├── LogicalScan { table: t1 }
         └── LogicalScan { table: t2 }
-PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
-├── PhysicalScan { table: t1 }
-└── PhysicalScan { table: t2 }
+PhysicalGather
+└── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
+    ├── PhysicalHashShuffle { columns: [ #0 ] }
+    │   └── PhysicalScan { table: t1 }
+    └── PhysicalHashShuffle { columns: [ #0 ] }
+        └── PhysicalScan { table: t2 }
 0 0 0 200
 1 1 1 201
 2 2 2 202
@@ -198,9 +209,12 @@ LogicalProjection { exprs: [ #0, #1, #2, #3 ] }
     │   └── true
     ├── LogicalScan { table: t1 }
     └── LogicalScan { table: t2 }
-PhysicalHashJoin { join_type: Inner, left_keys: [ #0, #0 ], right_keys: [ #0, #1 ] }
-├── PhysicalScan { table: t1 }
-└── PhysicalScan { table: t2 }
+PhysicalGather
+└── PhysicalHashJoin { join_type: Inner, left_keys: [ #0, #0 ], right_keys: [ #0, #1 ] }
+    ├── PhysicalHashShuffle { columns: [ #0, #0 ] }
+    │   └── PhysicalScan { table: t1 }
+    └── PhysicalHashShuffle { columns: [ #0, #1 ] }
+        └── PhysicalScan { table: t2 }
 */
 
 -- Test SimplifyJoinCondRule (skip true filter for and)
@@ -230,8 +244,10 @@ PhysicalNestedLoopJoin
 │   └── Eq
 │       ├── #0
 │       └── #3
-├── PhysicalScan { table: t1 }
-└── PhysicalScan { table: t2 }
+├── PhysicalGather
+│   └── PhysicalScan { table: t1 }
+└── PhysicalGather
+    └── PhysicalScan { table: t2 }
 0 0 0 200
 1 1 1 201
 2 2 2 202
@@ -255,8 +271,10 @@ LogicalProjection { exprs: [ #0, #1, #2, #3 ] }
     ├── LogicalScan { table: t1 }
     └── LogicalScan { table: t2 }
 PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-├── PhysicalScan { table: t1 }
-└── PhysicalScan { table: t2 }
+├── PhysicalGather
+│   └── PhysicalScan { table: t1 }
+└── PhysicalGather
+    └── PhysicalScan { table: t2 }
 0 0 0 200
 1 1 0 200
 2 2 0 200
@@ -288,9 +306,12 @@ LogicalProjection { exprs: [ #0, #1, #2, #3 ] }
     │           └── #2
     ├── LogicalScan { table: t1 }
     └── LogicalScan { table: t2 }
-PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
-├── PhysicalScan { table: t1 }
-└── PhysicalScan { table: t2 }
+PhysicalGather
+└── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
+    ├── PhysicalHashShuffle { columns: [ #0 ] }
+    │   └── PhysicalScan { table: t1 }
+    └── PhysicalHashShuffle { columns: [ #0 ] }
+        └── PhysicalScan { table: t2 }
 0 0 0 200
 1 1 1 201
 2 2 2 202

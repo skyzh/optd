@@ -34,6 +34,7 @@ PhysicalFilter
 │   └── Add
 │       ├── Cast { cast_to: Int64, child: #1 }
 │       └── 0(i64)
-└── PhysicalScan { table: xxx }
+└── PhysicalGather
+    └── PhysicalScan { table: xxx }
 */
 

@@ -71,43 +71,45 @@ PhysicalSort
 │   │   └── #0
 │   └── SortOrder { order: Asc }
 │       └── #1
-└── PhysicalHashAgg
-    ├── aggrs:
-    │   ┌── Agg(Sum)
-    │   │   └── [ #4 ]
-    │   ├── Agg(Sum)
-    │   │   └── [ #5 ]
-    │   ├── Agg(Sum)
-    │   │   └── Mul
-    │   │       ├── #5
-    │   │       └── Sub
-    │   │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
-    │   │           └── #6
-    │   ├── Agg(Sum)
-    │   │   └── Mul
-    │   │       ├── Mul
-    │   │       │   ├── #5
-    │   │       │   └── Sub
-    │   │       │       ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
-    │   │       │       └── #6
-    │   │       └── Add
-    │   │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
-    │   │           └── #7
-    │   ├── Agg(Avg)
-    │   │   └── [ #4 ]
-    │   ├── Agg(Avg)
-    │   │   └── [ #5 ]
-    │   ├── Agg(Avg)
-    │   │   └── [ #6 ]
-    │   └── Agg(Count)
-    │       └── [ 1(i64) ]
-    ├── groups: [ #8, #9 ]
-    └── PhysicalFilter
-        ├── cond:Leq
-        │   ├── #10
-        │   └── Sub
-        │       ├── Cast { cast_to: Date32, child: "1998-12-01" }
-        │       └── INTERVAL_MONTH_DAY_NANO (0, 90, 0)
-        └── PhysicalScan { table: lineitem }
+└── PhysicalGather
+    └── PhysicalHashAgg
+        ├── aggrs:
+        │   ┌── Agg(Sum)
+        │   │   └── [ #4 ]
+        │   ├── Agg(Sum)
+        │   │   └── [ #5 ]
+        │   ├── Agg(Sum)
+        │   │   └── Mul
+        │   │       ├── #5
+        │   │       └── Sub
+        │   │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
+        │   │           └── #6
+        │   ├── Agg(Sum)
+        │   │   └── Mul
+        │   │       ├── Mul
+        │   │       │   ├── #5
+        │   │       │   └── Sub
+        │   │       │       ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
+        │   │       │       └── #6
+        │   │       └── Add
+        │   │           ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
+        │   │           └── #7
+        │   ├── Agg(Avg)
+        │   │   └── [ #4 ]
+        │   ├── Agg(Avg)
+        │   │   └── [ #5 ]
+        │   ├── Agg(Avg)
+        │   │   └── [ #6 ]
+        │   └── Agg(Count)
+        │       └── [ 1(i64) ]
+        ├── groups: [ #8, #9 ]
+        └── PhysicalFilter
+            ├── cond:Leq
+            │   ├── #10
+            │   └── Sub
+            │       ├── Cast { cast_to: Date32, child: "1998-12-01" }
+            │       └── INTERVAL_MONTH_DAY_NANO (0, 90, 0)
+            └── PhysicalHashShuffle { columns: [ #8, #9 ] }
+                └── PhysicalScan { table: lineitem }
 */
 

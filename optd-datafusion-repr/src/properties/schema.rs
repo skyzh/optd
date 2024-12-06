@@ -174,7 +174,6 @@ impl LogicalPropertyBuilder<DfNodeType> for SchemaPropertyBuilder {
             }
             DfNodeType::Projection => Self::derive_for_predicate(predicates[0].clone()),
             DfNodeType::Filter | DfNodeType::Limit | DfNodeType::Sort => children[0].clone(),
-            DfNodeType::PhysicalSort => children[0].clone(), // TODO: fix this after revisiting memo table
             DfNodeType::Join(join_type) | DfNodeType::DepJoin(join_type) => {
                 use crate::plan_nodes::JoinType::*;
                 match join_type {
@@ -189,6 +188,9 @@ impl LogicalPropertyBuilder<DfNodeType> for SchemaPropertyBuilder {
                 }
             }
             DfNodeType::EmptyRelation => decode_empty_relation_schema(&predicates[1]),
+            DfNodeType::PhysicalSort
+            | DfNodeType::PhysicalGather
+            | DfNodeType::PhysicalHashShuffle => children[0].clone(), // TODO: fix this after revisiting memo table
             x => unimplemented!("cannot derive schema property for {}", x),
         }
     }

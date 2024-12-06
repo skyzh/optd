@@ -6,6 +6,7 @@
 //! Typed interface of plan nodes.
 
 mod agg;
+mod distribution;
 mod empty_relation;
 mod filter;
 mod join;
@@ -21,6 +22,7 @@ use std::fmt::Debug;
 
 pub use agg::{LogicalAgg, PhysicalHashAgg, PhysicalStreamAgg};
 use arrow_schema::DataType;
+pub use distribution::{PhysicalGather, PhysicalHashShuffle};
 pub use empty_relation::{
     decode_empty_relation_schema, LogicalEmptyRelation, PhysicalEmptyRelation,
 };
@@ -93,6 +95,8 @@ pub enum DfNodeType {
     PhysicalNestedLoopJoin(JoinType),
     PhysicalEmptyRelation,
     PhysicalLimit,
+    PhysicalHashShuffle,
+    PhysicalGather,
 }
 
 impl std::fmt::Display for DfNodeType {

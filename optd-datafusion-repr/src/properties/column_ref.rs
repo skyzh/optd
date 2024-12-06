@@ -525,8 +525,11 @@ impl LogicalPropertyBuilder<DfNodeType> for ColumnRefPropertyBuilder {
                 GroupColumnRefs::new(group_by_col_refs, None)
             }
             DfNodeType::Filter | DfNodeType::Sort | DfNodeType::Limit => children[0].clone(),
-            DfNodeType::PhysicalSort => children[0].clone(), // TODO: fix this after revisiting memo table
-            _ => unimplemented!("Unsupported rel node type {:?}", typ),
+            // Should fix this...
+            DfNodeType::PhysicalSort
+            | DfNodeType::PhysicalGather
+            | DfNodeType::PhysicalHashShuffle => children[0].clone(), // TODO: fix this after revisiting memo table
+            _ => unimplemented!("unsupported rel node type {:?}", typ),
         }
     }
 

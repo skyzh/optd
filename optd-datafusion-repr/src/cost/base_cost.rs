@@ -204,6 +204,8 @@ impl CostModel<DfNodeType, NaiveMemo<DfNodeType>> for DfCostModel {
                 let (compute_cost_2, _) = Self::cost_tuple(&derive_pred_cost(&predicates[1]));
                 Self::cost(row_cnt * (compute_cost_1 + compute_cost_2), 0.0)
             }
+            DfNodeType::PhysicalGather => Self::cost(0.0, row_cnts[0] * 0.01),
+            DfNodeType::PhysicalHashShuffle => Self::cost(row_cnts[0] * 0.01, row_cnts[0] * 0.01),
             x => unimplemented!("cannot compute cost for {}", x),
         };
         cost.0[COMPUTE_COST] += COPY_COST * row_cnts.iter().sum::<f64>();

@@ -11,9 +11,9 @@ use crate::plan_nodes::{
     DataTypePred, DependentJoin, DfNodeType, DfPredType, DfReprPlanNode, DfReprPredNode,
     ExternColumnRefPred, FuncPred, InListPred, LikePred, ListPred, LogOpPred, LogicalAgg,
     LogicalEmptyRelation, LogicalFilter, LogicalJoin, LogicalLimit, LogicalProjection, LogicalScan,
-    LogicalSort, PhysicalEmptyRelation, PhysicalFilter, PhysicalHashAgg, PhysicalHashJoin,
-    PhysicalLimit, PhysicalNestedLoopJoin, PhysicalProjection, PhysicalScan, PhysicalSort,
-    PhysicalStreamAgg, SortOrderPred, UnOpPred,
+    LogicalSort, PhysicalEmptyRelation, PhysicalFilter, PhysicalGather, PhysicalHashAgg,
+    PhysicalHashJoin, PhysicalHashShuffle, PhysicalLimit, PhysicalNestedLoopJoin,
+    PhysicalProjection, PhysicalScan, PhysicalSort, PhysicalStreamAgg, SortOrderPred, UnOpPred,
 };
 
 pub trait Insertable<'a> {
@@ -118,6 +118,12 @@ pub fn explain_plan_node(
             .unwrap()
             .explain(meta_map),
         DfNodeType::PhysicalStreamAgg => PhysicalStreamAgg::from_plan_node(node)
+            .unwrap()
+            .explain(meta_map),
+        DfNodeType::PhysicalGather => PhysicalGather::from_plan_node(node)
+            .unwrap()
+            .explain(meta_map),
+        DfNodeType::PhysicalHashShuffle => PhysicalHashShuffle::from_plan_node(node)
             .unwrap()
             .explain(meta_map),
     }

@@ -26,7 +26,8 @@ macro_rules! define_plan_node {
             }
 
             fn explain(&self, meta_map: Option<&crate::PlanNodeMetaMap>) -> pretty_xmlish::Pretty<'static> {
-                use crate::plan_nodes::{DfReprPredNode};
+                #[allow(unused)]
+                use crate::plan_nodes::DfReprPredNode;
                 use crate::explain::Insertable;
 
                 let mut fields = vec![
@@ -53,6 +54,7 @@ macro_rules! define_plan_node {
                 $($attr_name : $attr_meta_typ),*
                 $(, $inner_name : $inner_typ)?
             ) -> $struct_name {
+                #[allow(unused)]
                 use crate::plan_nodes::DfReprPredNode;
                 #[allow(unused_mut, unused)]
                 $struct_name(
@@ -74,6 +76,7 @@ macro_rules! define_plan_node {
                 $($attr_name : $attr_meta_typ),*
                 $(, $inner_name : $inner_typ)?
             ) -> $struct_name {
+                #[allow(unused)]
                 use crate::plan_nodes::DfReprPredNode;
                 #[allow(unused_mut, unused)]
                 $struct_name(

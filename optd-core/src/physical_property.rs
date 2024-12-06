@@ -90,6 +90,9 @@ pub trait PhysicalPropertyBuilder<T: NodeType>: 'static + Send + Sync + Sized {
     /// by check if `satisfies(derive(passthrough(input)), input)`. The implementor can override this function to provide
     /// a more efficient implementation. If the plan node always satisfies a property (i.e., sort always satisfies sort
     /// property), then this function should also return true.
+    ///
+    /// In other words, if this function returns true, it means that "if `passthrough` tells us that we need to passthrough
+    /// some properties, and if the children satisfy these properties, required property of this node will be satisfied".
     fn can_passthrough(
         &self,
         typ: T,
@@ -123,7 +126,8 @@ pub trait PhysicalPropertyBuilder<T: NodeType>: 'static + Send + Sync + Sized {
         None
     }
 
-    /// Represents no requirement on a property.
+    /// Represents no requirement on a property. This should always return a required property and it will be used in
+    /// the search process.
     fn default(&self) -> Self::Prop;
 
     fn property_name(&self) -> &'static str;

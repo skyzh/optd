@@ -4,6 +4,7 @@
 // https://opensource.org/licenses/MIT.
 
 pub mod column_ref;
+pub mod distribution;
 pub mod schema;
 pub mod sort;
 

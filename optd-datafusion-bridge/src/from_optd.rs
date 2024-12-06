@@ -25,9 +25,9 @@ use optd_datafusion_repr::plan_nodes::{
     ArcDfPlanNode, ArcDfPredNode, BetweenPred, BinOpPred, BinOpType, CastPred, ColumnRefPred,
     ConstantPred, ConstantType, DfNodeType, DfPredType, DfReprPlanNode, DfReprPredNode, FuncPred,
     FuncType, InListPred, JoinType, LikePred, LogOpPred, LogOpType, PhysicalEmptyRelation,
-    PhysicalFilter, PhysicalHashAgg, PhysicalHashJoin, PhysicalLimit, PhysicalNestedLoopJoin,
-    PhysicalProjection, PhysicalScan, PhysicalSort, PhysicalStreamAgg, SortOrderPred,
-    SortOrderType,
+    PhysicalFilter, PhysicalGather, PhysicalHashAgg, PhysicalHashJoin, PhysicalHashShuffle,
+    PhysicalLimit, PhysicalNestedLoopJoin, PhysicalProjection, PhysicalScan, PhysicalSort,
+    PhysicalStreamAgg, SortOrderPred, SortOrderType,
 };
 use optd_datafusion_repr::properties::schema::Schema as OptdSchema;
 use optd_datafusion_repr::properties::sort::{SortProp, SortPropType};
@@ -669,6 +669,16 @@ impl OptdPlanContext<'_> {
             DfNodeType::PhysicalLimit => {
                 self.conv_from_optd_limit(PhysicalLimit::from_plan_node(rel_node).unwrap(), meta)
                     .await?
+            }
+            DfNodeType::PhysicalHashShuffle => {
+                // TODO: convert them into df nodes
+                let node = PhysicalHashShuffle::from_plan_node(rel_node).unwrap();
+                Box::pin(self.conv_from_optd_plan_node(node.child(), meta)).await?
+            }
+            DfNodeType::PhysicalGather => {
+                // TODO: convert them into df nodes
+                let node = PhysicalGather::from_plan_node(rel_node).unwrap();
+                Box::pin(self.conv_from_optd_plan_node(node.child(), meta)).await?
             }
             typ => unimplemented!("{}", typ),
         };

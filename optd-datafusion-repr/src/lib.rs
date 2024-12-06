@@ -24,6 +24,7 @@ use optd_core::rules::Rule;
 pub use optimizer_ext::OptimizerExt;
 use plan_nodes::{ArcDfPlanNode, DfNodeType};
 use properties::column_ref::ColumnRefPropertyBuilder;
+use properties::distribution::{DistributionProp, DistributionPropertyBuilder};
 use properties::schema::{Catalog, SchemaPropertyBuilder};
 use properties::sort::{SortProp, SortPropertyBuilder};
 
@@ -148,7 +149,10 @@ impl DatafusionOptimizer {
                 Box::new(ColumnRefPropertyBuilder::new(catalog.clone())),
             ]);
         let physical_property_builders: Arc<[Box<dyn PhysicalPropertyBuilderAny<DfNodeType>>]> =
-            Arc::new([Box::new(SortPropertyBuilder::new())]);
+            Arc::new([
+                Box::new(SortPropertyBuilder::new()),
+                Box::new(DistributionPropertyBuilder::new()),
+            ]);
 
         Self {
             runtime_statistics: runtime_map,
@@ -239,7 +243,10 @@ impl DatafusionOptimizer {
             self.cascades_optimizer.step_clear();
         }
 
-        let required_props = &[&SortProp::any_order() as &dyn PhysicalProperty];
+        let required_props = &[
+            &SortProp::any_order() as &dyn PhysicalProperty,
+            &DistributionProp::Single as &dyn PhysicalProperty,
+        ];
 
         for disable_rule in Self::stage2_cascades_rules() {
             for (idx, current_rule) in self.cascades_optimizer.rules().iter().enumerate() {

@@ -156,6 +156,9 @@ impl PhysicalPropertyBuilder<DfNodeType> for SortPropertyBuilder {
             DfNodeType::PhysicalFilter | DfNodeType::PhysicalLimit => children[0].borrow().clone(),
             DfNodeType::PhysicalHashJoin(_) => SortProp::any_order(),
             DfNodeType::PhysicalProjection => SortProp::any_order(),
+            // Actually, the current task framework doesn't double-check whether enforcers change the properties...
+            DfNodeType::PhysicalGather => SortProp::any_order(), // Gather doesn't preserve order, need to add MergeGather
+            DfNodeType::PhysicalHashShuffle => children[0].borrow().clone(), // HashShuffle preserves order (in datafusion?)
             _ if typ.is_logical() => unreachable!("logical node should not be called"),
             _ => SortProp::any_order(),
         }

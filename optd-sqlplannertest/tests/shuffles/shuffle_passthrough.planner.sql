@@ -78,7 +78,7 @@ PhysicalGather
                 └── PhysicalScan { table: t1 }
 */
 
--- test shuffle passthrough, should be two shuffle by v1 and one shuffle by (v1, v2) because shuffle by v1 satisfies shuffle by v1, v2
+-- test shuffle passthrough, should be three shuffle by v1 because shuffle by v1 satisfies shuffle by v1, v2
 select v1, count(*) from (select * from t1, t2, t3 where v1 = v4 and v1 = v5 and v2 = v6) group by v1;
 
 /*

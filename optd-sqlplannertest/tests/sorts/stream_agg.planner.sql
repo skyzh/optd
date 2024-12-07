@@ -97,7 +97,7 @@ group_id=!6
     (required) distribution=Any
     (derived) sort=<any>
     (derived) distribution=HashShard([0])
-  subgoal_id=.19 winner=(Enforcer)30 weighted_cost=9410 | (PhysicalGather !6) goal=.15
+  subgoal_id=.19 winner=(Enforcer)30 weighted_cost=9410 | (PhysicalGather !6) goal=.14
     cost={compute=8390,io=1020}
     stat={row_cnt=1000}
     (required) sort=<any>

@@ -184,6 +184,29 @@ impl PhysicalPropertyBuilder<DfNodeType> for DistributionPropertyBuilder {
                 let right_keys = ListPred::from_pred_node(predicates[1].clone()).unwrap();
                 let left_columns = left_keys.to_column_indexes();
                 let right_columns = right_keys.to_column_indexes();
+                // Passthrough: if the required property is a subset of the join keys, we can passthrough
+                if let DistributionProp::KeyShard(required) = required {
+                    let positions = required
+                        .iter()
+                        .map(|x| left_columns.iter().position(|y| y == x))
+                        .collect_vec();
+                    if positions.iter().all(|x| x.is_some()) {
+                        let left_columns = positions
+                            .iter()
+                            .map(|x| left_columns[x.unwrap()])
+                            .collect_vec();
+                        let right_columns = positions
+                            .iter()
+                            .map(|x| right_columns[x.unwrap()])
+                            .collect_vec();
+                        return vec![
+                            DistributionProp::HashShard(left_columns.iter().copied().collect()),
+                            DistributionProp::HashShard(right_columns.iter().copied().collect()),
+                        ];
+                    }
+                }
+
+                // Otherwise, use the join keys as the distribution property.
                 // TODO: the executor needs to ensure left/right uses the same hash function (the hashes should be aligned)
                 // We enforce hash shard here instead of key shard, considering self join hash partition alignment.
                 vec![
@@ -244,14 +267,7 @@ impl PhysicalPropertyBuilder<DfNodeType> for DistributionPropertyBuilder {
                 }
                 true
             }
-            (DistributionProp::HashShard(x), DistributionProp::HashShard(y)) => {
-                for item in x {
-                    if !y.contains(item) {
-                        return false;
-                    }
-                }
-                true
-            }
+            (DistributionProp::HashShard(x), DistributionProp::HashShard(y)) => x == y,
             _ => false,
         }
     }

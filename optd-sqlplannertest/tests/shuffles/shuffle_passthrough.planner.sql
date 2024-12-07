@@ -78,35 +78,44 @@ PhysicalGather
                 └── PhysicalScan { table: t1 }
 */
 
--- test shuffle passthrough, should generate one shuffle because shuffle by v1 satisfies shuffle by v1, v2
-select * from t1, t2, t3 where v1 = v4 and v1 = v5 and v2 = v6;
+-- test shuffle passthrough, should be two shuffle by v1 and one shuffle by (v1, v2) because shuffle by v1 satisfies shuffle by v1, v2
+select v1, count(*) from (select * from t1, t2, t3 where v1 = v4 and v1 = v5 and v2 = v6) group by v1;
 
 /*
-LogicalProjection { exprs: [ #0, #1, #2, #3, #4, #5 ] }
-└── LogicalFilter
-    ├── cond:And
-    │   ├── Eq
-    │   │   ├── #0
-    │   │   └── #3
-    │   ├── Eq
-    │   │   ├── #0
-    │   │   └── #4
-    │   └── Eq
-    │       ├── #1
-    │       └── #5
-    └── LogicalJoin { join_type: Inner, cond: true }
-        ├── LogicalJoin { join_type: Inner, cond: true }
-        │   ├── LogicalScan { table: t1 }
-        │   └── LogicalScan { table: t2 }
-        └── LogicalScan { table: t3 }
+LogicalProjection { exprs: [ #0, #1 ] }
+└── LogicalAgg
+    ├── exprs:Agg(Count)
+    │   └── [ 1(i64) ]
+    ├── groups: [ #0 ]
+    └── LogicalProjection { exprs: [ #0, #1, #2, #3, #4, #5 ] }
+        └── LogicalFilter
+            ├── cond:And
+            │   ├── Eq
+            │   │   ├── #0
+            │   │   └── #3
+            │   ├── Eq
+            │   │   ├── #0
+            │   │   └── #4
+            │   └── Eq
+            │       ├── #1
+            │       └── #5
+            └── LogicalJoin { join_type: Inner, cond: true }
+                ├── LogicalJoin { join_type: Inner, cond: true }
+                │   ├── LogicalScan { table: t1 }
+                │   └── LogicalScan { table: t2 }
+                └── LogicalScan { table: t3 }
 PhysicalGather
-└── PhysicalHashJoin { join_type: Inner, left_keys: [ #0, #1 ], right_keys: [ #0, #1 ] }
-    ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
-    │   ├── PhysicalHashShuffle { columns: [ #0 ] }
-    │   │   └── PhysicalScan { table: t1 }
-    │   └── PhysicalHashShuffle { columns: [ #0 ] }
-    │       └── PhysicalScan { table: t2 }
-    └── PhysicalHashShuffle { columns: [ #0, #1 ] }
-        └── PhysicalScan { table: t3 }
+└── PhysicalHashAgg
+    ├── aggrs:Agg(Count)
+    │   └── [ 1(i64) ]
+    ├── groups: [ #0 ]
+    └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0, #1 ], right_keys: [ #0, #1 ] }
+        ├── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
+        │   ├── PhysicalHashShuffle { columns: [ #0 ] }
+        │   │   └── PhysicalScan { table: t1 }
+        │   └── PhysicalHashShuffle { columns: [ #0 ] }
+        │       └── PhysicalScan { table: t2 }
+        └── PhysicalHashShuffle { columns: [ #0 ] }
+            └── PhysicalScan { table: t3 }
 */
 

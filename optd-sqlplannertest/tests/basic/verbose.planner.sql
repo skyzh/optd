@@ -26,14 +26,13 @@ PhysicalGather { cost: {compute=100,io=1010}, stat: {row_cnt=1000} }
 select count(*) from t1;
 
 /*
-PhysicalGather { cost: {compute=5310,io=1020}, stat: {row_cnt=1000} }
-└── PhysicalStreamAgg
-    ├── aggrs:Agg(Count)
-    │   └── [ 1(i64) ]
-    ├── groups: []
-    ├── cost: {compute=5210,io=1010}
-    ├── stat: {row_cnt=1000}
-    └── PhysicalHashShuffle { columns: [], cost: {compute=110,io=1010}, stat: {row_cnt=1000} }
-        └── PhysicalScan { table: t1, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
+PhysicalStreamAgg
+├── aggrs:Agg(Count)
+│   └── [ 1(i64) ]
+├── groups: []
+├── cost: {compute=5200,io=1010}
+├── stat: {row_cnt=1000}
+└── PhysicalGather { cost: {compute=100,io=1010}, stat: {row_cnt=1000} }
+    └── PhysicalScan { table: t1, cost: {compute=0,io=1000}, stat: {row_cnt=1000} }
 */
 

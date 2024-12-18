@@ -108,19 +108,19 @@ LogicalSort
                     │   │   └── LogicalScan { table: customer }
                     │   └── LogicalScan { table: nation }
                     └── LogicalScan { table: nation }
-PhysicalGather
-└── PhysicalStreamAgg
-    ├── aggrs:Agg(Sum)
-    │   └── [ #3 ]
-    ├── groups: [ #0, #1, #2 ]
-    └── PhysicalSort
-        ├── exprs:
-        │   ┌── SortOrder { order: Asc }
-        │   │   └── #0
-        │   ├── SortOrder { order: Asc }
-        │   │   └── #1
-        │   └── SortOrder { order: Asc }
-        │       └── #2
+PhysicalSort
+├── exprs:
+│   ┌── SortOrder { order: Asc }
+│   │   └── #0
+│   ├── SortOrder { order: Asc }
+│   │   └── #1
+│   └── SortOrder { order: Asc }
+│       └── #2
+└── PhysicalGather
+    └── PhysicalHashAgg
+        ├── aggrs:Agg(Sum)
+        │   └── [ #3 ]
+        ├── groups: [ #0, #1, #2 ]
         └── PhysicalHashShuffle { columns: [ #0, #1, #2 ] }
             └── PhysicalProjection
                 ├── exprs:
@@ -161,12 +161,13 @@ PhysicalGather
                     │       │       ├── PhysicalHashShuffle { columns: [ #24 ] }
                     │       │       │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #7 ], right_keys: [ #0 ] }
                     │       │       │       ├── PhysicalHashShuffle { columns: [ #7 ] }
-                    │       │       │       │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #2 ] }
-                    │       │       │       │       ├── PhysicalHashShuffle { columns: [ #0 ] }
-                    │       │       │       │       │   └── PhysicalScan { table: supplier }
-                    │       │       │       │       └── PhysicalFilter { cond: Between { child: #10, lower: Cast { cast_to: Date32, child: "1995-01-01" }, upper: Cast { cast_to: Date32, child: "1996-12-31" } } }
-                    │       │       │       │           └── PhysicalHashShuffle { columns: [ #2 ] }
-                    │       │       │       │               └── PhysicalScan { table: lineitem }
+                    │       │       │       │   └── PhysicalProjection { exprs: [ #16, #17, #18, #19, #20, #21, #22, #0, #1, #2, #3, #4, #5, #6, #7, #8, #9, #10, #11, #12, #13, #14, #15 ] }
+                    │       │       │       │       └── PhysicalHashJoin { join_type: Inner, left_keys: [ #2 ], right_keys: [ #0 ] }
+                    │       │       │       │           ├── PhysicalFilter { cond: Between { child: #10, lower: Cast { cast_to: Date32, child: "1995-01-01" }, upper: Cast { cast_to: Date32, child: "1996-12-31" } } }
+                    │       │       │       │           │   └── PhysicalHashShuffle { columns: [ #2 ] }
+                    │       │       │       │           │       └── PhysicalScan { table: lineitem }
+                    │       │       │       │           └── PhysicalHashShuffle { columns: [ #0 ] }
+                    │       │       │       │               └── PhysicalScan { table: supplier }
                     │       │       │       └── PhysicalHashShuffle { columns: [ #0 ] }
                     │       │       │           └── PhysicalScan { table: orders }
                     │       │       └── PhysicalHashShuffle { columns: [ #0 ] }

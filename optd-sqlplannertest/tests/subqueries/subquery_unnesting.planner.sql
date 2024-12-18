@@ -45,13 +45,13 @@ LogicalProjection { exprs: [ #0, #1 ] }
                 └── LogicalJoin { join_type: Inner, cond: true }
                     ├── LogicalScan { table: t1 }
                     └── LogicalScan { table: t2 }
-PhysicalProjection { exprs: [ #0, #1 ], cost: {compute=15813.1,io=2030}, stat: {row_cnt=1} }
+PhysicalProjection { exprs: [ #0, #1 ], cost: {compute=15841,io=2030}, stat: {row_cnt=10} }
 └── PhysicalFilter
     ├── cond:Gt
     │   ├── #2
     │   └── 100(i64)
     ├── cost: {compute=15810,io=2030}
-    ├── stat: {row_cnt=1}
+    ├── stat: {row_cnt=10}
     └── PhysicalGather { cost: {compute=12710,io=2030}, stat: {row_cnt=1000} }
         └── PhysicalHashAgg
             ├── aggrs:Agg(Sum)
@@ -114,13 +114,13 @@ LogicalProjection { exprs: [ #0, #1 ] }
                         └── LogicalJoin { join_type: Inner, cond: true }
                             ├── LogicalScan { table: t1 }
                             └── LogicalScan { table: t2 }
-PhysicalProjection { exprs: [ #0, #1 ], cost: {compute=24103.1,io=2040}, stat: {row_cnt=1} }
+PhysicalProjection { exprs: [ #0, #1 ], cost: {compute=24131,io=2040}, stat: {row_cnt=10} }
 └── PhysicalFilter
     ├── cond:Gt
     │   ├── #2
     │   └── 100(i64)
     ├── cost: {compute=24100,io=2040}
-    ├── stat: {row_cnt=1}
+    ├── stat: {row_cnt=10}
     └── PhysicalGather { cost: {compute=21000,io=2040}, stat: {row_cnt=1000} }
         └── PhysicalHashAgg
             ├── aggrs:Agg(Sum)
@@ -239,19 +239,19 @@ LogicalProjection { exprs: [ #0, #1 ] }
                         └── LogicalJoin { join_type: Inner, cond: true }
                             ├── LogicalScan { table: t2 }
                             └── LogicalScan { table: t3 }
-PhysicalProjection { exprs: [ #0, #1 ], cost: {compute=19343.1,io=3060}, stat: {row_cnt=1} }
+PhysicalProjection { exprs: [ #0, #1 ], cost: {compute=19261,io=3050}, stat: {row_cnt=10} }
 └── PhysicalFilter
     ├── cond:Gt
     │   ├── #2
     │   └── 100(i64)
-    ├── cost: {compute=19340,io=3060}
-    ├── stat: {row_cnt=1}
-    └── PhysicalGather { cost: {compute=16240,io=3060}, stat: {row_cnt=1000} }
+    ├── cost: {compute=19230,io=3050}
+    ├── stat: {row_cnt=10}
+    └── PhysicalGather { cost: {compute=16130,io=3050}, stat: {row_cnt=1000} }
         └── PhysicalHashAgg
             ├── aggrs:Agg(Sum)
             │   └── [ Cast { cast_to: Int64, child: #3 } ]
             ├── groups: [ #0, #1 ]
-            ├── cost: {compute=16140,io=3050}
+            ├── cost: {compute=16030,io=3040}
             ├── stat: {row_cnt=1000}
             └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ], cost: {compute=6840,io=3040}, stat: {row_cnt=1000} }
                 ├── PhysicalHashShuffle { columns: [ #0 ], cost: {compute=110,io=1010}, stat: {row_cnt=1000} }

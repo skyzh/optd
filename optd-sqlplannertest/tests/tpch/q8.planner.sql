@@ -149,12 +149,8 @@ PhysicalSort
                     │   │       ├── Cast { cast_to: Decimal128(20, 0), child: 1(i64) }
                     │   │       └── #22
                     │   └── #54
-                    └── PhysicalNestedLoopJoin
-                        ├── join_type: Inner
-                        ├── cond:Eq
-                        │   ├── #51
-                        │   └── #57
-                        ├── PhysicalGather
+                    └── PhysicalHashJoin { join_type: Inner, left_keys: [ #51 ], right_keys: [ #0 ] }
+                        ├── PhysicalHashShuffle { columns: [ #51 ] }
                         │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #12 ], right_keys: [ #0 ] }
                         │       ├── PhysicalHashShuffle { columns: [ #12 ] }
                         │       │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #44 ], right_keys: [ #0 ] }
@@ -189,7 +185,7 @@ PhysicalSort
                             ├── cond:Eq
                             │   ├── #1
                             │   └── "AMERICA"
-                            └── PhysicalGather
+                            └── PhysicalHashShuffle { columns: [ #0 ] }
                                 └── PhysicalScan { table: region }
 */
 

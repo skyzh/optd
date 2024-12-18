@@ -107,25 +107,26 @@ PhysicalSort
         │               └── 0(i64)
         ├── groups: [ #23 ]
         └── PhysicalHashShuffle { columns: [ #23 ] }
-            └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
-                ├── PhysicalHashShuffle { columns: [ #0 ] }
-                │   └── PhysicalScan { table: orders }
-                └── PhysicalFilter
-                    ├── cond:And
-                    │   ├── InList { expr: #14, list: [ "MAIL", "SHIP" ], negated: false }
-                    │   ├── Lt
-                    │   │   ├── #11
-                    │   │   └── #12
-                    │   ├── Lt
-                    │   │   ├── #10
-                    │   │   └── #11
-                    │   ├── Geq
-                    │   │   ├── #12
-                    │   │   └── Cast { cast_to: Date32, child: "1994-01-01" }
-                    │   └── Lt
-                    │       ├── #12
-                    │       └── Cast { cast_to: Date32, child: "1995-01-01" }
+            └── PhysicalProjection { exprs: [ #16, #17, #18, #19, #20, #21, #22, #23, #24, #0, #1, #2, #3, #4, #5, #6, #7, #8, #9, #10, #11, #12, #13, #14, #15 ] }
+                └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #0 ] }
+                    ├── PhysicalFilter
+                    │   ├── cond:And
+                    │   │   ├── InList { expr: #14, list: [ "MAIL", "SHIP" ], negated: false }
+                    │   │   ├── Lt
+                    │   │   │   ├── #11
+                    │   │   │   └── #12
+                    │   │   ├── Lt
+                    │   │   │   ├── #10
+                    │   │   │   └── #11
+                    │   │   ├── Geq
+                    │   │   │   ├── #12
+                    │   │   │   └── Cast { cast_to: Date32, child: "1994-01-01" }
+                    │   │   └── Lt
+                    │   │       ├── #12
+                    │   │       └── Cast { cast_to: Date32, child: "1995-01-01" }
+                    │   └── PhysicalHashShuffle { columns: [ #0 ] }
+                    │       └── PhysicalScan { table: lineitem }
                     └── PhysicalHashShuffle { columns: [ #0 ] }
-                        └── PhysicalScan { table: lineitem }
+                        └── PhysicalScan { table: orders }
 */
 

@@ -107,7 +107,7 @@ impl CostModel<DfNodeType, NaiveMemo<DfNodeType>> for DfCostModel {
             DfNodeType::PhysicalEmptyRelation => Self::stat(0.01),
             DfNodeType::PhysicalFilter => {
                 let row_cnt = Self::row_cnt(children[0]);
-                let selectivity = 0.001;
+                let selectivity = 0.01;
                 Self::stat((row_cnt * selectivity).max(1.0))
             }
             DfNodeType::PhysicalNestedLoopJoin(_) => {

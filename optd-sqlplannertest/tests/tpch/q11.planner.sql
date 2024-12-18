@@ -88,13 +88,13 @@ LogicalSort
                             │   ├── LogicalScan { table: partsupp }
                             │   └── LogicalScan { table: supplier }
                             └── LogicalScan { table: nation }
-PhysicalSort
-├── exprs:SortOrder { order: Desc }
-│   └── #1
-└── PhysicalFilter
-    ├── cond:Gt
-    │   ├── Cast { cast_to: Decimal128(38, 15), child: #1 }
-    │   └── #2
+PhysicalFilter
+├── cond:Gt
+│   ├── Cast { cast_to: Decimal128(38, 15), child: #1 }
+│   └── #2
+└── PhysicalSort
+    ├── exprs:SortOrder { order: Desc }
+    │   └── #1
     └── PhysicalGather
         └── PhysicalHashAgg
             ├── aggrs:Agg(Sum)
@@ -103,41 +103,44 @@ PhysicalSort
             │       └── Cast { cast_to: Decimal128(10, 0), child: #4 }
             ├── groups: [ #0, #1 ]
             └── PhysicalHashShuffle { columns: [ #0, #1 ] }
-                └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
-                    ├── PhysicalGather
-                    │   └── PhysicalHashAgg
-                    │       ├── aggrs:Agg(Sum)
-                    │       │   └── Mul
-                    │       │       ├── #3
-                    │       │       └── Cast { cast_to: Decimal128(10, 0), child: #2 }
-                    │       ├── groups: [ #0 ]
-                    │       └── PhysicalHashShuffle { columns: [ #0 ] }
-                    │           └── PhysicalHashJoin { join_type: Inner, left_keys: [ #8 ], right_keys: [ #0 ] }
-                    │               ├── PhysicalHashShuffle { columns: [ #8 ] }
-                    │               │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ] }
-                    │               │       ├── PhysicalHashShuffle { columns: [ #1 ] }
-                    │               │       │   └── PhysicalScan { table: partsupp }
-                    │               │       └── PhysicalHashShuffle { columns: [ #0 ] }
-                    │               │           └── PhysicalScan { table: supplier }
-                    │               └── PhysicalFilter
-                    │                   ├── cond:Eq
-                    │                   │   ├── #1
-                    │                   │   └── "CHINA"
-                    │                   └── PhysicalHashShuffle { columns: [ #0 ] }
-                    │                       └── PhysicalScan { table: nation }
-                    └── PhysicalGather
-                        └── PhysicalHashJoin { join_type: Inner, left_keys: [ #8 ], right_keys: [ #0 ] }
-                            ├── PhysicalHashShuffle { columns: [ #8 ] }
-                            │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ] }
-                            │       ├── PhysicalHashShuffle { columns: [ #1 ] }
-                            │       │   └── PhysicalScan { table: partsupp }
-                            │       └── PhysicalHashShuffle { columns: [ #0 ] }
-                            │           └── PhysicalScan { table: supplier }
-                            └── PhysicalFilter
-                                ├── cond:Eq
-                                │   ├── #1
-                                │   └── "CHINA"
-                                └── PhysicalHashShuffle { columns: [ #0 ] }
-                                    └── PhysicalScan { table: nation }
+                └── PhysicalProjection { exprs: [ #11, #12, #13, #14, #15, #16, #17, #4, #5, #6, #7, #8, #9, #10, #0, #1, #2, #3 ] }
+                    └── PhysicalHashJoin { join_type: Inner, left_keys: [ #4 ], right_keys: [ #1 ] }
+                        ├── PhysicalHashShuffle { columns: [ #4 ] }
+                        │   └── PhysicalNestedLoopJoin { join_type: Inner, cond: true }
+                        │       ├── PhysicalGather
+                        │       │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #3 ] }
+                        │       │       ├── PhysicalFilter
+                        │       │       │   ├── cond:Eq
+                        │       │       │   │   ├── #1
+                        │       │       │   │   └── "CHINA"
+                        │       │       │   └── PhysicalHashShuffle { columns: [ #0 ] }
+                        │       │       │       └── PhysicalScan { table: nation }
+                        │       │       └── PhysicalHashShuffle { columns: [ #3 ] }
+                        │       │           └── PhysicalScan { table: supplier }
+                        │       └── PhysicalGather
+                        │           └── PhysicalHashAgg
+                        │               ├── aggrs:Agg(Sum)
+                        │               │   └── Mul
+                        │               │       ├── #3
+                        │               │       └── Cast { cast_to: Decimal128(10, 0), child: #2 }
+                        │               ├── groups: [ #0 ]
+                        │               └── PhysicalHashShuffle { columns: [ #0 ] }
+                        │                   └── PhysicalProjection { exprs: [ #4, #5, #6, #7, #8, #9, #10, #11, #12, #13, #14, #15, #0, #1, #2, #3 ] }
+                        │                       └── PhysicalProjection { exprs: [ #0, #1, #2, #3, #11, #12, #13, #14, #15, #4, #5, #6, #7, #8, #9, #10 ] }
+                        │                           └── PhysicalHashJoin { join_type: Inner, left_keys: [ #4 ], right_keys: [ #1 ] }
+                        │                               ├── PhysicalHashShuffle { columns: [ #4 ] }
+                        │                               │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #3 ] }
+                        │                               │       ├── PhysicalFilter
+                        │                               │       │   ├── cond:Eq
+                        │                               │       │   │   ├── #1
+                        │                               │       │   │   └── "CHINA"
+                        │                               │       │   └── PhysicalHashShuffle { columns: [ #0 ] }
+                        │                               │       │       └── PhysicalScan { table: nation }
+                        │                               │       └── PhysicalHashShuffle { columns: [ #3 ] }
+                        │                               │           └── PhysicalScan { table: supplier }
+                        │                               └── PhysicalHashShuffle { columns: [ #1 ] }
+                        │                                   └── PhysicalScan { table: partsupp }
+                        └── PhysicalHashShuffle { columns: [ #1 ] }
+                            └── PhysicalScan { table: partsupp }
 */
 

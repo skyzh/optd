@@ -90,12 +90,8 @@ PhysicalSort
         │           └── #23
         ├── groups: [ #41 ]
         └── PhysicalHashShuffle { columns: [ #41 ] }
-            └── PhysicalNestedLoopJoin
-                ├── join_type: Inner
-                ├── cond:Eq
-                │   ├── #42
-                │   └── #44
-                ├── PhysicalGather
+            └── PhysicalHashJoin { join_type: Inner, left_keys: [ #42 ], right_keys: [ #0 ] }
+                ├── PhysicalHashShuffle { columns: [ #42 ] }
                 │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #36 ], right_keys: [ #0 ] }
                 │       ├── PhysicalHashShuffle { columns: [ #36 ] }
                 │       │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #19, #3 ], right_keys: [ #0, #3 ] }
@@ -125,7 +121,7 @@ PhysicalSort
                     ├── cond:Eq
                     │   ├── #1
                     │   └── "Asia"
-                    └── PhysicalGather
+                    └── PhysicalHashShuffle { columns: [ #0 ] }
                         └── PhysicalScan { table: region }
 */
 

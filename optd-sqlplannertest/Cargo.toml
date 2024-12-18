@@ -26,8 +26,7 @@ datafusion = { version = "43.0.0", features = [
     "compression",
 ] }
 backtrace-on-stack-overflow = "0.3"
-
-env_logger = "0.9"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 mimalloc = { version = "0.1", default-features = false }
 regex = "1.8"
 tokio = { version = "1.24", features = [

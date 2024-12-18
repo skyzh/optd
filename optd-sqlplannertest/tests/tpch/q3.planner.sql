@@ -79,33 +79,26 @@ PhysicalLimit { skip: 0(i64), fetch: 10(i64) }
                 │           └── #23
                 ├── groups: [ #17, #12, #15 ]
                 └── PhysicalHashShuffle { columns: [ #12, #15, #17 ] }
-                    └── PhysicalNestedLoopJoin
-                        ├── join_type: Inner
-                        ├── cond:Eq
-                        │   ├── #17
-                        │   └── #8
-                        ├── PhysicalNestedLoopJoin
-                        │   ├── join_type: Inner
-                        │   ├── cond:Eq
-                        │   │   ├── #0
-                        │   │   └── #9
-                        │   ├── PhysicalFilter
-                        │   │   ├── cond:Eq
-                        │   │   │   ├── #6
-                        │   │   │   └── "FURNITURE"
-                        │   │   └── PhysicalGather
-                        │   │       └── PhysicalScan { table: customer }
-                        │   └── PhysicalFilter
-                        │       ├── cond:Lt
-                        │       │   ├── #4
-                        │       │   └── Cast { cast_to: Date32, child: "1995-03-29" }
-                        │       └── PhysicalGather
-                        │           └── PhysicalScan { table: orders }
+                    └── PhysicalHashJoin { join_type: Inner, left_keys: [ #8 ], right_keys: [ #0 ] }
+                        ├── PhysicalHashShuffle { columns: [ #8 ] }
+                        │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #1 ] }
+                        │       ├── PhysicalFilter
+                        │       │   ├── cond:Eq
+                        │       │   │   ├── #6
+                        │       │   │   └── "FURNITURE"
+                        │       │   └── PhysicalHashShuffle { columns: [ #0 ] }
+                        │       │       └── PhysicalScan { table: customer }
+                        │       └── PhysicalFilter
+                        │           ├── cond:Lt
+                        │           │   ├── #4
+                        │           │   └── Cast { cast_to: Date32, child: "1995-03-29" }
+                        │           └── PhysicalHashShuffle { columns: [ #1 ] }
+                        │               └── PhysicalScan { table: orders }
                         └── PhysicalFilter
                             ├── cond:Gt
                             │   ├── #10
                             │   └── Cast { cast_to: Date32, child: "1995-03-29" }
-                            └── PhysicalGather
+                            └── PhysicalHashShuffle { columns: [ #0 ] }
                                 └── PhysicalScan { table: lineitem }
 */
 

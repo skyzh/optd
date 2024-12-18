@@ -220,12 +220,20 @@ impl PhysicalPropertyBuilder<DfNodeType> for DistributionPropertyBuilder {
             DfNodeType::PhysicalStreamAgg => {
                 let group_keys = ListPred::from_pred_node(predicates[1].clone()).unwrap();
                 let group_columns = group_keys.to_column_indexes();
-                vec![DistributionProp::key_shard(group_columns)]
+                if group_columns.is_empty() {
+                    vec![DistributionProp::Single]
+                } else {
+                    vec![DistributionProp::key_shard(group_columns)]
+                }
             }
             DfNodeType::PhysicalHashAgg => {
                 let group_keys = ListPred::from_pred_node(predicates[1].clone()).unwrap();
                 let group_columns = group_keys.to_column_indexes();
-                vec![DistributionProp::key_shard(group_columns)]
+                if group_columns.is_empty() {
+                    vec![DistributionProp::Single]
+                } else {
+                    vec![DistributionProp::key_shard(group_columns)]
+                }
             }
             DfNodeType::PhysicalProjection => vec![required.on_projection_passthrough(predicates)],
             DfNodeType::PhysicalScan => vec![],

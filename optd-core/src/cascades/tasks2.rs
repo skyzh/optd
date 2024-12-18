@@ -331,7 +331,7 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
                 let step = self.steps;
                 if let Some(partial_explore_space) = self.optimizer.prop.partial_explore_space {
                     if plan_space > partial_explore_space {
-                        println!(
+                        tracing::warn!(
                             "plan space size budget used, not applying logical rules any more. current plan space: {}",
                             plan_space
                         );
@@ -343,7 +343,7 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
                 }
                 if let Some(partial_explore_iter) = self.optimizer.prop.partial_explore_iter {
                     if step > partial_explore_iter {
-                        println!(
+                        tracing::warn!(
                             "iter budget used, not applying logical rules any more. current iter: {}",
                             step
                         );
@@ -436,6 +436,7 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
         predicates: &[ArcPredNode<T>],
     ) -> (
         Vec<Option<Arc<Statistics>>>,
+        Vec<Cost>,
         Cost,
         Cost,
         Vec<Option<Arc<[Box<dyn PhysicalProperty>]>>>,
@@ -482,7 +483,13 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
             self.optimizer,
         );
         let total_cost = cost.sum(&operation_cost, &input_cost);
-        (input_stats, total_cost, operation_cost, input_props)
+        (
+            input_stats,
+            input_cost,
+            total_cost,
+            operation_cost,
+            input_props,
+        )
     }
 
     async fn optimize_input_inner(&mut self, ctx: SearchContext, expr_id: ExprId) {
@@ -648,7 +655,7 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
 
         for (input_group_idx, _) in expr.children.iter().enumerate() {
             // Before optimizing each of the child, infer a current lower bound cost
-            let (_, total_cost, _, _) = self.gather_statistics_and_costs(
+            let (_, input_costs, total_cost, _, _) = self.gather_statistics_and_costs(
                 group_id,
                 expr_id,
                 &expr,
@@ -658,6 +665,7 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
 
             let child_upper_bound = if !self.optimizer.prop.disable_pruning {
                 let cost_so_far = cost.weighted_cost(&total_cost);
+                let child_current_cost = input_costs[input_group_idx].clone();
                 // TODO: also adds up lower-bound cost
                 trace!(
                     event = "compute_cost",
@@ -668,12 +676,13 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
                     current_processing = %input_group_idx,
                     total_child_groups = %expr.children.len());
                 if let Some(upper_bound) = upper_bound {
-                    if upper_bound <= cost_so_far {
+                    if upper_bound < cost_so_far {
+                        // allow strictly == b/c we want to replan
                         trace!(event = "task_finish", task = "optimize_inputs", expr_id = %expr_id, result = "pruned");
                         self.optimizer.mark_task_end(&desc);
                         return;
                     }
-                    Some(upper_bound - cost_so_far)
+                    Some(upper_bound - cost_so_far + cost.weighted_cost(&child_current_cost))
                 } else {
                     None
                 }
@@ -683,16 +692,17 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
 
             let child_subgoal_id = children_subgoal_ids[input_group_idx];
             let child_group_id = expr.children[input_group_idx];
+            // always optimize group even if there's a winner b/c we want to replan
+            self.optimize_group(SearchContext {
+                group_id: child_group_id,
+                subgoal_id: child_subgoal_id,
+                upper_bound: child_upper_bound,
+            })
+            .await;
             let child_group_winner = self
                 .optimizer
                 .get_group_winner(child_group_id, child_subgoal_id);
             if !child_group_winner.has_full_winner() {
-                self.optimize_group(SearchContext {
-                    group_id: child_group_id,
-                    subgoal_id: child_subgoal_id,
-                    upper_bound: child_upper_bound,
-                })
-                .await;
                 if let Winner::Unknown = self
                     .optimizer
                     .get_group_winner(child_group_id, child_subgoal_id)
@@ -705,7 +715,7 @@ impl<'a, T: NodeType, M: Memo<T>> TaskContext<'a, T, M> {
         }
 
         // Compute everything again
-        let (input_stats, total_cost, operation_cost, child_phys_props) = self
+        let (input_stats, _, total_cost, operation_cost, child_phys_props) = self
             .gather_statistics_and_costs(
                 group_id,
                 expr_id,

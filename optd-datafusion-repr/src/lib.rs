@@ -163,7 +163,7 @@ impl DatafusionOptimizer {
                 physical_property_builders,
                 OptimizerProperties {
                     panic_on_budget: false,
-                    partial_explore_iter: Some(1 << 20),
+                    partial_explore_iter: Some(1 << 18),
                     partial_explore_space: Some(1 << 14),
                     disable_pruning: false,
                 },
@@ -256,6 +256,7 @@ impl DatafusionOptimizer {
             }
         }
 
+        tracing::trace!("stage1");
         self.cascades_optimizer
             .step_optimize_rel(root_rel.clone(), required_props)?;
 
@@ -268,6 +269,7 @@ impl DatafusionOptimizer {
         }
 
         self.cascades_optimizer.step_next_stage();
+        tracing::trace!("stage2");
 
         let (group_id, subgoal_id) = self
             .cascades_optimizer

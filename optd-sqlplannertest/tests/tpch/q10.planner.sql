@@ -92,32 +92,29 @@ PhysicalLimit { skip: 0(i64), fetch: 20(i64) }
                 └── PhysicalHashShuffle { columns: [ #0, #1, #2, #4, #5, #7, #34 ] }
                     └── PhysicalHashJoin { join_type: Inner, left_keys: [ #3 ], right_keys: [ #0 ] }
                         ├── PhysicalHashShuffle { columns: [ #3 ] }
-                        │   └── PhysicalNestedLoopJoin
-                        │       ├── join_type: Inner
-                        │       ├── cond:Eq
-                        │       │   ├── #17
-                        │       │   └── #8
-                        │       ├── PhysicalGather
-                        │       │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #0 ], right_keys: [ #1 ] }
-                        │       │       ├── PhysicalHashShuffle { columns: [ #0 ] }
-                        │       │       │   └── PhysicalScan { table: customer }
-                        │       │       └── PhysicalFilter
-                        │       │           ├── cond:And
-                        │       │           │   ├── Geq
-                        │       │           │   │   ├── #4
-                        │       │           │   │   └── Cast { cast_to: Date32, child: "1993-07-01" }
-                        │       │           │   └── Lt
-                        │       │           │       ├── #4
-                        │       │           │       └── Add
-                        │       │           │           ├── Cast { cast_to: Date32, child: "1993-07-01" }
-                        │       │           │           └── INTERVAL_MONTH_DAY_NANO (3, 0, 0)
-                        │       │           └── PhysicalHashShuffle { columns: [ #1 ] }
-                        │       │               └── PhysicalScan { table: orders }
+                        │   └── PhysicalHashJoin { join_type: Inner, left_keys: [ #8 ], right_keys: [ #0 ] }
+                        │       ├── PhysicalHashShuffle { columns: [ #8 ] }
+                        │       │   └── PhysicalProjection { exprs: [ #9, #10, #11, #12, #13, #14, #15, #16, #0, #1, #2, #3, #4, #5, #6, #7, #8 ] }
+                        │       │       └── PhysicalHashJoin { join_type: Inner, left_keys: [ #1 ], right_keys: [ #0 ] }
+                        │       │           ├── PhysicalFilter
+                        │       │           │   ├── cond:And
+                        │       │           │   │   ├── Geq
+                        │       │           │   │   │   ├── #4
+                        │       │           │   │   │   └── Cast { cast_to: Date32, child: "1993-07-01" }
+                        │       │           │   │   └── Lt
+                        │       │           │   │       ├── #4
+                        │       │           │   │       └── Add
+                        │       │           │   │           ├── Cast { cast_to: Date32, child: "1993-07-01" }
+                        │       │           │   │           └── INTERVAL_MONTH_DAY_NANO (3, 0, 0)
+                        │       │           │   └── PhysicalHashShuffle { columns: [ #1 ] }
+                        │       │           │       └── PhysicalScan { table: orders }
+                        │       │           └── PhysicalHashShuffle { columns: [ #0 ] }
+                        │       │               └── PhysicalScan { table: customer }
                         │       └── PhysicalFilter
                         │           ├── cond:Eq
                         │           │   ├── #8
                         │           │   └── "R"
-                        │           └── PhysicalGather
+                        │           └── PhysicalHashShuffle { columns: [ #0 ] }
                         │               └── PhysicalScan { table: lineitem }
                         └── PhysicalHashShuffle { columns: [ #0 ] }
                             └── PhysicalScan { table: nation }
